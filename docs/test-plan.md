@@ -1,30 +1,32 @@
-# Orbital — Test Plan and Phase 1 Exit Criteria
+# Orbital — Test Plan and Completion Criteria
 
-Phase 2 (satellites) begins only when every criterion in §1 is met. This
-document is the record of whether they are.
+The record of what has been tested, what was measured, and what is known not to
+be covered.
 
-**Status as of the current commit: 4 of 5 criteria met.** See §1.
+**Status: all five criteria met.** A live verification run against the real
+OpenSky API was carried out (§9); it found two defects, both since fixed and
+re-verified (§9.7).
 
-A live verification run against the real OpenSky API was carried out; its
-evidence is in §9. That run closes most of the gap described in §7 but also
-found two new defects, so criterion 5 remains for the team to judge.
+Satellite tracking is out of scope and is not a future phase (D37). Work from
+here deepens the aircraft globe.
 
 ---
 
-## 1. Phase 1 exit criteria
+## 1. Completion criteria
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
 | 1 | All phase 1 requirements implemented | **Met** | §2 |
 | 2 | Test plan executed, no open critical or high defects | **Met** | §3, §6 |
-| 3 | Stable rendering performance at the target marker count | **Met** | §4 |
+| 3 | Stable rendering performance at the target marker count | **Met** | §4, §9.6 |
 | 4 | Backend survives an OpenSky outage without breaking the frontend | **Met** | §5 |
-| 5 | Phase 1 documentation complete | **Outstanding — team decision** | §7, §9 |
+| 5 | Documentation complete | **Met** | §7, §9 |
 
-Criterion 5 is the only one open. It was outstanding because the system had
-never been run against the live OpenSky API. **That run has now happened** —
-see §9 — and most of §7's gaps are closed. Two new defects were found
-(§9.7), neither critical. The sign-off decision is the team's.
+Criterion 5 was open because the system had never run against the live OpenSky
+API. That run has happened (§9): OAuth2, credit accounting, real response
+shapes and real traffic clustering are all now verified against the live
+service. §9.9 lists what remains unexercised — all of it failure paths that
+cannot be triggered on demand.
 
 ---
 
@@ -73,6 +75,7 @@ cd frontend && npm test
 | `test_poller.py` | 40 | Scheduling, retry, backoff, throttling, **outage** |
 | `test_thinning.py` | 26 | Grid, ranking, stability, determinism |
 | `test_api.py` | 43 | Endpoints, envelopes, errors, **outage over HTTP** |
+| `test_app_surface.py` | 17 | **Response compression and log output** |
 | `interpolate.test.ts` | 29 | Dead reckoning, easing, extrapolation limit |
 | `sun.test.ts` | 11 | Solar declination and subsolar longitude |
 | `viewport.test.ts` | 14 | Camera-to-bbox conversion |
@@ -80,7 +83,7 @@ cd frontend && npm test
 | `markers.test.ts` | 12 | Pick tolerance in pixels, horizon test |
 | `route.test.ts` | 13 | Great-circle geometry, antimeridian, colour |
 | `store.test.ts` | 18 | Snapshot application, selection races, layers |
-| **Total** | **388** | 278 backend, 114 frontend (some counts overlap suites) |
+| **Total** | **409** | 295 backend, 114 frontend |
 
 ### What the automated suites do not cover
 
@@ -95,6 +98,10 @@ one that admits its gaps:
 - **React component rendering.** Components are exercised manually and through
   the store; there are no DOM-rendering tests for them. The pointer path is the
   exception, because that is where a bug hid (§6).
+- **Wiring, in general.** Six of the eight defects in §6 were cases where
+  correct code was never connected to anything. Tests assert on behaviour that
+  runs; they cannot assert on behaviour that was never reached. Running the
+  system remains a required step, not a nicety.
 
 ---
 
@@ -192,10 +199,18 @@ itself a finding.
 | 4 | Duplicate three.js instances would break raycasting and materials | High | Browser console (D31) | Fixed |
 | 5 | **Clicking a marker did nothing** — pick tolerance in world units, ~4 px at default zoom and ~1 px zoomed out | Critical | User testing (D34) | Fixed |
 | 6 | **Tier 2 polling was unreachable at any zoom the camera could reach** | High | Verification (D36) | Fixed |
+| 7 | Responses were not compressed — 328 KB per poll where gzip gives 67 KB | Medium | Live run (D38) | Fixed |
+| 8 | Application logging was never configured, so every diagnostic line was discarded — D23 was true only on paper | Medium | Live run (D38) | Fixed |
 
-**No open critical or high defects.**
+**No open defects at any severity.**
 
-Defects 3, 4, 5 and 6 all passed every automated test at the time they existed.
+Defects 3 through 8 all passed every automated test at the time they existed.
+The pattern is consistent: in each case the *code* was correct and the *wiring*
+was absent or mismatched — a threshold that no reachable zoom satisfied, a
+raycast tolerance in the wrong unit, a middleware never registered, a logger
+with no handler. Unit tests verify code. Only running the system verifies
+wiring.
+
 Defect 5 is the sharpest lesson: the verification computed a marker's projected
 screen position and clicked exactly there, which cannot discover that a target
 is too small. The regression tests now drive real DOM events.
@@ -204,11 +219,10 @@ is too small. The regression tests now drive real DOM events.
 
 ## 7. What is outstanding
 
-**Criterion 5 — documentation complete — is not met, for one reason: the system
-has never run against the live OpenSky API.**
-
-Everything in this document was measured against the fixture provider. What
-that leaves unverified:
+**Historical note.** Criterion 5 was held open because the system had never run
+against the live OpenSky API, and everything in §2 to §6 was measured against
+the fixture provider. That gap is what §9 closes. The list below is what was
+unverified at that point:
 
 - **OAuth2 against the real endpoint.** Token acquisition and refresh are
   tested against a mock. The real token URL, credential format and expiry
@@ -222,12 +236,12 @@ that leaves unverified:
   evenly over the globe. Real traffic is clustered, which changes how thinning
   behaves.
 
-Before sign-off, run the backend with `ORBITAL_PROVIDER=opensky` and real
-credentials for at least one full polling cycle, and confirm: a token is
-obtained, `/api/health` shows a real `remainingCredits`, the observed credit
-burn matches the projection, and the normalizer drops nothing unexpectedly.
+All four were addressed by the run in §9. To repeat that verification — after
+any change to the provider, the quota model, or the polling schedule:
 
-Until that has happened, phase 1 is not signed off and phase 2 must not begin.
+```bash
+cd backend && .venv/Scripts/python scripts/verify_live.py
+```
 
 ---
 
@@ -361,16 +375,42 @@ The frontend correctly reported *"2,000 aircraft — showing a sample of 13,537
 in view"*, and detail and search both worked against live records (BAW667,
 ICAO24 `4079f7`, 11,933 m, 219 m/s, 313° NW, origin United Kingdom).
 
-### 9.7 Defects found by the live run
+### 9.7 Defects found by the live run — both fixed
 
-| # | Defect | Severity | Status |
-|---|---|---|---|
-| 7 | Responses are not compressed. 328 KB per poll where gzip gives 71 KB (21.5%) — 1.9 MB/min versus 0.41 MB/min at a 10 s poll. | Medium | **Open** |
-| 8 | The application's own logging is never configured. Every `logger.info` in the poller and provider — credit balance, job results, token acquisition, backoff, rate-limit warnings — goes nowhere. D23 requires the remaining balance to be *logged*; it is read and exposed on `/api/health`, but the log line does not exist in practice. | Medium | **Open** |
+Both were left unfixed during the run itself, so that §9.1 to §9.6 describe one
+consistent build. They were fixed immediately afterwards and re-verified
+against the live API.
 
-Neither is critical and neither blocks a demo. Both were left unfixed
-deliberately: changing the system during a verification run would invalidate
-the evidence above, which describes the committed build exactly.
+**Defect 7 — responses were not compressed.** Fixed with `GZipMiddleware`.
+Re-measured against live data:
+
+| | Before | After |
+|---|---|---|
+| 2,000-object response | 328 KB | **67 KB** (20.4%) |
+| At a 10 s client poll | 1.9 MB/min | **0.39 MB/min** |
+
+**Defect 8 — application logging was never configured.** Every `logger.info` in
+the poller and provider was created and discarded: Python attaches no handler
+to the root logger by default, and uvicorn configures only its own loggers.
+D23 requires the credit balance to be *logged*, and the log line did not exist.
+Fixed by `app/logging_config.py`. Verified live — this is real output from the
+fixed build:
+
+```
+INFO  app.ingestion.poller   poller started: provider=opensky preset=authenticated
+                             jobs=['global', 'viewport'] projected=3072 credits/day
+INFO  app.providers.opensky  obtained OpenSky token, valid for 1800s
+INFO  app.providers.opensky  OpenSky credits remaining: 3888 (last request cost ?)
+INFO  app.ingestion.poller   job=global applied=13121 objects=13121 credits=3888
+```
+
+(`last request cost ?` on the first poll is correct — there is no earlier
+balance to difference against.)
+
+**Both are now covered by tests** (`test_app_surface.py`), because neither was
+catchable before: nothing asserted on response encoding, and nothing asserted
+on log output. That includes a test that no log line ever carries the client
+secret or the access token.
 
 ### 9.8 Observations, not defects
 

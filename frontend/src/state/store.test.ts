@@ -190,9 +190,8 @@ describe('search', () => {
 });
 
 describe('layers', () => {
-  it('phase 1 exposes exactly one layer', () => {
-    // Phase 2 tripwire: adding satellites should add one entry here and touch
-    // nothing else. Delete this assertion when phase 1 is signed off.
+  it('exposes exactly one layer', () => {
+    // Permanent guard against undeclared scope growth (D37).
     expect(LAYERS).toHaveLength(1);
     expect(LAYERS[0].id).toBe('aircraft');
   });

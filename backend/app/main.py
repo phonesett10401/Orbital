@@ -12,11 +12,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api import aircraft, health
 from app.config import Settings, get_settings
 from app.ingestion.poller import Poller
 from app.ingestion.store import ObjectStore
+from app.logging_config import configure_logging
 from app.providers import registry
 from app.providers.base import Provider
 
@@ -36,6 +38,8 @@ def create_app(
             they can make upstream fail on demand.
     """
     settings = settings or get_settings()
+    # Before anything else, so provider and poller startup logging is visible.
+    configure_logging(settings.log_level)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -84,6 +88,12 @@ def create_app(
         allow_methods=["GET"],
         allow_headers=["*"],
     )
+
+    # A thinned 2000-object response is ~328 KB of extremely repetitive JSON --
+    # the same nine keys two thousand times -- which gzips to about a fifth of
+    # that. At a ten-second client poll that is the difference between 1.9 MB
+    # and 0.4 MB per minute (D38).
+    app.add_middleware(GZipMiddleware, minimum_size=settings.gzip_min_bytes)
 
     app.include_router(aircraft.router)
     app.include_router(health.router)

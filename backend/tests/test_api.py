@@ -372,6 +372,6 @@ class TestApplicationSurface:
         assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
 
     def test_no_satellite_endpoint_exists_yet(self, client):
-        # Phase 2 tripwire. Delete when phase 1 is signed off.
+        # Permanent tripwire against undeclared scope growth (D37).
         paths = client.get("/openapi.json").json()["paths"]
         assert not any("satellite" in p for p in paths)

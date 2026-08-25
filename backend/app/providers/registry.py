@@ -7,8 +7,7 @@ environment variable, not a code change:
     ORBITAL_PROVIDER=opensky   # live data
 
 Adding adsb.fi or airplanes.live later means writing one module and adding one
-entry to ``_BUILDERS``. Adding the phase 2 satellite provider works the same
-way -- which is the point -- but no such provider exists yet.
+entry to ``_BUILDERS``. Nothing in ``app.api`` or the frontend changes.
 """
 
 from __future__ import annotations

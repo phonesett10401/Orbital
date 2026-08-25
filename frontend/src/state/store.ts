@@ -30,11 +30,9 @@ import { toRenderable } from '../globe/interpolate';
 /**
  * The available layers.
  *
- * Phase 2 adds exactly one entry here — `{ id: 'satellite', label: 'Satellites',
- * resource: 'satellites' }` — and nothing else in this file changes. That is
- * the whole of the layer abstraction, and deliberately so: building a richer
- * one before there is a second layer would fit it to an imagined use case
- * (D19).
+ * One entry. The abstraction is deliberately this thin: a richer layer system
+ * built before a second layer exists would be fitted to an imagined use case
+ * rather than a real one (D19).
  */
 export const LAYERS: LayerDescriptor[] = [
   { id: 'aircraft', label: 'Aircraft', resource: 'aircraft' },

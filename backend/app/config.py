@@ -196,6 +196,24 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     )
+    gzip_min_bytes: int = Field(
+        default=1024,
+        ge=0,
+        description=(
+            "Compress responses at or above this size. A thinned 2000-object "
+            "response is ~328 KB of highly repetitive JSON and gzips to ~21% of "
+            "that; below a kilobyte the compression costs more than it saves."
+        ),
+    )
+
+    # ---- logging -----------------------------------------------------------
+    log_level: str = Field(
+        default="INFO",
+        description=(
+            "Level for the app.* loggers. INFO shows every poll result and the "
+            "remaining credit balance, which D23 requires to be logged."
+        ),
+    )
 
     @property
     def longest_interval(self) -> float:

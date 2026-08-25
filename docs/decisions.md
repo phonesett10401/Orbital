@@ -4,6 +4,10 @@ A running record of every significant architectural choice and why it was made.
 Newest entries are appended at the bottom. Each entry states the decision, the
 alternatives considered, and the reasoning — so any team member can defend it.
 
+Entries are a historical log. Where a later decision changes an earlier one, the
+earlier entry carries a note rather than being rewritten: the reasoning at the
+time is part of the record.
+
 Format: **decision**, *alternatives*, reasoning, and where relevant, what would
 make us revisit it.
 
@@ -32,10 +36,10 @@ Those are real advantages and we do not dismiss them. We rejected it anyway:
   need to understand anyway in order to explain it.
 - Imagery requires either an Ion token or a fiddly offline configuration.
 
-**Revisit if:** phase 2 satellites at GEO altitude (≈5.6 Earth radii) prove
-awkward under Globe.gl's radial altitude model, or if true altitude accuracy
-becomes a requirement. Because the renderer only consumes the normalized shape,
-swapping it is a frontend-local change.
+**Revisit if:** true altitude accuracy ever becomes a requirement, or if we
+need terrain, real imagery tiling, or objects at radically different altitudes
+where Globe.gl's radial model gets awkward. Because the renderer only consumes
+the normalized shape, swapping it is a frontend-local change.
 
 ---
 
@@ -68,9 +72,11 @@ FastAPI wins on three specific points:
 *Alternative:* plain JavaScript, which is faster to start.
 
 The normalized shape is the contract between layers. TypeScript makes the
-compiler enforce it on the frontend side, and — the decisive point — when
-phase 2 adds a satellite type, the compiler enumerates every place that needs
-to handle it. In plain JavaScript that becomes a manual search.
+compiler enforce it on the frontend side: when a field changes meaning or
+nullability, every consumer that needs updating is enumerated rather than
+found by hand. Nullability is the decisive case here — `altitude`, `velocity`
+and `heading` are all nullable, and the difference between unknown and zero is
+load-bearing throughout the UI.
 
 **Cost accepted:** roughly a week of friction if nobody has shipped TypeScript
 before. Falling back to plain JS is survivable but forfeits the main benefit.
@@ -371,20 +377,29 @@ actually causes a bug.
 
 ---
 
-## D19 — Phase 2 has exactly two footholds in phase 1
+## D19 — No speculative layer system
 
-**Decision:** the `type` field and the provider registry are the only
-concessions to satellites. No satellite provider, no `satellite.js` dependency,
-no satellite type, no layer abstraction built "for later".
+> **Amended by [D37](#d37--satellite-tracking-is-out-of-scope).** This entry was
+> originally written about "phase 2 footholds". Satellite tracking is no longer
+> planned, and the two pieces below stand on their own reasoning rather than as
+> groundwork for anything.
 
-Speculative generality is the failure mode here: building a layer system before
+**Decision:** the `type` field and the provider registry stay exactly as small
+as they are. No layer abstraction built "for later".
+
+Speculative generality is the failure mode: building a layer system before
 there is a second layer produces an abstraction fitted to an imagined use case,
-which then turns out to be the wrong shape when the real one arrives. The two
-footholds are cheap and concrete; anything more is a guess.
+which turns out to be the wrong shape if a real one ever arrives.
 
-`test_providers.py` contains a test asserting that no satellite provider is
-registered. It is a tripwire against accidental scope creep, and it is deleted
-when phase 1 is signed off.
+Both pieces earn their place independently. A discriminator carried from the
+start costs one enum with one value; retrofitting one into a contract spanning
+three layers is a migration. The registry *is* the pluggability requirement —
+swapping data sources by config — and it is what makes the offline fixture
+provider possible (D8).
+
+`test_providers.py` and `test_api.py` each contain a tripwire asserting no
+satellite provider or endpoint exists. They are **permanent**, not markers
+awaiting deletion.
 
 ---
 
@@ -980,3 +995,80 @@ defect lived in the *relationship* between a backend threshold and a frontend
 camera limit — the kind of thing unit tests structurally cannot see. It was
 found by asking "does this feature actually run?" and checking the counter,
 which is now step 14 of the manual test script.
+
+---
+
+## D37 — Satellite tracking is out of scope
+
+**Decision:** satellites are **not being built**. Not deferred, not scheduled —
+removed from the plan. Nothing in this repository is groundwork for them, and
+no document should describe them as upcoming work.
+
+This reverses the original two-phase plan. It is recorded rather than quietly
+applied because the earlier phasing shaped real decisions, and anyone reading
+D4, D6, D8 or D19 will find them arguing partly from a future that is no longer
+coming.
+
+**What stays, and why it stands on its own:**
+
+- **The `type` field.** A discriminator carried from the start costs one enum
+  with one value. Retrofitting one into a contract spanning three layers, a
+  serialized wire format and a TypeScript mirror is a migration. It exists
+  because the shape is deliberately source-agnostic (D4).
+- **The provider registry.** This *is* the pluggability requirement: swapping
+  OpenSky for adsb.fi or airplanes.live by config. It is also what makes the
+  fixture provider possible, and the fixture provider is what lets the whole
+  project run offline with no credentials (D8).
+
+Neither is scaffolding. Both would be in the design if satellites had never
+been mentioned.
+
+**What changes:** the tripwire tests
+(`test_no_satellite_provider_exists_yet`, `test_no_satellite_endpoint_exists_yet`,
+and the frontend's single-layer assertion) were written to be deleted at a
+phase 2 sign-off. They are now **permanent guards against undeclared scope
+growth**. Adding satellite tracking requires an explicit decision to change
+direction, and these tests are what force that decision to be made
+deliberately rather than drifted into.
+
+Work from here deepens the aircraft globe: robustness, accuracy, and
+documentation of what already exists.
+
+---
+
+## D38 — Compression and logging: two features that existed but did nothing
+
+**Decision:** enable `GZipMiddleware`, and configure a handler for the `app.*`
+loggers.
+
+Both were found by the live verification run, not by any test.
+
+**Compression.** Responses were uncompressed. A thinned 2,000-object payload is
+328 KB of extremely repetitive JSON — the same nine keys two thousand times —
+which gzips to 67 KB, **20% of the original**. At a ten-second client poll that
+is 1.9 MB/min against 0.39 MB/min. One line of middleware, measured before and
+after.
+
+**Logging.** Every `logger.info` in the poller and the provider was being
+created and discarded. Python attaches no handler to the root logger by
+default, and uvicorn configures only its own `uvicorn.*` loggers, so records
+from `app.*` went nowhere. The calls were all correct; nothing was listening.
+
+That made **D23 true only on paper**. It requires the remaining credit balance
+to be *logged*; the balance was read from the header and surfaced on
+`/api/health`, but the log line did not exist in practice. The same applied to
+poll results, token acquisition, and backoff warnings — the entire diagnostic
+story for the failure modes hardest to reproduce.
+
+### Why the test suite could not have caught either
+
+Nothing asserted on response encoding, and nothing asserted on log output. Both
+gaps are now closed by `test_app_surface.py`: compression is asserted at the
+header level and by measured ratio, and each log line D23 depends on is
+asserted by content — including a test that **no log line ever carries the
+client secret or the access token**.
+
+This is the fourth defect in this project that every test passed while the
+feature did nothing (see the test plan's defect table). The pattern is
+consistent: they are all cases where the code was correct and the *wiring* was
+absent. Unit tests verify code. Only running the system verifies wiring.

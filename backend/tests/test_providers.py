@@ -38,7 +38,7 @@ class TestFixtureProviderLoading:
         assert all(isinstance(o, TrackedObjectRecord) for o in objects)
 
     @pytest.mark.anyio
-    async def test_every_object_is_an_aircraft_in_phase_one(self, provider):
+    async def test_every_object_is_an_aircraft(self, provider):
         assert {o.type for o in await provider.fetch()} == {ObjectType.AIRCRAFT}
 
     @pytest.mark.anyio
@@ -200,7 +200,9 @@ class TestRegistry:
             registry.build("opensky-typo")
 
     def test_no_satellite_provider_exists_yet(self):
-        # Phase 2 guard. Delete this test when phase 1 is signed off.
+        # A permanent guard, not a temporary one. Satellite tracking was
+        # considered and is not being built; this fails loudly if it reappears
+        # without a deliberate decision to take the project there (D37).
         assert not any("satellite" in name for name in registry.available())
 
 

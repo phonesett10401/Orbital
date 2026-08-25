@@ -1,14 +1,10 @@
 /**
  * Switch between data layers.
  *
- * Phase 1 has exactly one layer, so this control renders a single option. That
- * is the correct phase 1 artifact, not a placeholder: the component is driven
- * by the `LAYERS` array, and phase 2 adds one entry to that array and nothing
- * else (D19).
- *
- * It is rendered rather than hidden so the mechanism is visible and testable
- * now, instead of being written for the first time under deadline pressure
- * when the second layer arrives.
+ * There is exactly one layer, so this control renders a single option. It is
+ * driven by the `LAYERS` array rather than hardcoded, which costs nothing and
+ * keeps the component honest about what it is: a selector over whatever layers
+ * exist (D19).
  */
 
 import { LAYERS, useOrbitalStore } from '../state/store';

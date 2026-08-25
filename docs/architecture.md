@@ -1,6 +1,6 @@
 # Orbital — Architecture
 
-**CSC480 team project. Phase 1: live aircraft tracking on a 3D globe.**
+**CSC480 team project. Live aircraft tracking on a 3D globe.**
 
 This document describes how Orbital is built and why. It is written to be read
 start to finish by someone who has not seen the code.
@@ -14,12 +14,8 @@ positions on it. A user can rotate and zoom the globe, search for a flight by
 callsign, click an aircraft to see its details, and view the path that aircraft
 has been observed to fly.
 
-A second phase, not yet started, adds satellites as a second layer on the same
-globe. Phase 1 is designed so that phase 2 requires no changes to the rendering
-or API layers — but contains no satellite code. See §8.
-
-**Out of scope for the whole project:** user accounts, native mobile apps,
-historical playback, flight schedules or delay data, offline use.
+**Out of scope:** user accounts, native mobile apps, historical playback,
+flight schedules or delay data, offline use, and satellite tracking — see §8.
 
 ---
 
@@ -221,21 +217,26 @@ stale data is not a nice-to-have — that test *is* the exit criterion.
 
 ---
 
-## 8. How phase 2 fits without being built
+## 8. Scope boundaries
 
-Phase 2 adds satellites. Phase 1 contains exactly two concessions to it:
+Satellite tracking was considered and **is not being built**. It is out of
+scope, not deferred, and nothing in this repository is groundwork for it (D37).
 
-1. The `type` field on the shape, whose only value today is `"aircraft"`.
-2. The provider registry, which maps a config name to a provider class.
+Two pieces of the design look like they were built for a second data layer.
+They were not, and they earn their place on their own:
 
-Adding satellites should then be: write `providers/celestrak.py` returning the
-same nine fields, add one line to the registry, add `"satellite"` to the enum,
-add an endpoint that reuses the existing store and thinning code. **No change
-to the shape, the API layer, or the renderer.**
+1. **The `type` field on the shape.** A discriminator carried from the start
+   costs one enum with one value. Retrofitting one into a contract spanning
+   three layers is a migration. It exists because the shape is deliberately
+   source-agnostic (D4), not because a second type is planned.
+2. **The provider registry.** This is the pluggability requirement itself:
+   swapping OpenSky for adsb.fi or airplanes.live is a config change, and the
+   fixture provider that makes the whole project runnable offline (D8) is a
+   registry entry.
 
-There is no satellite code in this repository, no `satellite.js` dependency,
-and no satellite type. `test_providers.py` contains a test asserting that no
-satellite provider is registered; it is deleted when phase 1 is signed off.
+Two tests assert that no satellite provider is registered and no satellite
+endpoint exists. They are **permanent guards against undeclared scope growth**,
+not temporary markers awaiting deletion.
 
 ---
 
@@ -264,7 +265,8 @@ orbital/
 │   │   │   ├── store.py     object cache + track history     (M2)
 │   │   │   └── poller.py    two-tier scheduling, backoff     (M2)
 │   │   ├── api/             REST endpoints                   (M3)
-│   │   └── thinning.py      server-side marker reduction     (M3)
+│   │   ├── thinning.py      server-side marker reduction     (M3)
+│   │   └── logging_config.py  handler setup for app.* loggers
 │   └── tests/
 │       └── fixtures/        committed sample data + generator
 └── frontend/                                                 (M4)

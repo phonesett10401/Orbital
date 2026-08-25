@@ -10,7 +10,13 @@
  * docs/data-contract.md is the authority on units and meaning.
  */
 
-/** Which layer an object belongs to. Phase 2 adds `"satellite"` here. */
+/**
+ * Which layer an object belongs to.
+ *
+ * A union of one. It exists so the renderer can discriminate if the backend
+ * ever serves more than one kind of object — retrofitting that into a contract
+ * spanning three layers is far worse than carrying it from the start.
+ */
 export type ObjectType = 'aircraft';
 
 /** One moving object at one instant. Source-agnostic by design (D4). */
@@ -134,7 +140,7 @@ export interface RenderableObject extends TrackedObject {
   lastSeenMs: number;
 }
 
-/** A selectable data layer. Phase 2 adds one entry to this list (D19). */
+/** A selectable data layer. */
 export interface LayerDescriptor {
   id: ObjectType;
   label: string;

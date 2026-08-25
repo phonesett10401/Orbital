@@ -4,8 +4,7 @@ An interactive 3D globe in the browser with live aircraft positions plotted on
 it. Rotate and zoom the Earth, search for a flight by callsign, click an
 aircraft for its details, and see the path it has been observed to fly.
 
-CSC480 team project. Phase 1 (aircraft) is under construction; phase 2
-(satellites) has not started.
+CSC480 team project.
 
 ---
 
@@ -69,15 +68,11 @@ an API credit.
 | [docs/decisions.md](docs/decisions.md) | Every significant choice, with its alternatives and reasoning |
 | [docs/test-plan.md](docs/test-plan.md) | Test coverage, performance measurements, and the phase 1 exit criteria |
 
-## Phase 1 status
+## Status
 
-Four of the five exit criteria are met. The one outstanding item is that
-**the system has never been run against the live OpenSky API** — every test and
-measurement so far uses the offline fixture provider. OAuth2 against the real
-endpoint, real credit consumption, and real response quirks are all unverified.
-
-[docs/test-plan.md](docs/test-plan.md) §7 says exactly what to run before
-sign-off. Phase 2 does not begin until it has been run.
+All the completion criteria in [docs/test-plan.md](docs/test-plan.md) §1 are
+met, including a verification run against the live OpenSky API (§9). Ongoing
+work deepens the aircraft globe rather than adding new scope.
 
 ## Performance
 
@@ -102,6 +97,7 @@ cd backend && .venv/Scripts/python benchmarks/bench_backend.py
 - **An upstream outage does not break the display.** The backend keeps serving
   its last good snapshot with a `stale` flag; the frontend keeps drawing
   last-known positions with their age. Both refuse to show an empty globe.
-- **No satellite code exists.** The `type` field and the provider registry are
-  the only concessions to phase 2, and there are tests that fail if anything
-  more creeps in.
+- **Satellite tracking is out of scope**, not planned. The `type` field and the
+  provider registry exist for their own reasons — a discriminator is cheap to
+  carry and expensive to retrofit, and swappable providers were a requirement.
+  Two tests fail if a satellite provider or endpoint appears.

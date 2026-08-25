@@ -4,9 +4,9 @@ Every route here reads the store and returns. **Nothing in this module performs
 I/O or calls a provider**, which is precisely why an OpenSky outage cannot
 produce a 5xx: there is no upstream call in the request path to fail.
 
-The endpoints are named for aircraft rather than for objects because that is
-what phase 1 serves. A satellite layer would add a parallel router over the
-same store, thinning and envelope code -- no change here.
+The endpoints are named for aircraft because that is what they serve. Another
+layer would add a parallel router over the same store, thinning and envelope
+code -- no change here.
 """
 
 from __future__ import annotations
@@ -148,6 +148,6 @@ def get_aircraft(
     detail = store.get_detail(object_id.strip().lower())
     if detail is None:
         raise HTTPException(status_code=404, detail=f"aircraft {object_id!r} is not tracked")
-    if detail.type is not ObjectType.AIRCRAFT:  # pragma: no cover - phase 2 guard
+    if detail.type is not ObjectType.AIRCRAFT:  # pragma: no cover - type guard
         raise HTTPException(status_code=404, detail="not an aircraft")
     return detail

@@ -44,9 +44,10 @@ class OrbitalModel(BaseModel):
 class ObjectType(str, Enum):
     """Which layer an object belongs to.
 
-    This is the single concession in the phase 1 contract to the eventual
-    satellite layer. The value exists so the renderer can branch on it later;
-    no satellite code exists anywhere in the codebase yet.
+    One value today. It exists because the shape is deliberately source-
+    agnostic (D4): a renderer that receives mixed object kinds needs to be able
+    to tell them apart, and retrofitting a discriminator into a contract three
+    layers deep is far more painful than carrying one from the start.
     """
 
     AIRCRAFT = "aircraft"
@@ -61,8 +62,8 @@ class TrackedObject(OrbitalModel):
 
     Deliberately source-agnostic: there is no aircraft-specific field here.
     Anything that only makes sense for one kind of object lives in
-    ``TrackedObjectRecord.meta``. That is what makes a future satellite
-    provider a drop-in rather than a schema change.
+    ``TrackedObjectRecord.meta``. That is what makes a new data source a
+    drop-in rather than a schema change.
     """
 
     id: str = Field(description="Stable identifier, unique within a provider.")
@@ -124,8 +125,8 @@ class TrackedObjectRecord(TrackedObject):
     """What a provider returns and what the store holds: core shape plus meta.
 
     ``meta`` is the pressure valve that keeps ``TrackedObject`` universal.
-    Aircraft put originCountry here; a future satellite provider would put
-    orbit class here; neither forces a change to the shape the renderer knows.
+    Aircraft put originCountry here. Any other source puts its own specifics
+    here too, without forcing a change to the shape the renderer knows.
 
     This type never reaches the browser as-is. The list endpoint declares
     ``TrackedObject`` as its response model, so FastAPI projects ``meta`` away

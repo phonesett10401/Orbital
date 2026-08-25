@@ -69,9 +69,9 @@ class ObjectStore:
         track_history_points: ring buffer length per object.
         snapshot_ttl_seconds: age past which the store reports itself stale.
         evict_interval_seconds: how often the eviction sweep may run.
-        object_type: which layer this store holds. One store per layer, so the
-            phase 2 satellite layer gets its own instance rather than a shared
-            one with a type filter threaded through every method.
+        object_type: which layer this store holds. One store per layer, so a
+            second layer would get its own instance rather than a shared one
+            with a type filter threaded through every method.
     """
 
     def __init__(
