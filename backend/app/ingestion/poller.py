@@ -61,7 +61,15 @@ class JobStatus:
 
     @property
     def healthy(self) -> bool:
-        return self.consecutive_failures == 0 and self.last_success_at is not None
+        """Whether this job is failing.
+
+        Deliberately not "has succeeded at least once": tier 2 legitimately
+        skips every cycle until a client reports a small enough viewport, and
+        reporting that as unhealthy sends whoever reads /api/health chasing a
+        bug that is not there. A tier 1 job that has never polled shows up as
+        the overall status "starting" instead.
+        """
+        return self.consecutive_failures == 0
 
 
 @dataclass
@@ -148,8 +156,7 @@ class Poller:
     def set_viewport(self, bbox: BBox | None) -> None:
         """Record what the client is currently looking at, for tier 2.
 
-        Snapped to a grid first so that nudging the camera a few pixels does
-        not spend a credit on a nearly identical box.
+        Snapped to a grid first; see :meth:`snap` for what that buys.
         """
         self._viewport = self.snap(bbox) if bbox is not None else None
 

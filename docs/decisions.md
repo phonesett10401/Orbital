@@ -664,3 +664,62 @@ itself. What snapping actually buys is *stability* — consecutive polls cover
 the same area, so aircraft do not flicker in and out at the edges as the camera
 drifts. The mechanism was right; the explanation was not, and an explanation
 nobody can defend is worse than none.
+
+---
+
+## D28 — Thinning is a spatial grid, not a proximity cluster
+
+**Decision:** divide the requested box into roughly `limit` cells, bucket
+objects into cells, then take each cell's best object, then each cell's second
+best, until the budget is spent.
+
+*Alternatives:* take the first N (trivial); true proximity clustering with
+merged "12 aircraft here" markers.
+
+Taking the first N is what a naive implementation does, and it fails visibly:
+the response fills with a solid blob over Europe and the rest of the globe
+comes back empty. A grid spreads survivors across the visible area, which is
+the actual requirement.
+
+True clustering was rejected as more machinery than phase 1 needs. It requires
+a cluster marker type, a click-to-expand interaction, and a distance metric
+that behaves near the poles — none of which is in scope, and all of which would
+displace graded features.
+
+**Stability is weighted above optimality.** If a cell's chosen representative
+flipped between polls, markers would blink on and off every few seconds. The
+ranking key is therefore altitude *bucketed to 1000 m*, then id — so a cruising
+aircraft outranks a taxiing one, but normal climb and descent do not reshuffle
+the display. Determinism is asserted directly by a test, as is independence
+from input ordering.
+
+Preferring altitude also means a zoomed-out view shows en-route traffic rather
+than a selection dominated by ground vehicles at busy airports.
+
+---
+
+## D29 — Every read endpoint answers 200, including during an outage
+
+**Decision:** `/api/aircraft` and `/api/aircraft/{id}` never return 5xx because
+upstream failed. They serve whatever the store holds, with `stale` and
+`ageSeconds` in the envelope.
+
+No route in the API layer performs I/O or calls a provider. That is not a
+convention to be maintained by discipline — it is structural, and it is why
+there is nothing in the request path that *can* fail from an outage.
+
+The exceptions are genuine client errors: a malformed `bbox` is a 422, and an
+unknown id is a 404. Serving the whole globe for an unparseable bbox would hide
+a frontend bug behind plausible-looking data.
+
+`/api/health` also answers 200 when degraded. It *describes* the system rather
+than being a liveness signal; returning 503 would make a monitoring tool report
+"health check down" when the truth is "OpenSky is down and we are coping".
+
+**A reporting bug found by running the server rather than the tests:** a tier 2
+job that has correctly skipped every cycle was being reported `healthy: false`,
+because "healthy" was defined as *has succeeded at least once*. Tier 2 skips
+legitimately until a client reports a small enough viewport, so that definition
+sends whoever reads `/api/health` chasing a bug that is not there. Health now
+means *not currently failing*; a tier 1 job that has never polled surfaces as
+the overall status `starting` instead.
