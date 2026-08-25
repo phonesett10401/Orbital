@@ -1,0 +1,192 @@
+# Orbital — Data Contract
+
+The normalized shape every layer speaks. This document is the authority on
+units and meaning; `backend/app/models.py` is the authority on validation.
+
+Changing anything here is a team-wide decision, because all three layers are
+built against it.
+
+---
+
+## 1. `TrackedObject` — the universal shape
+
+Returned by `GET /api/aircraft`. Serialized as camelCase JSON.
+
+| Field | JSON type | Unit / range | Nullable | Meaning |
+|---|---|---|---|---|
+| `id` | string | — | no | Stable identifier, unique within a provider. For aircraft this is the ICAO24 address (6 lowercase hex chars). |
+| `lat` | number | degrees, `[-90, 90]` | no | Latitude north, WGS84. |
+| `lon` | number | degrees, `[-180, 180)` | no | Longitude east, WGS84. `+180` is normalized to `-180`. |
+| `altitude` | number | **metres** above mean sea level | **yes** | `null` means unknown, not zero. |
+| `velocity` | number | **metres per second**, `>= 0` | **yes** | Ground speed, not airspeed. `null` means unknown. |
+| `heading` | number | degrees, `[0, 360)` | **yes** | Clockwise from **true** north, not magnetic. Direction of travel over the ground. |
+| `label` | string | — | no | Short display name. For aircraft, the callsign, trimmed. Falls back to `id` when upstream has no callsign. |
+| `lastSeen` | string | RFC 3339, UTC, `Z` suffix | no | When the **upstream source** last observed the object — not when we polled. |
+| `type` | string | `"aircraft"` | no | Which layer the object belongs to. |
+
+### Rules that hold for every object
+
+- **Units are SI and are converted exactly once**, inside the provider. No
+  layer above ingestion ever sees knots, feet, or feet-per-minute.
+- **`null` means unknown; it never means zero.** A stationary aircraft has
+  `velocity: 0`. An aircraft whose speed upstream did not report has
+  `velocity: null`. The frontend renders these differently, so they must not
+  collapse into each other.
+- **Objects with no usable position are dropped, not defaulted.** A provider
+  must never emit `lat: 0, lon: 0` as a stand-in for missing coordinates. That
+  produces a marker that looks like a real aircraft in the Gulf of Guinea.
+- **`lastSeen` is always timezone-aware UTC.** A naive datetime is rejected at
+  the model boundary, because it silently corrupts every staleness comparison
+  downstream.
+- **Objects are immutable.** The store hands the same instance to concurrent
+  requests.
+
+---
+
+## 2. `TrackedObjectRecord` — internal only
+
+`TrackedObject` plus:
+
+| Field | JSON type | Meaning |
+|---|---|---|
+| `meta` | object (string → string) | Source-specific fields the universal shape deliberately omits. |
+
+This is what providers return and what the store holds. It **never reaches the
+browser in a list response**: the list endpoint declares `TrackedObject` as its
+response model, so FastAPI projects `meta` away.
+
+### Why `originCountry` is not a top-level field
+
+The detail panel needs origin country. It is not in the universal shape,
+because it is meaningless for a satellite. Putting it in the shape would force
+a future satellite provider to either emit a fake value or change the schema —
+and the claim that data sources are pluggable would stop being true.
+
+Keys currently used by the aircraft provider:
+
+| Key | Meaning |
+|---|---|
+| `originCountry` | Country of the aircraft's registration, as reported upstream. |
+
+The frontend renders `meta` generically as key/value rows, so a provider can
+add a key without a frontend change.
+
+---
+
+## 3. `TrackedObjectDetail` — the by-id response
+
+`TrackedObjectRecord` plus:
+
+| Field | JSON type | Meaning |
+|---|---|---|
+| `track` | array of `TrackPoint` | Observed positions, **oldest first**. |
+
+### `TrackPoint`
+
+| Field | JSON type | Unit | Nullable |
+|---|---|---|---|
+| `lat` | number | degrees | no |
+| `lon` | number | degrees | no |
+| `altitude` | number | metres | yes |
+| `timestamp` | string | RFC 3339 UTC | no |
+
+### What "route" means in Orbital — read this
+
+> **`track` is the path we have observed, not the aircraft's filed flight plan.**
+
+OpenSky state vectors contain no route, origin airport, or destination airport.
+Obtaining those would require separate `/flights/aircraft` calls, which cost
+additional quota we do not have and which frequently return nothing for an
+aircraft that is currently airborne.
+
+Consequences a reader must understand:
+
+- The route **begins when the object entered our polling window**, not at
+  takeoff. An aircraft first seen thirty seconds ago has a thirty-second route.
+- The route is **lost when the backend restarts.** History lives in memory.
+- Track history is a **bounded ring buffer**, so a long-lived object's route is
+  truncated to the most recent N points.
+- The route is a **sampled** path at the poll interval, so it is a polyline of
+  observed points, not a smooth curve. Between two points we know nothing.
+
+This is a documented product limitation, agreed deliberately. It is not a
+defect, and it should be stated plainly in the demo.
+
+---
+
+## 4. `BBox` — bounding boxes
+
+Query-string form, matching OpenSky's own parameter order:
+
+```
+?bbox=latMin,lonMin,latMax,lonMax
+```
+
+All edges are **inclusive**. `latMin` must not exceed `latMax`.
+
+**Antimeridian:** if `lonMin > lonMax`, the box is understood to wrap across
+±180. `bbox=50,170,70,-170` is a 20°-wide box over the Pacific, not an empty
+one. A naive `lonMin <= lon <= lonMax` test returns nothing for these boxes —
+an easy bug to ship and a hard one to notice, so it is handled in `BBox` itself
+and every caller inherits the fix.
+
+---
+
+## 5. List response envelope
+
+`GET /api/aircraft` returns objects wrapped with freshness metadata, because
+the frontend must be able to tell live data from stale data:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `objects` | array of `TrackedObject` | The filtered, thinned result. |
+| `fetchedAt` | string | When the snapshot was retrieved from upstream. |
+| `ageSeconds` | number | How old the snapshot is now. |
+| `stale` | boolean | True once age exceeds the configured TTL. |
+| `source` | string | Provider name that produced the snapshot. |
+| `total` | number | Objects matching the bbox **before** thinning. |
+| `returned` | number | Objects actually in `objects`. |
+
+`total` and `returned` differing is how the frontend knows thinning occurred
+and can tell the user they are seeing a sample.
+
+---
+
+## 6. Mirroring this contract on the frontend
+
+`frontend/src/types.ts` mirrors these types by hand. It must be updated in the
+same commit as `models.py`.
+
+We considered generating the TypeScript from FastAPI's OpenAPI schema. We chose
+not to, for now: the contract is nine fields and changes rarely, and a codegen
+step is one more thing that can break for a three-person team on a deadline.
+This is recorded in [decisions.md](decisions.md) and is worth revisiting if the
+shape starts changing often.
+
+---
+
+## 7. Example
+
+```json
+{
+  "objects": [
+    {
+      "id": "a1b2c3",
+      "lat": 40.7128,
+      "lon": -74.006,
+      "altitude": 10668.0,
+      "velocity": 244.3,
+      "heading": 87.5,
+      "label": "UAL1234",
+      "lastSeen": "2026-08-25T12:00:00Z",
+      "type": "aircraft"
+    }
+  ],
+  "fetchedAt": "2026-08-25T12:00:02Z",
+  "ageSeconds": 3.4,
+  "stale": false,
+  "source": "opensky",
+  "total": 4821,
+  "returned": 1
+}
+```
