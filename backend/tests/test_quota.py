@@ -1,0 +1,166 @@
+"""Tests for credit accounting and the configured polling budget.
+
+The arithmetic these assert is the most important constraint on the project:
+overspending takes the live demo offline for a day with no way to buy the
+credits back. Making it executable means an interval change that breaks the
+budget fails a test rather than being discovered the following afternoon.
+
+See docs/decisions.md, D21.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from app.config import PRESETS, Settings
+from app.models import BBox
+from app.quota import (
+    AUTHENTICATED_DAILY_CREDITS,
+    GLOBE_AREA_SQ_DEG,
+    ThrottleLevel,
+    credits_for_area,
+    credits_for_bbox,
+    daily_credits,
+    min_interval_for_budget,
+    throttle_for,
+)
+
+
+class TestCostBands:
+    @pytest.mark.parametrize(
+        ("area", "expected"),
+        [
+            (1.0, 1), (25.0, 1),          # top of the 1-credit band
+            (25.1, 2), (100.0, 2),
+            (100.1, 3), (400.0, 3),
+            (400.1, 4), (GLOBE_AREA_SQ_DEG, 4),
+        ],
+    )
+    def test_bands_charge_by_requested_area(self, area, expected):
+        assert credits_for_area(area) == expected
+
+    def test_a_bbox_of_none_is_billed_as_the_whole_globe(self):
+        assert credits_for_bbox(None) == 4
+
+    def test_a_five_by_five_box_costs_one_credit(self):
+        assert credits_for_bbox(BBox.parse("40,-75,45,-70")) == 1
+
+    def test_area_is_computed_correctly_across_the_antimeridian(self):
+        # 20 x 20 = 400 sq deg, the top of the 3-credit band. Computing the
+        # width naively would give -340 and bill it as 1 credit.
+        assert credits_for_bbox(BBox.parse("50,170,70,-170")) == 3
+
+
+class TestAreaEfficiency:
+    """The finding that reversed the polling design (D21)."""
+
+    def test_the_globe_buys_far_more_area_per_credit_than_any_box(self):
+        globe = GLOBE_AREA_SQ_DEG / credits_for_area(GLOBE_AREA_SQ_DEG)
+        small_box = 25.0 / credits_for_area(25.0)
+        assert globe / small_box > 300  # 324x, in fact
+
+    def test_replacing_the_global_sweep_with_regions_costs_more_for_less(self):
+        # Six 10x10 regions at 300 s versus one global sweep at 300 s.
+        regions = 6 * daily_credits(300.0, credits_for_area(100.0))
+        globe = daily_credits(300.0, credits_for_area(GLOBE_AREA_SQ_DEG))
+        assert regions > globe                      # three times the cost
+        assert 6 * 100.0 < GLOBE_AREA_SQ_DEG / 100  # for under 1% of the area
+
+
+class TestDailyProjection:
+    def test_a_sixty_second_global_poll_busts_the_authenticated_budget(self):
+        # The assumption D7 was built on, now dead.
+        projected = daily_credits(60.0, credits_for_bbox(None))
+        assert projected == 5760
+        assert projected > AUTHENTICATED_DAILY_CREDITS
+
+    def test_the_recommended_pair_fits_with_headroom(self):
+        tier1 = daily_credits(300.0, 4)   # globe every 5 minutes
+        tier2 = daily_credits(45.0, 1)    # 5x5 viewport every 45 seconds
+        assert tier1 + tier2 == 3072
+        assert tier1 + tier2 < AUTHENTICATED_DAILY_CREDITS
+
+    def test_min_interval_inverts_the_projection(self):
+        interval = min_interval_for_budget(4, AUTHENTICATED_DAILY_CREDITS)
+        assert daily_credits(interval, 4) == pytest.approx(AUTHENTICATED_DAILY_CREDITS)
+
+    def test_zero_interval_is_rejected(self):
+        with pytest.raises(ValueError):
+            daily_credits(0.0, 4)
+
+
+class TestConfiguredPresetsFitTheirBudget:
+    """The executable form of D21. If an interval changes, this fails."""
+
+    @pytest.mark.parametrize("preset", sorted(PRESETS))
+    def test_preset_stays_within_its_safety_ceiling(self, preset):
+        settings = Settings(quota_preset=preset)
+        ceiling = settings.daily_allowance * settings.budget_safety_fraction
+        assert settings.projected_daily_credits() <= ceiling
+
+    def test_authenticated_preset_projects_the_documented_figure(self):
+        assert Settings(quota_preset="authenticated").projected_daily_credits() == 3072
+
+    def test_startup_fails_when_an_interval_overspends(self):
+        with pytest.raises(ValueError, match="credits/day"):
+            Settings(quota_preset="authenticated", daily_credit_budget=1000)
+
+    def test_unknown_preset_fails_loudly(self):
+        with pytest.raises(ValueError, match="unknown quota preset"):
+            Settings(quota_preset="generous")
+
+    def test_ttl_must_exceed_the_longest_interval(self):
+        # Otherwise every response is stale the moment it is served.
+        with pytest.raises(ValueError, match="stale by construction"):
+            Settings(quota_preset="authenticated", snapshot_ttl_seconds=10.0)
+
+    def test_derived_ttl_outlives_the_slowest_preset(self):
+        settings = Settings(quota_preset="anonymous")
+        assert settings.snapshot_ttl > settings.longest_interval
+
+
+class TestThrottle:
+    @pytest.mark.parametrize(
+        ("remaining", "expected"),
+        [
+            (4000, ThrottleLevel.NORMAL),
+            (1600, ThrottleLevel.NORMAL),     # exactly 40%
+            (1200, ThrottleLevel.REDUCED),
+            (800, ThrottleLevel.REDUCED),     # exactly 20%
+            (600, ThrottleLevel.MINIMAL),
+            (400, ThrottleLevel.MINIMAL),     # exactly 10%
+            (200, ThrottleLevel.CRITICAL),
+            (40, ThrottleLevel.CRITICAL),     # exactly 1%
+            (10, ThrottleLevel.EXHAUSTED),
+            (0, ThrottleLevel.EXHAUSTED),
+        ],
+    )
+    def test_level_falls_as_the_balance_drains(self, remaining, expected):
+        assert throttle_for(remaining, AUTHENTICATED_DAILY_CREDITS) == expected
+
+    def test_unknown_balance_assumes_normal(self):
+        # We have not polled yet. Refusing to poll for lack of information
+        # would never recover, and the projected budget already fits.
+        assert throttle_for(None, AUTHENTICATED_DAILY_CREDITS) == ThrottleLevel.NORMAL
+
+    def test_negative_balance_is_treated_as_exhausted(self):
+        assert throttle_for(-5, AUTHENTICATED_DAILY_CREDITS) == ThrottleLevel.EXHAUSTED
+
+    def test_intervals_lengthen_as_the_level_falls(self):
+        levels = [
+            ThrottleLevel.NORMAL,
+            ThrottleLevel.REDUCED,
+            ThrottleLevel.MINIMAL,
+            ThrottleLevel.CRITICAL,
+        ]
+        multipliers = [level.interval_multiplier for level in levels]
+        assert multipliers == sorted(multipliers)
+        assert multipliers[0] == 1.0
+
+    def test_the_latency_tier_is_cut_before_the_coverage_tier(self):
+        # Losing tier 2 degrades freshness in one region; losing tier 1 empties
+        # the globe. So tier 2 goes first.
+        assert ThrottleLevel.REDUCED.allows_focus_tier
+        assert not ThrottleLevel.MINIMAL.allows_focus_tier
+        assert ThrottleLevel.MINIMAL.allows_polling
+        assert not ThrottleLevel.EXHAUSTED.allows_polling

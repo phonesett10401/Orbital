@@ -128,10 +128,20 @@ small without anyone having to remember to strip fields.
 
 ## 5. Data flow: from OpenSky to a pixel
 
-1. **Schedule.** On startup, FastAPI's `lifespan` handler starts a single
-   asyncio task. One poller per server, not per connected browser.
-2. **Fetch.** The task calls `provider.fetch()`. `OpenSkyProvider` issues one
-   HTTP request with a timeout. On failure it raises a `ProviderError`.
+1. **Schedule.** On startup, FastAPI's `lifespan` handler starts the poller,
+   which runs one asyncio task per configured job. One poller per server, not
+   per connected browser. Under the default preset there are two jobs:
+   **tier 1** fetches the whole globe every 5 minutes to buy *coverage*, and
+   **tier 2** fetches the client's viewport every 45 seconds to buy *latency*.
+   The split exists because OpenSky bills by requested area, and a full-globe
+   call buys 324x more area per credit than a small box — so the globe is the
+   cheap way to stay populated, and a small box is the cheap way to stay fresh.
+   See [decisions.md](decisions.md) D21 for the arithmetic.
+2. **Fetch.** The task calls `provider.fetch(bbox)`. `OpenSkyProvider` obtains
+   an OAuth2 token if it does not hold a valid one, then issues one HTTP request
+   with a timeout. It records `X-Rate-Limit-Remaining` from the response so the
+   poller can throttle against the real balance. On failure it raises a typed
+   `ProviderError`; all retry and backoff policy lives in the poller.
 3. **Normalize.** OpenSky returns positional arrays — `state[0]` is the ICAO24
    address, `state[5]` is longitude, and so on — which are unreadable at the
    call site and would leak upstream's quirks into our code. The provider maps
@@ -139,9 +149,12 @@ small without anyone having to remember to strip fields.
    with no usable position** rather than emitting a placeholder. A marker at
    (0, 0) is worse than no marker: it looks like a real aircraft in the Gulf of
    Guinea.
-4. **Store.** The store atomically replaces the current snapshot. It also
-   appends each object's position to a bounded ring buffer — this is the route
-   history, and it is why "route" means the observed path (see §6).
+4. **Store.** The store **merges** the result by object id rather than
+   replacing wholesale — with two tiers returning different areas at different
+   times, a wholesale replace on the 45-second viewport poll would erase every
+   aircraft outside the viewport. Objects expire individually on their own TTL.
+   Each poll also appends the object's position to a bounded ring buffer, which
+   is the route history and why "route" means the observed path (see §6).
 5. **Serve.** `GET /api/aircraft?bbox=…` reads the snapshot, filters by
    bounding box, thins if the box is large, and returns objects plus `stale`
    and `ageSeconds`. It performs no I/O and cannot fail because OpenSky failed.
@@ -186,14 +199,20 @@ with its reasoning in [decisions.md](decisions.md).
 Surviving an OpenSky outage is a phase 1 exit criterion, so it is designed
 rather than discovered:
 
-- A failed poll **never mutates the cache**. The previous snapshot stays.
-- The poller backs off on repeated failure, and honours `retry_after` when
-  upstream supplies one — the expected failure is quota exhaustion, and
-  hammering a source that has already said no makes it worse.
+- A failed poll **never mutates the cache**. The previous data stays.
+- The poller backs off exponentially on repeated failure (capped, with jitter),
+  and honours `X-Rate-Limit-Retry-After-Seconds` when upstream supplies one —
+  the expected failure is quota exhaustion, and hammering a source that has
+  already said no makes it worse. A 429 pauses *every* job, since the quota is
+  shared.
+- The poller **degrades in stages as credits drain**, cutting the latency tier
+  before the coverage tier: losing tier 2 makes one region less fresh, losing
+  tier 1 empties the globe.
 - The API **always returns 200** with the last good data, marked `stale: true`
   once past the TTL, with `ageSeconds` so the frontend can say how old it is.
-- `/api/health` reports the provider name, the last successful poll, and the
-  consecutive failure count.
+- `/api/health` reports the provider name, the last successful poll, the
+  consecutive failure count, the remaining credit balance and the current
+  throttle level.
 - The frontend **keeps showing the last known position** with a timestamp
   rather than removing markers.
 
@@ -234,15 +253,16 @@ orbital/
 │   ├── app/
 │   │   ├── models.py        the normalized shape             (M1)
 │   │   ├── geo.py           spherical geometry helpers       (M1)
-│   │   ├── config.py        env-driven settings              (M2)
+│   │   ├── config.py        env-driven settings, presets     (M2)
+│   │   ├── quota.py         credit cost model + throttling   (M2)
 │   │   ├── providers/
 │   │   │   ├── base.py      the Provider interface           (M1)
 │   │   │   ├── fixture.py   offline replay provider          (M1)
 │   │   │   ├── registry.py  name -> provider                 (M1)
 │   │   │   └── opensky.py   the live source                  (M2)
 │   │   ├── ingestion/
-│   │   │   ├── store.py     snapshot cache + track history   (M2)
-│   │   │   └── poller.py    scheduling, retry, backoff       (M2)
+│   │   │   ├── store.py     object cache + track history     (M2)
+│   │   │   └── poller.py    two-tier scheduling, backoff     (M2)
 │   │   ├── api/             REST endpoints                   (M3)
 │   │   └── thinning.py      server-side marker reduction     (M3)
 │   └── tests/
