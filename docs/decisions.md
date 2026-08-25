@@ -723,3 +723,95 @@ legitimately until a client reports a small enough viewport, so that definition
 sends whoever reads `/api/health` chasing a bug that is not there. Health now
 means *not currently failing*; a tier 1 job that has never polled surfaces as
 the overall status `starting` instead.
+
+---
+
+## D30 — Earth textures are copied from node_modules, not committed or fetched
+
+**Decision:** `scripts/copy-textures.mjs` copies NASA Blue Marble imagery out of
+`three-globe/example/img` into `public/textures/` before dev and build. The
+paths are then config-driven via `VITE_EARTH_*_TEXTURE`.
+
+*Alternatives:* commit the images (~4 MB); reference a CDN; generate procedural
+textures at runtime.
+
+`three-globe` is already a dependency of globe.gl and ships the imagery we
+need, so the assets arrive with `npm install`. That gives a globe that looks
+like Earth out of the box with **no CDN dependency and no network beyond the
+install**, which matters because the fixture provider (D8) otherwise makes the
+whole application runnable offline and a CDN would quietly undo that.
+
+They are copied rather than imported because `three-globe`'s package `exports`
+map does not expose the example directory — a deep import fails at build time.
+They are copied rather than committed so ~4 MB of binaries stay out of git
+history.
+
+Procedural generation was rejected outright: a canvas-drawn planet does not
+look like Earth, and "looks like Earth" was the requirement.
+
+Higher-resolution imagery drops into the same directory with one environment
+variable, so texture resolution can be traded against load time without a code
+change.
+
+---
+
+## D31 — The three.js version is pinned to what globe.gl needs
+
+**Decision:** depend on the same major of `three` that globe.gl's transitive
+dependencies require, and add `resolve.dedupe: ['three']` to the Vite config.
+
+Found by running the app rather than by testing it. The console reported
+*"Multiple instances of Three.js being imported"* — a warning easy to dismiss,
+but a real defect: our material and the globe's renderer would come from
+different module instances, so `instanceof` checks fail and custom materials
+and raycasting silently stop working.
+
+Deduping alone then broke the build, because `three-render-objects` imports
+`Timer`, which does not exist in the older `three` we had pinned. The two
+constraints together mean the version is not free: it is whatever globe.gl's
+dependency tree requires.
+
+**Worth knowing for the report:** neither the unit tests nor the type checker
+could have caught this. Both passed throughout. It took starting the server and
+reading the console.
+
+---
+
+## D32 — Marker positions are verified against globe.gl's own conversion
+
+**Decision:** `latLonToVector3` duplicates three-globe's coordinate convention
+rather than calling `globe.getCoords()`, because the material and marker layers
+are constructed before the globe is laid out.
+
+Duplicating a convention is a risk — an inverted axis puts every marker in the
+wrong place and the display still looks entirely plausible, just wrong. So the
+duplication is checked directly against `world.getCoords()` for the same
+lat/lon, and the two agree to zero floating-point difference.
+
+The same check disproved an assumption in the first draft: markers were being
+attached to a "globe group" on the theory that they had to rotate with the
+planet. There is no such group, and every object in globe.gl's scene has zero
+rotation — it orbits the camera rather than turning the Earth. The comment
+explaining the wrong reason has been replaced with one stating the verified
+fact.
+
+---
+
+## D33 — The client stops extrapolating after ten minutes
+
+**Decision:** dead reckoning is capped. Past ten minutes without an update a
+marker holds its last known position instead of continuing to fly.
+
+An aircraft unheard-of for ten minutes has not necessarily flown 150 km in a
+straight line — it may have turned, landed, or dropped out of coverage.
+Continuing to move the marker confidently would be **inventing data**, and the
+invention would be invisible: a smoothly moving marker looks more trustworthy
+than a stationary one, not less.
+
+Held position plus a visible age is honest. The marker is also muted after two
+minutes and the detail panel states when the position was last reported, so a
+stale object cannot be mistaken for live traffic.
+
+This is the client-side counterpart of the backend's decision to keep serving
+last-known positions rather than deleting them (D10). Both follow the same
+rule: an empty or invented display is worse than an old one that says so.

@@ -55,3 +55,8 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Earth textures, copied out of node_modules by scripts/copy-textures.mjs.
+# Kept out of git so ~4 MB of binaries do not live in history; they arrive with
+# npm install and are copied before dev and build.
+frontend/public/textures/

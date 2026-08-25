@@ -1,0 +1,143 @@
+/**
+ * The normalized data contract, mirrored from the backend.
+ *
+ * This file must be updated in the same commit as `backend/app/models.py`.
+ * The mirror is maintained by hand rather than generated from the OpenAPI
+ * schema: the contract is nine fields and changes rarely, and a codegen step
+ * is another build stage that can break for a three-person team on a deadline
+ * (D18).
+ *
+ * docs/data-contract.md is the authority on units and meaning.
+ */
+
+/** Which layer an object belongs to. Phase 2 adds `"satellite"` here. */
+export type ObjectType = 'aircraft';
+
+/** One moving object at one instant. Source-agnostic by design (D4). */
+export interface TrackedObject {
+  /** Stable id, unique within a provider. For aircraft, the ICAO24 address. */
+  id: string;
+  /** Degrees north, WGS84. */
+  lat: number;
+  /** Degrees east, WGS84, in [-180, 180). */
+  lon: number;
+  /** Metres above mean sea level. `null` means unknown, never zero. */
+  altitude: number | null;
+  /** Ground speed in metres per second. `null` means unknown. */
+  velocity: number | null;
+  /** Degrees clockwise from TRUE north. `null` means unknown. */
+  heading: number | null;
+  /** Short display name. For aircraft, the callsign; falls back to `id`. */
+  label: string;
+  /** RFC 3339 UTC. When the SOURCE last observed it, not when we polled. */
+  lastSeen: string;
+  type: ObjectType;
+}
+
+/** One observed position on an object's route. */
+export interface TrackPoint {
+  lat: number;
+  lon: number;
+  altitude: number | null;
+  timestamp: string;
+}
+
+/**
+ * One object in full.
+ *
+ * `track` is the path we have OBSERVED since the object entered our polling
+ * window — not a filed flight plan. It starts when we first saw the aircraft,
+ * is lost when the backend restarts, and is truncated by a ring buffer. This
+ * is a documented product limitation (D6), and the UI says so.
+ */
+export interface TrackedObjectDetail extends TrackedObject {
+  track: TrackPoint[];
+  /** Source-specific fields the universal shape omits, e.g. `originCountry`. */
+  meta: Record<string, string>;
+}
+
+/** List responses carry freshness metadata, not a bare array. */
+export interface ObjectListResponse {
+  objects: TrackedObject[];
+  type: ObjectType;
+  source: string | null;
+  fetchedAt: string | null;
+  ageSeconds: number | null;
+  /** True once the data is older than the backend's TTL, or never fetched. */
+  stale: boolean;
+  /** Objects matching the query BEFORE thinning. */
+  total: number;
+  /** Objects actually present in `objects`. */
+  returned: number;
+}
+
+export interface JobHealth {
+  name: string;
+  tier: number;
+  intervalSeconds: number;
+  healthy: boolean;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  consecutiveFailures: number;
+  successfulPolls: number;
+  failedPolls: number;
+  skippedPolls: number;
+  objectsLastPoll: number | null;
+}
+
+export interface QuotaHealth {
+  preset: string;
+  dailyAllowance: number;
+  projectedDailyCredits: number;
+  remainingCredits: number | null;
+  throttle: 'normal' | 'reduced' | 'minimal' | 'critical' | 'exhausted';
+}
+
+export interface HealthResponse {
+  status: 'ok' | 'degraded' | 'starting';
+  provider: string;
+  polling: boolean;
+  objectCount: number;
+  stale: boolean;
+  ageSeconds: number | null;
+  lastSuccessAt: string | null;
+  quota: QuotaHealth;
+  jobs: JobHealth[];
+}
+
+/** A geographic bounding box. `lonMin > lonMax` wraps the antimeridian. */
+export interface BoundingBox {
+  latMin: number;
+  lonMin: number;
+  latMax: number;
+  lonMax: number;
+}
+
+/**
+ * A rendered object: the contract plus the client-side position we are
+ * currently drawing, which is interpolated between polls (see globe/interpolate).
+ *
+ * `renderLat`/`renderLon` are never sent anywhere. They exist so the marker
+ * layer can move smoothly while `lat`/`lon` remain the last thing the backend
+ * actually told us.
+ */
+export interface RenderableObject extends TrackedObject {
+  renderLat: number;
+  renderLon: number;
+  /** Position this object was drawn at when the latest update arrived. */
+  fromLat: number;
+  fromLon: number;
+  /** Epoch ms when the latest update was applied, for easing. */
+  updatedAt: number;
+  /** Epoch ms parsed from `lastSeen`, cached to avoid re-parsing every frame. */
+  lastSeenMs: number;
+}
+
+/** A selectable data layer. Phase 2 adds one entry to this list (D19). */
+export interface LayerDescriptor {
+  id: ObjectType;
+  label: string;
+  /** Path segment on the API, e.g. `aircraft`. */
+  resource: string;
+}
