@@ -1,0 +1,228 @@
+"""The normalized data contract shared by every layer of Orbital.
+
+Everything downstream of a Provider speaks these types and only these types.
+No module outside ``app.providers`` should ever see a raw upstream payload.
+
+See ``docs/data-contract.md`` for the prose version of this contract, including
+units and the meaning of each field.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.alias_generators import to_camel
+
+
+def utcnow() -> datetime:
+    """Timezone-aware UTC now.
+
+    Defined once so tests can monkeypatch a single symbol, and so we never
+    accidentally mix naive and aware datetimes when comparing timestamps.
+    """
+    return datetime.now(timezone.utc)
+
+
+class OrbitalModel(BaseModel):
+    """Base for every wire model.
+
+    Serializes to camelCase because the frontend consumes these directly, while
+    staying snake_case in Python. ``populate_by_name`` means tests and fixtures
+    may use either spelling.
+    """
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        frozen=True,
+    )
+
+
+class ObjectType(str, Enum):
+    """Which layer an object belongs to.
+
+    This is the single concession in the phase 1 contract to the eventual
+    satellite layer. The value exists so the renderer can branch on it later;
+    no satellite code exists anywhere in the codebase yet.
+    """
+
+    AIRCRAFT = "aircraft"
+
+
+Latitude = Annotated[float, Field(ge=-90.0, le=90.0)]
+Longitude = Annotated[float, Field(ge=-180.0, le=180.0)]
+
+
+class TrackedObject(OrbitalModel):
+    """One moving object at one instant. The universal shape.
+
+    Deliberately source-agnostic: there is no aircraft-specific field here.
+    Anything that only makes sense for one kind of object lives in
+    ``TrackedObjectRecord.meta``. That is what makes a future satellite
+    provider a drop-in rather than a schema change.
+    """
+
+    id: str = Field(description="Stable identifier, unique within a provider.")
+    lat: Latitude = Field(description="Degrees north, WGS84.")
+    lon: Longitude = Field(description="Degrees east, WGS84, normalized to [-180, 180].")
+    altitude: float | None = Field(
+        default=None, description="Metres above mean sea level. None if unknown."
+    )
+    velocity: float | None = Field(
+        default=None, ge=0.0, description="Ground speed in metres per second."
+    )
+    heading: float | None = Field(
+        default=None,
+        description="Direction of travel in degrees clockwise from true north, [0, 360).",
+    )
+    label: str = Field(description="Short human-readable name, e.g. a callsign.")
+    last_seen: datetime = Field(
+        description="When the upstream source last observed this object (UTC)."
+    )
+    type: ObjectType = Field(description="Which layer this object belongs to.")
+
+    @field_validator("lon")
+    @classmethod
+    def _normalize_lon(cls, v: float) -> float:
+        # Guard against upstream sources reporting 180.0 vs -180.0 inconsistently.
+        return -180.0 if v == 180.0 else v
+
+    @field_validator("heading")
+    @classmethod
+    def _wrap_heading(cls, v: float | None) -> float | None:
+        if v is None:
+            return None
+        return v % 360.0
+
+    @field_validator("last_seen")
+    @classmethod
+    def _require_aware(cls, v: datetime) -> datetime:
+        # A naive datetime here silently breaks every staleness comparison, so
+        # we reject it at the boundary rather than debugging it later.
+        if v.tzinfo is None:
+            raise ValueError("last_seen must be timezone-aware")
+        return v.astimezone(timezone.utc)
+
+
+class TrackPoint(OrbitalModel):
+    """A single observed position, used to build the route polyline.
+
+    "Route" in Orbital means the path we have actually watched the object
+    travel, not a filed flight plan. See docs/data-contract.md.
+    """
+
+    lat: Latitude
+    lon: Longitude
+    altitude: float | None = None
+    timestamp: datetime
+
+
+class TrackedObjectRecord(TrackedObject):
+    """What a provider returns and what the store holds: core shape plus meta.
+
+    ``meta`` is the pressure valve that keeps ``TrackedObject`` universal.
+    Aircraft put originCountry here; a future satellite provider would put
+    orbit class here; neither forces a change to the shape the renderer knows.
+
+    This type never reaches the browser as-is. The list endpoint declares
+    ``TrackedObject`` as its response model, so FastAPI projects ``meta`` away
+    and a 2000-object response stays small.
+    """
+
+    meta: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Source-specific fields the core shape deliberately omits, "
+            "e.g. originCountry for aircraft. Rendered generically as key/value rows."
+        ),
+    )
+
+
+class TrackedObjectDetail(TrackedObjectRecord):
+    """A single object plus everything the detail panel needs.
+
+    Returned only by the by-id endpoint, where one extra payload of track
+    history costs nothing.
+    """
+
+    track: tuple[TrackPoint, ...] = Field(
+        default=(), description="Observed positions, oldest first."
+    )
+
+
+class BBox(OrbitalModel):
+    """A geographic bounding box, inclusive on all edges.
+
+    Handles the antimeridian: if ``lon_min > lon_max`` the box is understood to
+    wrap across +/-180 (e.g. lon_min=170, lon_max=-170 is a 20-degree-wide box
+    over the Pacific). Naive ``lon_min <= lon <= lon_max`` silently returns
+    nothing for those boxes, which is an easy bug to ship and a hard one to see.
+    """
+
+    lat_min: Latitude
+    lat_max: Latitude
+    lon_min: Longitude
+    lon_max: Longitude
+
+    @classmethod
+    def parse(cls, raw: str) -> BBox:
+        """Parse the query-string form ``latMin,lonMin,latMax,lonMax``.
+
+        Ordering matches OpenSky's own parameter order to avoid a translation
+        step that nobody would remember to do.
+        """
+        parts = raw.split(",")
+        if len(parts) != 4:
+            raise ValueError("bbox must be 'latMin,lonMin,latMax,lonMax'")
+        try:
+            lat_min, lon_min, lat_max, lon_max = (float(p) for p in parts)
+        except ValueError as exc:
+            raise ValueError("bbox values must be numbers") from exc
+        if lat_min > lat_max:
+            raise ValueError("bbox latMin must not exceed latMax")
+        return cls(lat_min=lat_min, lat_max=lat_max, lon_min=lon_min, lon_max=lon_max)
+
+    @property
+    def crosses_antimeridian(self) -> bool:
+        return self.lon_min > self.lon_max
+
+    def contains(self, lat: float, lon: float) -> bool:
+        if not (self.lat_min <= lat <= self.lat_max):
+            return False
+        if self.crosses_antimeridian:
+            return lon >= self.lon_min or lon <= self.lon_max
+        return self.lon_min <= lon <= self.lon_max
+
+    @property
+    def width_deg(self) -> float:
+        """Longitudinal span in degrees, correct across the antimeridian."""
+        if self.crosses_antimeridian:
+            return (180.0 - self.lon_min) + (self.lon_max + 180.0)
+        return self.lon_max - self.lon_min
+
+    @property
+    def height_deg(self) -> float:
+        return self.lat_max - self.lat_min
+
+
+WORLD = BBox(lat_min=-90.0, lat_max=90.0, lon_min=-180.0, lon_max=180.0)
+
+
+class Snapshot(OrbitalModel):
+    """One complete poll result: what we got, from where, and when.
+
+    The store holds exactly one of these per layer. The API serves views of it
+    and never triggers a fetch, which is what keeps upstream failures from
+    reaching the browser.
+    """
+
+    objects: tuple[TrackedObjectRecord, ...]
+    fetched_at: datetime
+    source: str = Field(description="Provider name that produced this snapshot.")
+    type: ObjectType
+
+    def age_seconds(self, now: datetime | None = None) -> float:
+        return ((now or utcnow()) - self.fetched_at).total_seconds()

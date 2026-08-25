@@ -1,0 +1,2200 @@
+[
+  {
+    "id": "d71c58",
+    "lat": 30.6801,
+    "lon": -102.88,
+    "altitude": 11619.8,
+    "velocity": 221.6,
+    "heading": 342.3,
+    "label": "THY5066",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Turkey"
+    }
+  },
+  {
+    "id": "5ab08d",
+    "lat": 42.6659,
+    "lon": -76.7951,
+    "altitude": 9613.6,
+    "velocity": 239.4,
+    "heading": 349.7,
+    "label": "DAL5365",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "b17230",
+    "lat": 38.5982,
+    "lon": -90.1724,
+    "altitude": 11645.7,
+    "velocity": 261.0,
+    "heading": 59.0,
+    "label": "AAL9544",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "961cc6",
+    "lat": 48.1078,
+    "lon": -86.3989,
+    "altitude": 11068.0,
+    "velocity": 233.4,
+    "heading": 142.2,
+    "label": "CCA3137",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "af9a1a",
+    "lat": 48.7931,
+    "lon": -103.9439,
+    "altitude": 174.0,
+    "velocity": 33.5,
+    "heading": 184.7,
+    "label": "AFR6817",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "France"
+    }
+  },
+  {
+    "id": "4a225b",
+    "lat": 40.9678,
+    "lon": -93.1097,
+    "altitude": 208.3,
+    "velocity": 54.9,
+    "heading": 262.0,
+    "label": "ETH6777",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ethiopia"
+    }
+  },
+  {
+    "id": "9d7e00",
+    "lat": 48.5544,
+    "lon": -117.2004,
+    "altitude": 9619.9,
+    "velocity": 264.7,
+    "heading": 82.3,
+    "label": "QFA3225",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Australia"
+    }
+  },
+  {
+    "id": "a57838",
+    "lat": 34.9138,
+    "lon": -101.2545,
+    "altitude": 11666.1,
+    "velocity": 226.4,
+    "heading": 237.6,
+    "label": "BAW9832",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "356381",
+    "lat": 37.6144,
+    "lon": -100.9112,
+    "altitude": 2616.0,
+    "velocity": 168.3,
+    "heading": 323.3,
+    "label": "CPA5160",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "139bf1",
+    "lat": 42.8732,
+    "lon": -96.2806,
+    "altitude": 12048.5,
+    "velocity": 215.1,
+    "heading": 331.6,
+    "label": "QTR3602",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Qatar"
+    }
+  },
+  {
+    "id": "d71918",
+    "lat": 39.9279,
+    "lon": -88.1237,
+    "altitude": 11267.6,
+    "velocity": 238.1,
+    "heading": 243.6,
+    "label": "AFR9409",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "France"
+    }
+  },
+  {
+    "id": "f5b8f6",
+    "lat": 44.2872,
+    "lon": -92.4957,
+    "altitude": 11301.2,
+    "velocity": 215.7,
+    "heading": 56.6,
+    "label": "JAL7141",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "fc68b7",
+    "lat": 43.6056,
+    "lon": -98.2449,
+    "altitude": 9917.3,
+    "velocity": 222.1,
+    "heading": 39.7,
+    "label": "AAL5777",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "def8e8",
+    "lat": 28.1487,
+    "lon": -96.8502,
+    "altitude": 11190.1,
+    "velocity": 259.6,
+    "heading": 301.1,
+    "label": "UAL667",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "e3d2dc",
+    "lat": 47.4151,
+    "lon": -105.6539,
+    "altitude": 12083.0,
+    "velocity": 250.7,
+    "heading": 312.0,
+    "label": "UAE8110",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Arab Emirates"
+    }
+  },
+  {
+    "id": "8e7898",
+    "lat": 44.3789,
+    "lon": -95.6797,
+    "altitude": 11304.2,
+    "velocity": 220.9,
+    "heading": 316.8,
+    "label": "RYR4946",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ireland"
+    }
+  },
+  {
+    "id": "500cfd",
+    "lat": 35.4366,
+    "lon": -106.7403,
+    "altitude": 12043.4,
+    "velocity": 219.0,
+    "heading": 171.5,
+    "label": "RYR5308",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ireland"
+    }
+  },
+  {
+    "id": "d7a16e",
+    "lat": 53.6388,
+    "lon": -91.7696,
+    "altitude": 10.5,
+    "velocity": 22.9,
+    "heading": 30.9,
+    "label": "CCA9716",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "799be7",
+    "lat": 32.8015,
+    "lon": -86.3413,
+    "altitude": 9495.0,
+    "velocity": 242.5,
+    "heading": 303.9,
+    "label": "AIC5096",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "India"
+    }
+  },
+  {
+    "id": "c93ce7",
+    "lat": 33.1582,
+    "lon": -94.5171,
+    "altitude": 118.3,
+    "velocity": 20.2,
+    "heading": 213.7,
+    "label": "ANA390",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "f13535",
+    "lat": 38.1111,
+    "lon": -105.8484,
+    "altitude": 9939.7,
+    "velocity": 253.5,
+    "heading": 139.7,
+    "label": "ETH4196",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ethiopia"
+    }
+  },
+  {
+    "id": "65cd49",
+    "lat": 34.7443,
+    "lon": -114.8457,
+    "altitude": 11304.2,
+    "velocity": 244.0,
+    "heading": 184.8,
+    "label": "TAM8456",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Brazil"
+    }
+  },
+  {
+    "id": "8b5e5e",
+    "lat": 32.565,
+    "lon": -95.8258,
+    "altitude": 10979.1,
+    "velocity": 239.0,
+    "heading": 347.2,
+    "label": "TAM6751",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Brazil"
+    }
+  },
+  {
+    "id": "fbbaa1",
+    "lat": 40.01,
+    "lon": -97.2405,
+    "altitude": 9002.2,
+    "velocity": 240.6,
+    "heading": 286.1,
+    "label": "UAL6328",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "031d30",
+    "lat": 46.7844,
+    "lon": -80.1542,
+    "altitude": 11482.0,
+    "velocity": 260.5,
+    "heading": 177.4,
+    "label": "QTR145",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Qatar"
+    }
+  },
+  {
+    "id": "de1e36",
+    "lat": 30.7176,
+    "lon": -89.2712,
+    "altitude": 11172.5,
+    "velocity": 252.3,
+    "heading": 109.4,
+    "label": "UAE1278",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Arab Emirates"
+    }
+  },
+  {
+    "id": "b75c7d",
+    "lat": 37.9472,
+    "lon": -93.8849,
+    "altitude": 9029.4,
+    "velocity": 263.5,
+    "heading": 302.5,
+    "label": "QFA7333",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Australia"
+    }
+  },
+  {
+    "id": "b4291e",
+    "lat": 55.4305,
+    "lon": -93.3399,
+    "altitude": 7964.8,
+    "velocity": 166.9,
+    "heading": 15.6,
+    "label": "AFR9524",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "France"
+    }
+  },
+  {
+    "id": "5c8f80",
+    "lat": 34.5669,
+    "lon": -108.8916,
+    "altitude": 11816.4,
+    "velocity": 229.2,
+    "heading": 176.5,
+    "label": "KLM2795",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Netherlands"
+    }
+  },
+  {
+    "id": "92ab88",
+    "lat": 35.3522,
+    "lon": -97.5437,
+    "altitude": 2521.4,
+    "velocity": 144.5,
+    "heading": 103.0,
+    "label": "ANA5871",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "45e39a",
+    "lat": 37.8777,
+    "lon": -88.8666,
+    "altitude": 281.2,
+    "velocity": 56.9,
+    "heading": 23.2,
+    "label": "BAW2484",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "3b1532",
+    "lat": 45.9827,
+    "lon": -100.0396,
+    "altitude": 12137.8,
+    "velocity": 211.9,
+    "heading": 337.2,
+    "label": "SAS709",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Sweden"
+    }
+  },
+  {
+    "id": "06c380",
+    "lat": 35.5571,
+    "lon": -97.4557,
+    "altitude": 9766.5,
+    "velocity": 249.4,
+    "heading": 254.3,
+    "label": "BAW4739",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "a7db47",
+    "lat": 55.0078,
+    "lon": -81.4721,
+    "altitude": 9297.4,
+    "velocity": 229.3,
+    "heading": 60.0,
+    "label": "RYR5177",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ireland"
+    }
+  },
+  {
+    "id": "ff2add",
+    "lat": 46.9346,
+    "lon": 12.8362,
+    "altitude": 9924.3,
+    "velocity": 216.5,
+    "heading": 89.9,
+    "label": "BAW4591",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "7b630a",
+    "lat": 54.7524,
+    "lon": 13.6474,
+    "altitude": 12259.1,
+    "velocity": 237.9,
+    "heading": 297.9,
+    "label": "RYR4019",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ireland"
+    }
+  },
+  {
+    "id": "a7db5b",
+    "lat": 47.9348,
+    "lon": 4.4686,
+    "altitude": 9694.6,
+    "velocity": 236.0,
+    "heading": 342.0,
+    "label": "DAL1641",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "df4564",
+    "lat": 53.3304,
+    "lon": 13.8963,
+    "altitude": 11392.4,
+    "velocity": 261.1,
+    "heading": 87.4,
+    "label": "EZY3154",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "738a05",
+    "lat": 46.6743,
+    "lon": 2.2393,
+    "altitude": 9675.7,
+    "velocity": 215.3,
+    "heading": 219.4,
+    "label": "DLH2475",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Germany"
+    }
+  },
+  {
+    "id": "8965d3",
+    "lat": 46.0126,
+    "lon": 10.1538,
+    "altitude": 12278.3,
+    "velocity": 224.9,
+    "heading": 244.3,
+    "label": "ETH6056",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ethiopia"
+    }
+  },
+  {
+    "id": "e580af",
+    "lat": 52.66,
+    "lon": 5.1852,
+    "altitude": 239.1,
+    "velocity": 6.5,
+    "heading": 171.5,
+    "label": "ANZ2899",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "New Zealand"
+    }
+  },
+  {
+    "id": "bc8b3b",
+    "lat": 55.0963,
+    "lon": 1.0931,
+    "altitude": 10922.8,
+    "velocity": 226.8,
+    "heading": 117.8,
+    "label": "SIA1217",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Singapore"
+    }
+  },
+  {
+    "id": "80de84",
+    "lat": 45.9052,
+    "lon": -6.0063,
+    "altitude": 9449.3,
+    "velocity": 237.7,
+    "heading": 341.2,
+    "label": "ANZ129",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "New Zealand"
+    }
+  },
+  {
+    "id": "be15c5",
+    "lat": 50.4507,
+    "lon": 4.6899,
+    "altitude": 129.5,
+    "velocity": 58.2,
+    "heading": 267.7,
+    "label": "CCA5427",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "cb2cf8",
+    "lat": 42.1034,
+    "lon": 0.093,
+    "altitude": 10899.1,
+    "velocity": 254.5,
+    "heading": 103.8,
+    "label": "BAW1180",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "57f2f2",
+    "lat": 55.6785,
+    "lon": 6.0893,
+    "altitude": 176.3,
+    "velocity": 59.9,
+    "heading": 19.5,
+    "label": "CPA674",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "1721d0",
+    "lat": 49.7932,
+    "lon": 18.825,
+    "altitude": 10372.4,
+    "velocity": 252.4,
+    "heading": 293.4,
+    "label": "ACA8137",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Canada"
+    }
+  },
+  {
+    "id": "9445c6",
+    "lat": 47.5377,
+    "lon": 9.2976,
+    "altitude": 9346.0,
+    "velocity": 230.2,
+    "heading": 109.6,
+    "label": "THY6551",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Turkey"
+    }
+  },
+  {
+    "id": "d01cb0",
+    "lat": 46.1871,
+    "lon": 6.072,
+    "altitude": 9406.4,
+    "velocity": 217.5,
+    "heading": 185.4,
+    "label": "AIC3300",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "India"
+    }
+  },
+  {
+    "id": "0a1b8e",
+    "lat": 47.4962,
+    "lon": 11.8553,
+    "altitude": 11855.8,
+    "velocity": 261.0,
+    "heading": 18.3,
+    "label": "KLM7494",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Netherlands"
+    }
+  },
+  {
+    "id": "cdd754",
+    "lat": 47.9628,
+    "lon": 16.9372,
+    "altitude": 9662.6,
+    "velocity": 232.6,
+    "heading": 131.2,
+    "label": "EZY1587",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "b359bf",
+    "lat": 52.1547,
+    "lon": 7.7238,
+    "altitude": 10457.7,
+    "velocity": 234.2,
+    "heading": 321.7,
+    "label": "SIA7135",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Singapore"
+    }
+  },
+  {
+    "id": "2496f0",
+    "lat": 55.987,
+    "lon": 7.9829,
+    "altitude": 3230.2,
+    "velocity": 144.2,
+    "heading": 139.4,
+    "label": "SAS9493",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Sweden"
+    }
+  },
+  {
+    "id": "a0aa14",
+    "lat": 52.5271,
+    "lon": 11.9727,
+    "altitude": 9154.6,
+    "velocity": 261.5,
+    "heading": 237.5,
+    "label": "EZY7478",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "57b0ab",
+    "lat": 48.8552,
+    "lon": -2.7459,
+    "altitude": 7466.5,
+    "velocity": 168.9,
+    "heading": 101.6,
+    "label": "CCA6031",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "60f4f5",
+    "lat": 56.9241,
+    "lon": 4.3527,
+    "altitude": 9159.4,
+    "velocity": 244.7,
+    "heading": 181.2,
+    "label": "LAN2858",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Chile"
+    }
+  },
+  {
+    "id": "752d1f",
+    "lat": 47.0074,
+    "lon": 20.7871,
+    "altitude": 4619.4,
+    "velocity": 164.8,
+    "heading": 67.9,
+    "label": "ACA8866",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Canada"
+    }
+  },
+  {
+    "id": "e7750f",
+    "lat": 45.647,
+    "lon": 0.985,
+    "altitude": 9370.2,
+    "velocity": 240.6,
+    "heading": 274.3,
+    "label": "AFR1357",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "France"
+    }
+  },
+  {
+    "id": "fe489d",
+    "lat": 52.3294,
+    "lon": 11.7521,
+    "altitude": 10693.2,
+    "velocity": 211.7,
+    "heading": 148.4,
+    "label": "UAL5320",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "c28aff",
+    "lat": 47.8748,
+    "lon": 4.5938,
+    "altitude": 9093.3,
+    "velocity": 229.3,
+    "heading": 245.5,
+    "label": "CPA821",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "79699d",
+    "lat": 42.5229,
+    "lon": 7.6837,
+    "altitude": 10379.6,
+    "velocity": 233.7,
+    "heading": 137.0,
+    "label": "ETH5517",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ethiopia"
+    }
+  },
+  {
+    "id": "f9a1be",
+    "lat": 50.6412,
+    "lon": 17.2513,
+    "altitude": 10388.2,
+    "velocity": 257.0,
+    "heading": 132.1,
+    "label": "AFR1593",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "France"
+    }
+  },
+  {
+    "id": "94003b",
+    "lat": 47.6233,
+    "lon": 14.0492,
+    "altitude": 10296.5,
+    "velocity": 254.1,
+    "heading": 332.2,
+    "label": "KLM4837",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Netherlands"
+    }
+  },
+  {
+    "id": "049200",
+    "lat": 47.4065,
+    "lon": 16.8042,
+    "altitude": 9573.9,
+    "velocity": 244.6,
+    "heading": 165.5,
+    "label": "EZY2072",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "e355d0",
+    "lat": 28.7576,
+    "lon": 128.9495,
+    "altitude": 10259.5,
+    "velocity": 231.9,
+    "heading": 157.5,
+    "label": "DLH4768",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Germany"
+    }
+  },
+  {
+    "id": "be2706",
+    "lat": 37.7544,
+    "lon": 116.0808,
+    "altitude": 9596.8,
+    "velocity": 231.0,
+    "heading": 59.1,
+    "label": "THY5291",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Turkey"
+    }
+  },
+  {
+    "id": "08086b",
+    "lat": 40.46,
+    "lon": 129.7294,
+    "altitude": 12107.6,
+    "velocity": 211.4,
+    "heading": 1.0,
+    "label": "AFR9477",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "France"
+    }
+  },
+  {
+    "id": "61cf05",
+    "lat": 31.0042,
+    "lon": 129.5524,
+    "altitude": 143.2,
+    "velocity": 14.0,
+    "heading": 84.4,
+    "label": "CCA4063",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "2d0a72",
+    "lat": 33.3565,
+    "lon": 129.8179,
+    "altitude": 6016.2,
+    "velocity": 188.6,
+    "heading": 291.6,
+    "label": "EZY3905",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "63cdde",
+    "lat": 34.4894,
+    "lon": 115.2928,
+    "altitude": 261.0,
+    "velocity": 36.9,
+    "heading": 179.7,
+    "label": "ANA5686",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "feef6f",
+    "lat": 37.719,
+    "lon": 124.1582,
+    "altitude": 9306.2,
+    "velocity": 220.3,
+    "heading": 195.3,
+    "label": "CPA4398",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "899658",
+    "lat": 29.4128,
+    "lon": 126.0236,
+    "altitude": 11948.1,
+    "velocity": 228.4,
+    "heading": 131.0,
+    "label": "SAS3573",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Sweden"
+    }
+  },
+  {
+    "id": "fdd531",
+    "lat": 35.8998,
+    "lon": 117.9651,
+    "altitude": 11799.0,
+    "velocity": 247.8,
+    "heading": 77.2,
+    "label": "QFA9278",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Australia"
+    }
+  },
+  {
+    "id": "2c8519",
+    "lat": 32.2207,
+    "lon": 111.8651,
+    "altitude": 11937.3,
+    "velocity": 251.9,
+    "heading": 135.3,
+    "label": "SAS6075",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Sweden"
+    }
+  },
+  {
+    "id": "17982c",
+    "lat": 39.2231,
+    "lon": 116.4964,
+    "altitude": 9668.3,
+    "velocity": 260.9,
+    "heading": 244.8,
+    "label": "JAL3644",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "35c568",
+    "lat": 29.792,
+    "lon": 102.6864,
+    "altitude": 10300.3,
+    "velocity": 243.0,
+    "heading": 244.5,
+    "label": "BAW8332",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "249cb2",
+    "lat": 39.6091,
+    "lon": 116.9681,
+    "altitude": 10171.7,
+    "velocity": 258.5,
+    "heading": 267.8,
+    "label": "QTR4331",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Qatar"
+    }
+  },
+  {
+    "id": "0c329f",
+    "lat": 34.8112,
+    "lon": 117.7564,
+    "altitude": 1870.1,
+    "velocity": 155.7,
+    "heading": 323.3,
+    "label": "EZY6056",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "9802ef",
+    "lat": 30.3166,
+    "lon": 121.0614,
+    "altitude": 9396.7,
+    "velocity": 245.5,
+    "heading": 329.6,
+    "label": "LAN4748",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Chile"
+    }
+  },
+  {
+    "id": "7cadf8",
+    "lat": 37.33,
+    "lon": 130.9323,
+    "altitude": 11269.9,
+    "velocity": 223.4,
+    "heading": 277.5,
+    "label": "ANZ5176",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "New Zealand"
+    }
+  },
+  {
+    "id": "151eb8",
+    "lat": 32.3159,
+    "lon": 120.3933,
+    "altitude": 7970.2,
+    "velocity": 157.4,
+    "heading": 19.5,
+    "label": "RYR2625",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ireland"
+    }
+  },
+  {
+    "id": "6c5865",
+    "lat": 32.3127,
+    "lon": 122.9632,
+    "altitude": 11750.2,
+    "velocity": 232.3,
+    "heading": 91.3,
+    "label": "SAA2151",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "South Africa"
+    }
+  },
+  {
+    "id": "f1eeb5",
+    "lat": 27.8692,
+    "lon": 120.174,
+    "altitude": 11452.3,
+    "velocity": 221.1,
+    "heading": 92.0,
+    "label": "EZY6312",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "7cc46d",
+    "lat": 24.0919,
+    "lon": 116.3899,
+    "altitude": 7515.4,
+    "velocity": 175.5,
+    "heading": 186.4,
+    "label": "SAA721",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "South Africa"
+    }
+  },
+  {
+    "id": "238630",
+    "lat": 36.6551,
+    "lon": 126.1315,
+    "altitude": 11487.1,
+    "velocity": 226.4,
+    "heading": 167.6,
+    "label": "DAL4996",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "82d34d",
+    "lat": 31.3184,
+    "lon": 123.6849,
+    "altitude": 11375.9,
+    "velocity": 228.0,
+    "heading": 2.1,
+    "label": "JAL4587",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "6f37d7",
+    "lat": 17.5082,
+    "lon": 51.1429,
+    "altitude": 4222.9,
+    "velocity": 168.4,
+    "heading": 190.5,
+    "label": "CCA5982",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "4be3aa",
+    "lat": 25.0244,
+    "lon": 52.1042,
+    "altitude": 12188.0,
+    "velocity": 217.4,
+    "heading": 23.8,
+    "label": "KLM1140",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Netherlands"
+    }
+  },
+  {
+    "id": "b94629",
+    "lat": 16.5439,
+    "lon": 59.8008,
+    "altitude": 69.4,
+    "velocity": 15.2,
+    "heading": 311.5,
+    "label": "KLM2301",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Netherlands"
+    }
+  },
+  {
+    "id": "32d2d5",
+    "lat": 28.0759,
+    "lon": 57.112,
+    "altitude": 10137.4,
+    "velocity": 215.1,
+    "heading": 111.8,
+    "label": "SWA7529",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "ae70a5",
+    "lat": 29.5758,
+    "lon": 54.303,
+    "altitude": 9516.2,
+    "velocity": 216.8,
+    "heading": 73.0,
+    "label": "AAL795",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "6ab2df",
+    "lat": 30.1355,
+    "lon": 68.3656,
+    "altitude": 11308.1,
+    "velocity": 262.5,
+    "heading": 333.7,
+    "label": "RYR7251",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ireland"
+    }
+  },
+  {
+    "id": "42bac0",
+    "lat": 24.0677,
+    "lon": 51.9704,
+    "altitude": 11548.0,
+    "velocity": 243.7,
+    "heading": 301.2,
+    "label": "CCA8490",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "849c41",
+    "lat": 22.5827,
+    "lon": 62.0117,
+    "altitude": 10607.8,
+    "velocity": 247.7,
+    "heading": 35.4,
+    "label": "AAL1605",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "c7d868",
+    "lat": 25.7605,
+    "lon": 54.1554,
+    "altitude": 1740.0,
+    "velocity": 158.1,
+    "heading": 288.1,
+    "label": "UAL7231",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "d2401e",
+    "lat": 27.3486,
+    "lon": 68.1262,
+    "altitude": 11223.8,
+    "velocity": 247.6,
+    "heading": 292.2,
+    "label": "EZY4708",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "1ff95f",
+    "lat": 20.5134,
+    "lon": 85.397,
+    "altitude": 10730.6,
+    "velocity": 213.4,
+    "heading": 31.1,
+    "label": "RYR9671",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ireland"
+    }
+  },
+  {
+    "id": "b06bd3",
+    "lat": 22.15,
+    "lon": 74.5952,
+    "altitude": 5961.5,
+    "velocity": 196.2,
+    "heading": 6.9,
+    "label": "AIC3085",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "India"
+    }
+  },
+  {
+    "id": "233e32",
+    "lat": 21.3275,
+    "lon": 78.7706,
+    "altitude": 12254.2,
+    "velocity": 245.9,
+    "heading": 108.8,
+    "label": "QFA8317",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Australia"
+    }
+  },
+  {
+    "id": "7dbcb0",
+    "lat": 27.8108,
+    "lon": 79.3168,
+    "altitude": 9822.4,
+    "velocity": 247.8,
+    "heading": 127.1,
+    "label": "ETH288",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ethiopia"
+    }
+  },
+  {
+    "id": "a92ed1",
+    "lat": 22.0987,
+    "lon": 74.6297,
+    "altitude": 12485.6,
+    "velocity": 222.9,
+    "heading": 352.2,
+    "label": "BAW472",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "8d436a",
+    "lat": 24.7848,
+    "lon": 69.8233,
+    "altitude": 6535.6,
+    "velocity": 173.7,
+    "heading": 79.6,
+    "label": "CCA7653",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "5c5756",
+    "lat": 26.2146,
+    "lon": 74.2709,
+    "altitude": 11677.7,
+    "velocity": 242.5,
+    "heading": 243.1,
+    "label": "EZY6819",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "561176",
+    "lat": 19.4514,
+    "lon": 72.4047,
+    "altitude": 10215.1,
+    "velocity": 261.3,
+    "heading": 303.3,
+    "label": "UAE7045",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Arab Emirates"
+    }
+  },
+  {
+    "id": "4100b5",
+    "lat": 12.3588,
+    "lon": 66.75,
+    "altitude": 10613.4,
+    "velocity": 257.0,
+    "heading": 34.0,
+    "label": "JAL2692",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "dc9750",
+    "lat": 18.1081,
+    "lon": 71.9605,
+    "altitude": 11126.6,
+    "velocity": 240.5,
+    "heading": 172.5,
+    "label": "CPA5705",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "4e87a5",
+    "lat": -20.9359,
+    "lon": 137.7948,
+    "altitude": 11315.4,
+    "velocity": 219.5,
+    "heading": 274.6,
+    "label": "KLM3710",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Netherlands"
+    }
+  },
+  {
+    "id": "d7c01f",
+    "lat": -28.9651,
+    "lon": 137.1502,
+    "altitude": 5863.5,
+    "velocity": 205.7,
+    "heading": 128.0,
+    "label": "SAS6748",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Sweden"
+    }
+  },
+  {
+    "id": "c581b5",
+    "lat": -22.5908,
+    "lon": 141.3788,
+    "altitude": 10597.3,
+    "velocity": 225.2,
+    "heading": 240.7,
+    "label": "JAL8619",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "56900b",
+    "lat": -33.5947,
+    "lon": 162.7259,
+    "altitude": 11659.5,
+    "velocity": 218.4,
+    "heading": 66.9,
+    "label": "BAW652",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "021b2d",
+    "lat": -29.0626,
+    "lon": 132.1477,
+    "altitude": 134.2,
+    "velocity": 9.9,
+    "heading": 136.8,
+    "label": "KLM5466",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Netherlands"
+    }
+  },
+  {
+    "id": "4c7115",
+    "lat": -29.7333,
+    "lon": 157.0055,
+    "altitude": 12272.9,
+    "velocity": 249.0,
+    "heading": 159.3,
+    "label": "ETH6992",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ethiopia"
+    }
+  },
+  {
+    "id": "dade80",
+    "lat": -27.3474,
+    "lon": 142.1274,
+    "altitude": 10607.1,
+    "velocity": 226.8,
+    "heading": 205.4,
+    "label": "EZY2304",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "d517dd",
+    "lat": -26.5309,
+    "lon": 149.8947,
+    "altitude": 11188.6,
+    "velocity": 230.6,
+    "heading": 19.3,
+    "label": "DLH6852",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Germany"
+    }
+  },
+  {
+    "id": "3dacda",
+    "lat": -9.411,
+    "lon": -52.1952,
+    "altitude": 10342.8,
+    "velocity": 254.3,
+    "heading": 325.3,
+    "label": "SAS6360",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Sweden"
+    }
+  },
+  {
+    "id": "2af499",
+    "lat": -13.0694,
+    "lon": -50.3167,
+    "altitude": 7164.4,
+    "velocity": 205.0,
+    "heading": 101.1,
+    "label": "UAL3663",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "fb93ef",
+    "lat": -18.2609,
+    "lon": -50.2444,
+    "altitude": 10436.7,
+    "velocity": 253.4,
+    "heading": 98.6,
+    "label": "QFA5295",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Australia"
+    }
+  },
+  {
+    "id": "765537",
+    "lat": -6.8459,
+    "lon": -36.5623,
+    "altitude": 11170.0,
+    "velocity": 230.5,
+    "heading": 100.7,
+    "label": "JAL7762",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "1a8ed3",
+    "lat": -9.3092,
+    "lon": -43.7467,
+    "altitude": 10896.2,
+    "velocity": 213.0,
+    "heading": 266.9,
+    "label": "QFA7050",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Australia"
+    }
+  },
+  {
+    "id": "3238a7",
+    "lat": -11.6591,
+    "lon": -55.9136,
+    "altitude": 108.5,
+    "velocity": 51.0,
+    "heading": 211.2,
+    "label": "AIC9849",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "India"
+    }
+  },
+  {
+    "id": "2660ab",
+    "lat": -14.5547,
+    "lon": -59.1333,
+    "altitude": 10553.3,
+    "velocity": 215.8,
+    "heading": 221.9,
+    "label": "CCA1510",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "5a5aac",
+    "lat": -13.8829,
+    "lon": -55.455,
+    "altitude": 12281.7,
+    "velocity": 248.6,
+    "heading": 237.6,
+    "label": "QFA3932",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Australia"
+    }
+  },
+  {
+    "id": "c2d2cd",
+    "lat": 5.1401,
+    "lon": 21.4599,
+    "altitude": 9441.4,
+    "velocity": 263.2,
+    "heading": 222.4,
+    "label": "AAL6220",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "3cadc5",
+    "lat": 3.0116,
+    "lon": 21.164,
+    "altitude": 10656.3,
+    "velocity": 219.8,
+    "heading": 188.5,
+    "label": "SAS6439",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Sweden"
+    }
+  },
+  {
+    "id": "414577",
+    "lat": 10.6325,
+    "lon": -0.273,
+    "altitude": 10477.4,
+    "velocity": 265.0,
+    "heading": 200.2,
+    "label": "THY3236",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Turkey"
+    }
+  },
+  {
+    "id": "7f1f63",
+    "lat": 9.121,
+    "lon": 15.6902,
+    "altitude": 145.7,
+    "velocity": 35.6,
+    "heading": 265.9,
+    "label": "ANA5855",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "5b50d6",
+    "lat": -4.9984,
+    "lon": 9.6124,
+    "altitude": 10589.1,
+    "velocity": 213.0,
+    "heading": 244.6,
+    "label": "ANA4414",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "b9d921",
+    "lat": -1.4305,
+    "lon": 16.4136,
+    "altitude": 10241.1,
+    "velocity": 215.3,
+    "heading": 246.6,
+    "label": "EZY6984",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "f5a73e",
+    "lat": 52.902,
+    "lon": -45.638,
+    "altitude": 11880.2,
+    "velocity": 218.5,
+    "heading": 87.9,
+    "label": "ETH1943",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ethiopia"
+    }
+  },
+  {
+    "id": "474acc",
+    "lat": 39.2915,
+    "lon": -47.856,
+    "altitude": 10646.9,
+    "velocity": 242.0,
+    "heading": 161.4,
+    "label": "LAN5752",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Chile"
+    }
+  },
+  {
+    "id": "160eea",
+    "lat": 43.2371,
+    "lon": -36.5616,
+    "altitude": 12429.8,
+    "velocity": 242.0,
+    "heading": 97.0,
+    "label": "UAE6686",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Arab Emirates"
+    }
+  },
+  {
+    "id": "0f24fa",
+    "lat": 42.7152,
+    "lon": -47.953,
+    "altitude": 11808.1,
+    "velocity": 247.5,
+    "heading": 89.6,
+    "label": "DAL6699",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "f9693a",
+    "lat": 52.0111,
+    "lon": -42.4241,
+    "altitude": 11651.7,
+    "velocity": 219.1,
+    "heading": 136.1,
+    "label": "CCA2730",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "d97620",
+    "lat": 46.2002,
+    "lon": -24.3237,
+    "altitude": 9090.1,
+    "velocity": 256.1,
+    "heading": 136.2,
+    "label": "DLH3426",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Germany"
+    }
+  },
+  {
+    "id": "b328bb",
+    "lat": 48.7439,
+    "lon": -48.2385,
+    "altitude": 10217.0,
+    "velocity": 219.1,
+    "heading": 322.4,
+    "label": "DLH5073",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Germany"
+    }
+  },
+  {
+    "id": "d80e89",
+    "lat": 46.6757,
+    "lon": -32.6454,
+    "altitude": 4621.5,
+    "velocity": 149.2,
+    "heading": 65.2,
+    "label": "QFA7765",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Australia"
+    }
+  },
+  {
+    "id": "829419",
+    "lat": 46.3432,
+    "lon": -37.1434,
+    "altitude": 10478.0,
+    "velocity": 230.0,
+    "heading": 34.4,
+    "label": "THY2169",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Turkey"
+    }
+  },
+  {
+    "id": "67fbc1",
+    "lat": 48.5317,
+    "lon": -38.8231,
+    "altitude": 9278.5,
+    "velocity": 259.2,
+    "heading": 322.2,
+    "label": "BAW2513",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "9baf22",
+    "lat": 56.8156,
+    "lon": -17.1689,
+    "altitude": 9747.8,
+    "velocity": 217.4,
+    "heading": 88.1,
+    "label": "AFR4733",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "France"
+    }
+  },
+  {
+    "id": "288118",
+    "lat": 46.8694,
+    "lon": -15.3719,
+    "altitude": 10005.2,
+    "velocity": 264.2,
+    "heading": 181.7,
+    "label": "ACA3866",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Canada"
+    }
+  },
+  {
+    "id": "2d732d",
+    "lat": 34.068,
+    "lon": -138.052,
+    "altitude": 11258.5,
+    "velocity": 221.6,
+    "heading": 156.7,
+    "label": "UAL9213",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "fc76ef",
+    "lat": 31.6097,
+    "lon": -149.5389,
+    "altitude": 11815.6,
+    "velocity": 247.5,
+    "heading": 351.7,
+    "label": "SWA1370",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "359570",
+    "lat": 25.5062,
+    "lon": -147.6619,
+    "altitude": 260.9,
+    "velocity": 15.2,
+    "heading": 51.8,
+    "label": "ANA4803",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "08fbb5",
+    "lat": 39.9872,
+    "lon": -156.3755,
+    "altitude": 10974.0,
+    "velocity": 256.9,
+    "heading": 9.9,
+    "label": "TAM9806",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Brazil"
+    }
+  },
+  {
+    "id": "6b9b76",
+    "lat": 35.8402,
+    "lon": -166.4059,
+    "altitude": 11076.5,
+    "velocity": 210.8,
+    "heading": 49.9,
+    "label": "CPA835",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "China"
+    }
+  },
+  {
+    "id": "0f9ada",
+    "lat": 34.02,
+    "lon": -161.2111,
+    "altitude": 9241.7,
+    "velocity": 237.0,
+    "heading": 255.7,
+    "label": "ETH9973",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ethiopia"
+    }
+  },
+  {
+    "id": "6db6d7",
+    "lat": 41.5098,
+    "lon": -158.1605,
+    "altitude": 235.1,
+    "velocity": 46.9,
+    "heading": 263.3,
+    "label": "UAE4207",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Arab Emirates"
+    }
+  },
+  {
+    "id": "82b0e5",
+    "lat": 43.4981,
+    "lon": -154.8629,
+    "altitude": 251.1,
+    "velocity": 36.7,
+    "heading": 257.8,
+    "label": "JAL4297",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Japan"
+    }
+  },
+  {
+    "id": "e0b72d",
+    "lat": 68.3251,
+    "lon": 179.5877,
+    "altitude": 10356.6,
+    "velocity": 248.5,
+    "heading": 280.3,
+    "label": "AFR7440",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "France"
+    }
+  },
+  {
+    "id": "0a2889",
+    "lat": 64.1429,
+    "lon": 174.1878,
+    "altitude": 11084.0,
+    "velocity": 248.3,
+    "heading": 333.3,
+    "label": "BAW2966",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "4ae1a5",
+    "lat": 62.7716,
+    "lon": 179.193,
+    "altitude": 9030.4,
+    "velocity": 243.9,
+    "heading": 252.2,
+    "label": "DAL4427",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United States"
+    }
+  },
+  {
+    "id": "9bec96",
+    "lat": 69.3398,
+    "lon": 176.6941,
+    "altitude": 12234.5,
+    "velocity": 245.2,
+    "heading": 287.6,
+    "label": "RYR4577",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Ireland"
+    }
+  },
+  {
+    "id": "e0ge01",
+    "lat": 51.4706,
+    "lon": -0.4619,
+    "altitude": 0.0,
+    "velocity": null,
+    "heading": null,
+    "label": "BAW9001",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "United Kingdom"
+    }
+  },
+  {
+    "id": "e0ge02",
+    "lat": -33.9461,
+    "lon": 151.1772,
+    "altitude": null,
+    "velocity": 68.0,
+    "heading": 160.0,
+    "label": "QFA401",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Australia"
+    }
+  },
+  {
+    "id": "e0ge03",
+    "lat": 62.5,
+    "lon": 179.6,
+    "altitude": 10600.0,
+    "velocity": 240.0,
+    "heading": 275.0,
+    "label": "AFL2201",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Russian Federation"
+    }
+  },
+  {
+    "id": "e0ge04",
+    "lat": 82.1,
+    "lon": -60.0,
+    "altitude": 11200.0,
+    "velocity": 250.0,
+    "heading": 5.0,
+    "label": "SAS944",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Sweden"
+    }
+  },
+  {
+    "id": "e0ge05",
+    "lat": 41.3,
+    "lon": 2.1,
+    "altitude": 3200.0,
+    "velocity": 180.0,
+    "heading": 90.0,
+    "label": "e0ge05",
+    "lastSeen": "2026-08-25T12:00:00Z",
+    "type": "aircraft",
+    "meta": {
+      "originCountry": "Spain"
+    }
+  }
+]
