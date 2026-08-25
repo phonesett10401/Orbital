@@ -23,6 +23,7 @@ import { config } from '../config';
 import { useOrbitalStore } from '../state/store';
 import { createEarthVisuals } from './earth';
 import { createMarkerLayer } from './markers';
+import { attachPointerSelection } from './pointer';
 import { createRouteLayer } from './route';
 import { bboxChanged, viewportBBox } from './viewport';
 
@@ -80,32 +81,19 @@ export function GlobeView() {
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
-    let pointerDownAt = { x: 0, y: 0, time: 0 };
 
-    const onPointerDown = (event: PointerEvent) => {
-      pointerDownAt = { x: event.clientX, y: event.clientY, time: performance.now() };
-    };
-
-    const onPointerUp = (event: PointerEvent) => {
-      // Distinguish a click from the end of a drag: rotating the globe must not
-      // select whatever marker happens to be under the cursor when you let go.
-      const moved =
-        Math.hypot(event.clientX - pointerDownAt.x, event.clientY - pointerDownAt.y) > 5;
-      if (moved) return;
-
-      const rect = container.getBoundingClientRect();
-      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(pointer, world.camera());
-
-      const hit = markers.pick(raycaster);
-      // Clicking empty space clears the selection, which is the only way to
-      // dismiss the detail panel without hunting for a close button.
-      useOrbitalStore.getState().select(hit);
-    };
-
-    container.addEventListener('pointerdown', onPointerDown);
-    container.addEventListener('pointerup', onPointerUp);
+    const detachPointer = attachPointerSelection({
+      element: container,
+      pick: (ndc) => {
+        pointer.set(ndc.x, ndc.y);
+        const camera = world.camera() as THREE.PerspectiveCamera;
+        raycaster.setFromCamera(pointer, camera);
+        // The pick tolerance is in screen pixels, so it needs the viewport
+        // height to convert into the world units the raycaster expects.
+        return markers.pick(raycaster, camera, container.clientHeight);
+      },
+      onSelect: (id) => useOrbitalStore.getState().select(id),
+    });
 
     // ---- resize ----------------------------------------------------------
 
@@ -185,8 +173,7 @@ export function GlobeView() {
       cancelAnimationFrame(frame);
       unsubscribeRoute();
       observer.disconnect();
-      container.removeEventListener('pointerdown', onPointerDown);
-      container.removeEventListener('pointerup', onPointerUp);
+      detachPointer();
       markers.dispose();
       route.dispose();
       earth.dispose();

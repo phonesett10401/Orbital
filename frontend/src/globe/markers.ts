@@ -20,6 +20,21 @@ import { latLonToVector3 } from './earth';
 export const STALE_AFTER_SECONDS = 120;
 
 /**
+ * Click tolerance, in screen pixels.
+ *
+ * Deliberately far larger than a marker's ~4 px sprite. A target you must hit
+ * within its own radius is not a target — and these targets move. Twelve
+ * pixels is a comfortable click for a moving four-pixel dot without making
+ * neighbouring aircraft ambiguous at normal zoom.
+ *
+ * The important part is the unit: **pixels, not world units**. The original
+ * threshold was a fixed fraction of the globe radius, so tolerance shrank as
+ * the camera pulled back — about 4 px at default zoom and barely 1 px when
+ * zoomed out, which is why clicking appeared to do nothing at all (D34).
+ */
+export const PICK_RADIUS_PX = 12;
+
+/**
  * How far above the surface markers float, as a fraction of globe radius.
  *
  * Not physical: a cruising airliner is 0.2% of Earth's radius up, which would
@@ -98,12 +113,34 @@ export function altitudeColor(altitude: number | null): [number, number, number]
   return stops[stops.length - 1][1];
 }
 
+/**
+ * World-space size of one screen pixel at a given distance from the camera.
+ *
+ * A perspective camera's visible height at distance `d` is `2 d tan(fov/2)`;
+ * dividing by the viewport height in pixels gives world units per pixel. This
+ * is what converts a tolerance expressed in pixels — which is how a user
+ * experiences it — into the world-space threshold the raycaster wants.
+ */
+export function worldUnitsPerPixel(
+  cameraDistance: number,
+  fovDegrees: number,
+  viewportHeightPx: number,
+): number {
+  if (viewportHeightPx <= 0) return 0;
+  const visibleHeight = 2 * cameraDistance * Math.tan((fovDegrees * Math.PI) / 360);
+  return visibleHeight / viewportHeightPx;
+}
+
 export interface MarkerLayer {
   points: THREE.Points;
   /** Rewrite the buffers for this frame. Allocates nothing in the steady state. */
   update(objects: RenderableObject[], nowMs: number, selectedId: string | null): void;
   /** Which object is under the pointer, if any. */
-  pick(raycaster: THREE.Raycaster): string | null;
+  pick(
+    raycaster: THREE.Raycaster,
+    camera: THREE.PerspectiveCamera,
+    viewportHeightPx: number,
+  ): string | null;
   dispose(): void;
 }
 
@@ -131,6 +168,14 @@ export function createMarkerLayer(globeRadius: number, capacity = 4096): MarkerL
 
   const points = new THREE.Points(geometry, material);
   points.name = 'markers';
+  // Set explicitly rather than left for three to compute lazily. Markers all
+  // sit on a shell just above the surface, so this sphere is exact and never
+  // needs recomputing — and computing it from the buffer would be wrong
+  // anyway, since unused capacity beyond the draw range is still (0, 0, 0).
+  geometry.boundingSphere = new THREE.Sphere(
+    new THREE.Vector3(0, 0, 0),
+    globeRadius * (1 + MARKER_ALTITUDE) * 1.01,
+  );
   // The bounding sphere is computed once by hand: markers move every frame, and
   // recomputing it per frame would traverse the whole buffer for no benefit.
   // Frustum culling is off for the same reason — the layer is always on screen.
@@ -191,18 +236,52 @@ export function createMarkerLayer(globeRadius: number, capacity = 4096): MarkerL
     geometry.attributes.dimmed.needsUpdate = true;
   }
 
-  function pick(raycaster: THREE.Raycaster): string | null {
-    // Points raycasting needs an explicit threshold; the default is far too
-    // small to hit a 4-pixel sprite reliably.
-    raycaster.params.Points.threshold = globeRadius * 0.012;
+  function pick(
+    raycaster: THREE.Raycaster,
+    camera: THREE.PerspectiveCamera,
+    viewportHeightPx: number,
+  ): string | null {
+    // Points raycasting needs an explicit threshold, expressed in world units.
+    // Deriving it from a pixel radius keeps the click target the same physical
+    // size on screen at every zoom level.
+    const cameraDistance = camera.position.length();
+    raycaster.params.Points.threshold =
+      PICK_RADIUS_PX * worldUnitsPerPixel(cameraDistance, camera.fov, viewportHeightPx);
+
     const hits = raycaster.intersectObject(points, false);
+    if (hits.length === 0) return null;
+
+    // A marker on the far side of the globe is hidden behind the planet, but
+    // the raycaster has no idea the planet is there. Without this test a
+    // generous threshold happily selects an aircraft over Australia while the
+    // user is clicking one over Spain. A point P is on the visible side when
+    // P . C >= r^2, which is exactly the horizon condition.
+    const horizon = globeRadius * globeRadius;
+    const camPos = camera.position;
+
+    let bestId: string | null = null;
+    let bestDistanceToRay = Infinity;
 
     for (const hit of hits) {
       const index = hit.index;
       if (index === undefined || index >= ids.length) continue;
-      return ids[index];
+
+      const x = positions[index * 3];
+      const y = positions[index * 3 + 1];
+      const z = positions[index * 3 + 2];
+      if (x * camPos.x + y * camPos.y + z * camPos.z < horizon) continue;
+
+      // Prefer the marker nearest the cursor rather than the nearest along the
+      // ray. With a 12-pixel tolerance several markers can qualify, and the
+      // one the user aimed at is the closest to where they clicked.
+      const distanceToRay = hit.distanceToRay ?? 0;
+      if (distanceToRay < bestDistanceToRay) {
+        bestDistanceToRay = distanceToRay;
+        bestId = ids[index];
+      }
     }
-    return null;
+
+    return bestId;
   }
 
   return {

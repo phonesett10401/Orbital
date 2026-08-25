@@ -815,3 +815,68 @@ stale object cannot be mistaken for live traffic.
 This is the client-side counterpart of the backend's decision to keep serving
 last-known positions rather than deleting them (D10). Both follow the same
 rule: an empty or invented display is worse than an old one that says so.
+
+---
+
+## D34 — Click tolerance is measured in screen pixels, not world units
+
+**The bug.** Clicking a marker did nothing. Search worked, so selection and the
+detail panel were fine; only pointer input on the globe failed.
+
+**The cause.** `pick()` set the raycaster's Points threshold to a fixed
+fraction of the globe radius — 1.2 world units. A world-space constant is a
+*shrinking* screen-space tolerance as the camera pulls back:
+
+| Camera distance | Effective click tolerance |
+|---|---|
+| 320 (default zoom) | ~4 px, on a ~4 px marker |
+| 750 (zoomed out) | ~1 px |
+
+So the user had to click within four pixels of the centre of a four-pixel dot
+that was also moving. At wider zoom it was unhittable. Not "sometimes fiddly" —
+effectively dead.
+
+**The fix.** Derive the threshold from a pixel radius using the camera distance
+and field of view, so the target is the same physical size on screen at every
+zoom. `PICK_RADIUS_PX = 12`, measured hit radius ~15 px at default zoom.
+
+Two things had to come with it:
+
+- **A horizon test.** The raycaster does not know the planet is there, so a
+  generous tolerance would happily select an aircraft over Australia while the
+  user clicked one over Spain. Markers on the far side are rejected with
+  `P · C >= r²`.
+- **Nearest to the cursor, not nearest along the ray.** With a 12-pixel
+  tolerance several markers can qualify; the one the user aimed at is the one
+  closest to where they clicked.
+
+An explicit `boundingSphere` was also set on the geometry. Three computes one
+lazily otherwise, from a buffer whose unused capacity is still `(0, 0, 0)`, and
+never recomputes it as markers move — a latent bug that had not bitten yet.
+
+### Why every test passed
+
+This is the part worth remembering. The M4 verification computed a marker's
+projected screen position and called `pick()` at exactly that point. That
+proved the raycast maths and **nothing else** — not the listener wiring, not
+event bubbling, not the coordinate conversion, and critically not the tolerance,
+because a pixel-perfect click needs no tolerance at all.
+
+A test that only ever hits dead centre cannot discover that the target is too
+small. The shortcut that made the test easy to write is exactly what made it
+blind.
+
+**The regression tests now go through the real DOM event path**
+(`pointer.test.ts`): constructed pointer events dispatched on a canvas nested
+inside the container, relying on real bubbling and a real bounding rect, with
+`pick` injected so no WebGL context is needed. Tolerance is pinned separately
+in `markers.test.ts`, including an assertion that reproduces the old
+world-unit behaviour and shows it collapsing.
+
+**Ruled out along the way**, since each was a plausible cause: no overlay
+swallows pointer events (`elementFromPoint` at the canvas centre returns the
+canvas; the header is `pointer-events: none` with `auto` only on its controls);
+events do reach the handler through two levels of bubbling; coordinates were
+already converted against the element rect rather than the window; and the
+three.js dedupe from D31 holds at runtime, with no duplicate-instance warning
+and a raycaster that successfully intersects the points geometry.
