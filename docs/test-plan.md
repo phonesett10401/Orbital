@@ -5,6 +5,10 @@ document is the record of whether they are.
 
 **Status as of the current commit: 4 of 5 criteria met.** See §1.
 
+A live verification run against the real OpenSky API was carried out; its
+evidence is in §9. That run closes most of the gap described in §7 but also
+found two new defects, so criterion 5 remains for the team to judge.
+
 ---
 
 ## 1. Phase 1 exit criteria
@@ -15,12 +19,12 @@ document is the record of whether they are.
 | 2 | Test plan executed, no open critical or high defects | **Met** | §3, §6 |
 | 3 | Stable rendering performance at the target marker count | **Met** | §4 |
 | 4 | Backend survives an OpenSky outage without breaking the frontend | **Met** | §5 |
-| 5 | Phase 1 documentation complete | **Outstanding** | §7 |
+| 5 | Phase 1 documentation complete | **Outstanding — team decision** | §7, §9 |
 
-Criterion 5 is the only one open. It is outstanding because the system has
-never been run against the live OpenSky API — every measurement in this
-document was taken against the fixture provider. See §7 for what that leaves
-unverified.
+Criterion 5 is the only one open. It was outstanding because the system had
+never been run against the live OpenSky API. **That run has now happened** —
+see §9 — and most of §7's gaps are closed. Two new defects were found
+(§9.7), neither critical. The sign-off decision is the team's.
 
 ---
 
@@ -247,3 +251,149 @@ For a demo or a fresh checkout. Start both servers, open the frontend.
 | 12 | Restart the backend | Recovers without a page reload |
 | 13 | Open `/api/health` | `status: ok`, both jobs listed, quota projection shown |
 | 14 | Zoom in tight, wait ~90 s, recheck health | Viewport job shows a successful poll |
+
+
+---
+
+## 9. Live OpenSky verification run
+
+Run against the real API with authenticated client credentials. Reproduce with:
+
+```bash
+cd backend && .venv/Scripts/python scripts/verify_live.py
+```
+
+Cost: 5 credits for the script, 22 credits total across the whole session.
+
+### 9.1 OAuth2 — works
+
+| Check | Result |
+|---|---|
+| Token obtained from the real endpoint | Yes, a 1,445-character JWT |
+| Nominal lifetime | 1,800 s |
+| Refresh scheduled at | 1,740 s (lifetime minus the 60 s safety margin, D24) |
+| Second call reuses the cached token | Yes |
+
+**Not observed:** an actual token refresh. That needs a 29-minute run, and the
+session did not last that long. The refresh path is unit-tested against a mock
+but has still never run against the real endpoint — the one auth risk left.
+
+### 9.2 Credit costs — the model is exactly right
+
+Observed against the real `X-Rate-Limit-Remaining` header:
+
+| Request | Area | Predicted | Observed |
+|---|---|---|---|
+| Bounded box (Benelux) | 20 sq deg | 1 credit | **1** |
+| Viewport poll (tier 2) | 100 sq deg | 2 credits | **2** |
+| Global `/states/all` | whole globe | 4 credits | **4** |
+
+The band table in `quota.py` needs no correction.
+
+### 9.3 Both polling tiers — verified end to end
+
+Over a 310-second run, with credit balance read from the live header:
+
+| Time | Event | Credits |
+|---|---|---|
+| 0 s | tier 1 global poll, 13,537 aircraft | 3,994 → 3,990 |
+| 80 s | tier 2 viewport poll | 3,990 → 3,988 |
+| 160 s | tier 2 viewport poll | 3,988 → 3,986 |
+| 240 s | tier 2 viewport poll | 3,986 → 3,984 |
+| 310 s | tier 1 global poll, 13,573 aircraft | 3,984 → 3,980 |
+
+Extrapolated burn: **roughly 3,150 credits/day against a 3,072 projection** —
+within a few percent, and the difference is the ±10% jitter on a small sample
+of intervals. The budget model holds.
+
+### 9.4 Real data shape — close to what we assumed
+
+13,541 aircraft in one global response.
+
+| Field | Null rate |
+|---|---|
+| `altitude` | 1 of 13,541 (0.007%) |
+| `velocity` | 1 of 13,541 (0.007%) |
+| `heading` | 0 of 13,541 |
+| callsign (label fell back to id) | 200 of 13,541 (1.5%) |
+| `onGround` true | 1,101 of 13,541 (8.1%) |
+
+108 distinct origin countries, including long forms like "Kingdom of the
+Netherlands" that the fixture never contained. All handled without incident.
+
+Nulls are **far rarer than the fixture implies** — the fixture deliberately
+over-represents them (D8), which is the right bias for a test fixture.
+
+### 9.5 Real traffic clustering vs the thinning grid — holds up
+
+This was the untested case: synthetic data was spread evenly, real traffic
+clusters hard.
+
+| Measure | Value |
+|---|---|
+| Occupied 10°×10° cells | 148 of 648 (22.8%) |
+| Busiest cell (30°N, 90°W) | 1,295 aircraft, 9.6% of all traffic |
+| Top 10 cells | 7,504 of 13,541 — **55.4% of world traffic** |
+| CONUS bounding box alone | 7,489 of 13,537 |
+
+After thinning 13,541 → 2,000:
+
+| Measure | Result |
+|---|---|
+| Occupied cells retained | **148 of 148 — none erased** |
+| Sparse cells (≤5 aircraft) retained | **54 of 54** |
+| Busiest cell's share | 9.6% → **2.1%** |
+
+The grid does exactly what D28 claimed: dense regions are reduced rather than
+allowed to dominate, and quiet regions survive intact. This is the single most
+valuable result of the live run, because it is the case no earlier test covered.
+
+### 9.6 Performance on live data — matches the synthetic benchmark
+
+| Measure | Synthetic | Live |
+|---|---|---|
+| Marker update, 2,000 markers | 0.80 ms | **0.82 ms** (4.9% of a frame) |
+| Draw calls | 5 | **4** (no route selected) |
+| `GET /api/aircraft` (globe, thinned) | — | **35 ms**, 328 KB |
+| `GET /api/aircraft?bbox=` (Europe) | — | **7 ms**, 52 KB |
+
+The frontend correctly reported *"2,000 aircraft — showing a sample of 13,537
+in view"*, and detail and search both worked against live records (BAW667,
+ICAO24 `4079f7`, 11,933 m, 219 m/s, 313° NW, origin United Kingdom).
+
+### 9.7 Defects found by the live run
+
+| # | Defect | Severity | Status |
+|---|---|---|---|
+| 7 | Responses are not compressed. 328 KB per poll where gzip gives 71 KB (21.5%) — 1.9 MB/min versus 0.41 MB/min at a 10 s poll. | Medium | **Open** |
+| 8 | The application's own logging is never configured. Every `logger.info` in the poller and provider — credit balance, job results, token acquisition, backoff, rate-limit warnings — goes nowhere. D23 requires the remaining balance to be *logged*; it is read and exposed on `/api/health`, but the log line does not exist in practice. | Medium | **Open** |
+
+Neither is critical and neither blocks a demo. Both were left unfixed
+deliberately: changing the system during a verification run would invalidate
+the evidence above, which describes the committed build exactly.
+
+### 9.8 Observations, not defects
+
+- **`objectCount` exceeds the per-poll count.** Health reported 14,863 objects
+  while the last poll returned 13,573. That is the merge design working as
+  intended (D26): objects persist for their TTL after dropping out of a
+  response, so the store holds a superset. Worth knowing before someone reports
+  it as a bug.
+- **Thinning systematically drops unknown-altitude aircraft.** `rank_key` sorts
+  them last, so at 13,541 → 2,000 the single null-altitude object never
+  survives. Defensible — we know least about those — but it means the frontend's
+  "unknown altitude" marker colour will rarely be seen on a global view.
+
+### 9.9 Still unverified
+
+- **Token refresh across the 30-minute boundary** (§9.1).
+- **HTTP 429 handling and `X-Rate-Limit-Retry-After-Seconds`.** Never triggered;
+  the run stayed far inside quota. Unit-tested against a mock only.
+- **The throttle ladder under real depletion** (D23). Never exercised, since the
+  balance never fell below 99% of the allowance.
+- **A real upstream outage.** The outage tests inject failures; OpenSky did not
+  actually go down during the run.
+
+These are all failure paths, which is exactly the category hardest to verify
+without waiting for a failure. The team should decide whether unit-level
+coverage of them is sufficient for sign-off.
