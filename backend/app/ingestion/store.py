@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 from collections import deque
 from datetime import datetime
+from typing import NamedTuple
 
 from app.models import (
     BBox,
@@ -40,6 +41,26 @@ from app.models import (
 logger = logging.getLogger(__name__)
 
 
+class _TrackSample(NamedTuple):
+    """One observed position, stored as a plain tuple rather than a model.
+
+    Track history is written for *every* object on *every* poll -- ten thousand
+    at a time -- but read only for the one object whose detail panel is open,
+    at most fifty points. Building a validated Pydantic ``TrackPoint`` on the
+    write path cost about 30 ms per poll at ten thousand objects, all of it to
+    validate data that came from an already-validated record.
+
+    So samples are kept as tuples and converted to ``TrackPoint`` lazily in
+    :meth:`ObjectStore.get_detail`, where the conversion is bounded by the ring
+    buffer length (D35).
+    """
+
+    lat: float
+    lon: float
+    altitude: float | None
+    timestamp: datetime
+
+
 class ObjectStore:
     """Latest known state of every tracked object, with observed track history.
 
@@ -47,6 +68,7 @@ class ObjectStore:
         object_ttl_seconds: drop an object not re-observed within this window.
         track_history_points: ring buffer length per object.
         snapshot_ttl_seconds: age past which the store reports itself stale.
+        evict_interval_seconds: how often the eviction sweep may run.
         object_type: which layer this store holds. One store per layer, so the
             phase 2 satellite layer gets its own instance rather than a shared
             one with a type filter threaded through every method.
@@ -59,14 +81,17 @@ class ObjectStore:
         track_history_points: int,
         snapshot_ttl_seconds: float,
         object_type: ObjectType = ObjectType.AIRCRAFT,
+        evict_interval_seconds: float = 60.0,
     ) -> None:
         self.object_ttl_seconds = object_ttl_seconds
         self.track_history_points = track_history_points
         self.snapshot_ttl_seconds = snapshot_ttl_seconds
         self.object_type = object_type
+        self.evict_interval_seconds = evict_interval_seconds
+        self._last_evict_at: datetime | None = None
 
         self._objects: dict[str, TrackedObjectRecord] = {}
-        self._tracks: dict[str, deque[TrackPoint]] = {}
+        self._tracks: dict[str, deque[_TrackSample]] = {}
         self._last_success_at: datetime | None = None
         self._source: str | None = None
         self._updates_applied = 0
@@ -94,8 +119,28 @@ class ObjectStore:
         self._last_success_at = now
         self._source = source
         self._updates_applied += 1
-        self.evict(now)
+        self._evict_if_due(now)
         return len(records)
+
+    def _evict_if_due(self, now: datetime) -> None:
+        """Run the eviction sweep, but not on every single poll.
+
+        Eviction is a full scan with a datetime subtraction per object, which
+        measured ~10 ms of the ~24 ms an apply took at ten thousand objects --
+        on a single-threaded event loop, that delays every request behind it.
+
+        Running it once a minute instead costs nothing in correctness: the
+        object TTL is half an hour, so an expired object lingering for up to
+        another minute is invisible. Reads are unaffected either way, since a
+        stale object is already distinguishable by its `lastSeen`.
+        """
+        due = (
+            self._last_evict_at is None
+            or (now - self._last_evict_at).total_seconds() >= self.evict_interval_seconds
+        )
+        if due:
+            self._last_evict_at = now
+            self.evict(now)
 
     def _append_track_point(self, record: TrackedObjectRecord) -> None:
         history = self._tracks.get(record.id)
@@ -111,12 +156,7 @@ class ObjectStore:
             return
 
         history.append(
-            TrackPoint(
-                lat=record.lat,
-                lon=record.lon,
-                altitude=record.altitude,
-                timestamp=record.last_seen,
-            )
+            _TrackSample(record.lat, record.lon, record.altitude, record.last_seen)
         )
 
     def evict(self, now: datetime | None = None) -> int:
@@ -158,8 +198,14 @@ class ObjectStore:
         record = self._objects.get(object_id)
         if record is None:
             return None
+        # The only place track samples become models, and bounded by the ring
+        # buffer length rather than by the number of objects held.
         history = self._tracks.get(object_id, ())
-        return TrackedObjectDetail(**record.model_dump(), track=tuple(history))
+        track = tuple(
+            TrackPoint(lat=s.lat, lon=s.lon, altitude=s.altitude, timestamp=s.timestamp)
+            for s in history
+        )
+        return TrackedObjectDetail(**record.model_dump(), track=track)
 
     def search(self, query: str, *, limit: int = 20) -> list[TrackedObjectRecord]:
         """Find objects whose label or id matches ``query``, case-insensitively.

@@ -76,9 +76,17 @@ class TestDailyProjection:
 
     def test_the_recommended_pair_fits_with_headroom(self):
         tier1 = daily_credits(300.0, 4)   # globe every 5 minutes
-        tier2 = daily_credits(45.0, 1)    # 5x5 viewport every 45 seconds
+        tier2 = daily_credits(90.0, 2)    # 10x10 viewport every 90 seconds
         assert tier1 + tier2 == 3072
         assert tier1 + tier2 < AUTHENTICATED_DAILY_CREDITS
+
+    def test_trading_viewport_area_against_rate_costs_the_same(self):
+        # Why the viewport tier polls a 100 sq deg box every 90 s rather than a
+        # 25 sq deg box every 45 s: identical daily cost, four times the area
+        # (D36).
+        small_and_fast = daily_credits(45.0, credits_for_area(25.0))
+        large_and_slow = daily_credits(90.0, credits_for_area(100.0))
+        assert small_and_fast == large_and_slow
 
     def test_min_interval_inverts_the_projection(self):
         interval = min_interval_for_budget(4, AUTHENTICATED_DAILY_CREDITS)

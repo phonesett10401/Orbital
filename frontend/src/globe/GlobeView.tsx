@@ -70,7 +70,11 @@ export function GlobeView() {
     const controls = world.controls();
     controls.enableDamping = true;
     controls.dampingFactor = 0.12;
-    controls.minDistance = globeRadius * 1.05;
+    // 1.005 rather than a more cautious 1.05. At 1.05 the closest reachable
+    // view still spans ~1260 square degrees, which is above the threshold at
+    // which the backend will spend credits on a fast viewport poll -- so tier 2
+    // could never engage at any zoom the user could reach (D36).
+    controls.minDistance = globeRadius * 1.005;
     controls.maxDistance = globeRadius * 8;
     // Slow zoom slightly: the default overshoots badly at globe scale.
     controls.zoomSpeed = 0.6;

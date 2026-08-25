@@ -67,6 +67,31 @@ an API credit.
 | [docs/architecture.md](docs/architecture.md) | The three-layer design and data flow, written to be read start to finish |
 | [docs/data-contract.md](docs/data-contract.md) | Field units and meaning; the authority on the normalized shape |
 | [docs/decisions.md](docs/decisions.md) | Every significant choice, with its alternatives and reasoning |
+| [docs/test-plan.md](docs/test-plan.md) | Test coverage, performance measurements, and the phase 1 exit criteria |
+
+## Phase 1 status
+
+Four of the five exit criteria are met. The one outstanding item is that
+**the system has never been run against the live OpenSky API** — every test and
+measurement so far uses the offline fixture provider. OAuth2 against the real
+endpoint, real credit consumption, and real response quirks are all unverified.
+
+[docs/test-plan.md](docs/test-plan.md) §7 says exactly what to run before
+sign-off. Phase 2 does not begin until it has been run.
+
+## Performance
+
+At the 2,000-marker target the browser spends 0.8 ms per frame updating markers
+— under 5% of a 60 fps budget — and draws the entire scene, all 2,000 markers
+included, in **5 draw calls**. The backend handles 10,000 objects with a 7.4 ms
+poll and 9.1 ms of thinning.
+
+Numbers and method are in [docs/test-plan.md](docs/test-plan.md) §4, and the
+benchmark is committed:
+
+```bash
+cd backend && .venv/Scripts/python benchmarks/bench_backend.py
+```
 
 ## Things worth knowing up front
 

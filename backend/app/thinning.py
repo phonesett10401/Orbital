@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from operator import itemgetter
 
 from app.models import WORLD, BBox, TrackedObjectRecord
 
@@ -89,6 +90,13 @@ def thin(
     Returns the input unchanged when it already fits, so the common zoomed-in
     case costs nothing. The result is deterministic: the same input always
     produces the same output, which is what keeps markers from flickering.
+
+    The bucketing loop is written flat rather than calling :func:`cell_of` and
+    :func:`rank_key` per record. Those helpers exist and are tested, but at ten
+    thousand objects the per-call overhead dominated: profiling showed this
+    function costing ~20 ms, which on a single-threaded event loop delays every
+    other request and the poller with it. The flat version computes the same
+    values (D35).
     """
     if limit <= 0:
         return []
@@ -98,12 +106,44 @@ def thin(
     box = bbox or WORLD
     cols, rows = grid_shape(box, limit)
 
-    buckets: dict[tuple[int, int], list[TrackedObjectRecord]] = defaultdict(list)
-    for record in records:
-        buckets[cell_of(record, box, cols, rows)].append(record)
+    # Hoisted out of the loop; recomputing these per record was most of the cost.
+    width = max(box.width_deg, 1e-9)
+    height = max(box.height_deg, 1e-9)
+    lon_min = box.lon_min
+    lat_min = box.lat_min
+    col_scale = cols / width
+    row_scale = rows / height
+    inv_bucket = 1.0 / ALTITUDE_BUCKET_M
+    floor = math.floor
 
+    # Cell key is packed into one int so ordering matches the (col, row) tuple
+    # ordering it replaces: column-major, exactly as before.
+    buckets: dict[int, list[tuple[tuple[float, str], TrackedObjectRecord]]] = defaultdict(list)
+
+    for record in records:
+        dx = (record.lon - lon_min) % 360.0
+        dy = record.lat - lat_min
+
+        col = int(dx * col_scale)
+        if col < 0:
+            col = 0
+        elif col >= cols:
+            col = cols - 1
+
+        row = int(dy * row_scale)
+        if row < 0:
+            row = 0
+        elif row >= rows:
+            row = rows - 1
+
+        altitude = record.altitude if record.altitude is not None else -1.0
+        buckets[col * rows + row].append(
+            ((-floor(altitude * inv_bucket), record.id), record)
+        )
+
+    first = itemgetter(0)
     for bucket in buckets.values():
-        bucket.sort(key=rank_key)
+        bucket.sort(key=first)
 
     # Deterministic cell order, then round-robin by rank: every cell contributes
     # its best before any cell contributes its second best.
@@ -116,7 +156,7 @@ def thin(
         for cell in ordered_cells:
             bucket = buckets[cell]
             if depth < len(bucket):
-                selected.append(bucket[depth])
+                selected.append(bucket[depth][1])
                 if len(selected) >= limit:
                     break
         depth += 1

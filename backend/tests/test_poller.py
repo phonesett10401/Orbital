@@ -18,7 +18,7 @@ from app.ingestion.poller import MAX_BACKOFF_SECONDS, Poller
 from app.ingestion.store import ObjectStore
 from app.models import BBox, ObjectType, TrackedObjectRecord, utcnow
 from app.providers.base import Provider, ProviderRateLimited, ProviderUnavailable
-from app.quota import ThrottleLevel, credits_for_bbox
+from app.quota import ThrottleLevel, credits_for_area, credits_for_bbox
 
 # Anchored to the real clock rather than a literal date: eviction compares
 # record timestamps against "now", so a hardcoded date would quietly start
@@ -148,16 +148,21 @@ class TestFocusTier:
         poller.set_viewport(BBox.parse("36,-100,41,-95"))
         focus = poller.focus_bbox()
         assert focus is not None
-        assert focus.width_deg * focus.height_deg <= 25.0
+        assert focus.width_deg * focus.height_deg <= poller.settings.focus_max_area_sq_deg
 
-    def test_every_focus_poll_costs_exactly_one_credit(self, poller):
+    def test_no_focus_poll_exceeds_its_credit_band(self, poller):
         # This is what keeps the daily projection in D21 exact rather than
-        # approximate: tier 2 can never wander into a higher band.
-        for raw in ("40,-75,42,-73", "36,-100,41,-95", "0,0,4.5,4.5", "-50,20,-46,26"):
+        # approximate: tier 2 can never wander into a higher band, whatever the
+        # camera is doing.
+        budget = credits_for_area(poller.settings.focus_max_area_sq_deg)
+        for raw in (
+            "40,-75,42,-73", "36,-100,41,-95", "0,0,4.5,4.5",
+            "-50,20,-46,26", "20,10,32,22", "-5,-15,7,-3",
+        ):
             poller.set_viewport(BBox.parse(raw))
             focus = poller.focus_bbox()
             assert focus is not None
-            assert credits_for_bbox(focus) == 1, raw
+            assert credits_for_bbox(focus) <= budget, raw
 
     def test_trimming_keeps_the_box_grid_aligned(self, poller):
         # Trimming in whole grid steps preserves the stability snapping bought.
@@ -213,9 +218,17 @@ class TestFocusTier:
         await tick(poller, "viewport")
         assert provider.calls == [poller.focus_bbox()]
 
-    def test_a_focus_box_stays_inside_the_one_credit_band(self, poller):
+    def test_a_small_focus_box_costs_a_single_credit(self, poller):
         poller.set_viewport(BBox.parse("40,-75,42,-73"))
         assert poller.credits_per_call(job_of(poller, "viewport")) == 1
+
+    def test_tier_two_engages_at_a_zoom_the_camera_can_actually_reach(self, poller):
+        # The bug this guards: with the engage threshold at 400 sq deg and the
+        # camera unable to get closer than a ~1260 sq deg view, tier 2 was dead
+        # code that could never fire at any zoom level (D36).
+        # A camera 0.005 globe radii up sees a cap of ~5.7 degrees.
+        poller.set_viewport(BBox.parse("-5.7,-5.7,5.7,5.7"))
+        assert poller.focus_bbox() is not None
 
     def test_a_skipped_focus_poll_is_billed_as_zero(self, poller):
         assert poller.credits_per_call(job_of(poller, "viewport")) == 0

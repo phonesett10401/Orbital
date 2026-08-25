@@ -471,7 +471,7 @@ coverage, tier 2 buys latency — rather than by geography.
 | Tier | Request | Interval | Credits/day | Share |
 |---|---|---|---|---|
 | 1 — coverage | Full globe | 300 s | 1152 | 29% |
-| 2 — latency | Viewport, clamped to ≤25 sq deg | 45 s | 1920 | 48% |
+| 2 — latency | Viewport, clamped to ≤100 sq deg | 90 s | 1920 | 48% |
 | | | **Total** | **3072** | **77%** |
 
 That leaves 928 credits (23%) of headroom for restarts, debugging and demo-day
@@ -484,8 +484,8 @@ Presets for the other quota levels:
 | Account | Tier 1 | Tier 2 | Credits/day | Share |
 |---|---|---|---|---|
 | Anonymous (400) | Globe @ 1200 s | *disabled* | 288 | 72% |
-| Authenticated (4000) | Globe @ 300 s | Viewport @ 45 s | 3072 | 77% |
-| Contributor (8000) | Globe @ 180 s | Viewport @ 30 s | 4800 | 60% |
+| Authenticated (4000) | Globe @ 300 s | Viewport @ 90 s | 3072 | 77% |
+| Contributor (8000) | Globe @ 180 s | Viewport @ 60 s | 4800 | 60% |
 
 Anonymous is a demo-only mode: a 20-minute global refresh with no live tier.
 It exists so the project runs at all for a marker without credentials.
@@ -646,9 +646,10 @@ for precisely the zoom level it was designed for.
 
 Three consequences of the fix:
 
-- **Tier 2 now always costs exactly one credit**, never two or three. That is
-  what makes the daily projection in D21 an exact figure rather than an
-  estimate, and it is asserted by a test that walks several viewport sizes.
+- **Tier 2 never exceeds its credit band.** That is what makes the daily
+  projection in D21 an exact figure rather than an estimate, and it is asserted
+  by a test that walks several viewport sizes. (The band was later widened from
+  one credit to two, with the interval doubled to match — see D36.)
 - **Trimming is in whole grid steps**, so the result stays grid-aligned and
   keeps the stability that snapping bought.
 - **The trimmed edges are not lost**, they are covered by tier 1 at tier 1
@@ -880,3 +881,102 @@ events do reach the handler through two levels of bubbling; coordinates were
 already converted against the element rect rather than the window; and the
 three.js dedupe from D31 holds at runtime, with no duplicate-instance warning
 and a raycaster that successfully intersects the points geometry.
+
+---
+
+## D35 — Optimize only what was measured, and record what was left alone
+
+**Decision:** two backend hot paths were rewritten after profiling; two
+plausible-looking candidates were measured and deliberately left alone.
+
+The benchmark (`benchmarks/bench_backend.py`) is committed so these numbers are
+reproducible rather than anecdotal. At 10,000 objects — roughly what OpenSky
+reports globally:
+
+| Operation | Before | After |
+|---|---|---|
+| Poll apply (steady state) | 31.7 ms | 7.4 ms |
+| Thin to 2,000 | 19.8 ms | 9.1 ms |
+
+Both matter for the same reason: the backend is a **single-threaded event
+loop**, so a slow synchronous call delays every other request *and* the poller.
+
+**Track samples are tuples, not models.** History is written for every object
+on every poll — ten thousand at a time — and read only for the one object whose
+detail panel is open, at most fifty points. Building a validated Pydantic
+`TrackPoint` on the write path spent ~30 ms per poll validating data that came
+from an already-validated record. Samples are now plain `NamedTuple`s converted
+lazily in `get_detail`.
+
+**Eviction runs on a schedule, not every poll.** A full scan with a datetime
+subtraction per object cost ~10 ms of every apply. The object TTL is half an
+hour, so sweeping once a minute is invisible in behaviour and removes the cost
+from the poll path.
+
+**The thinning loop is flat.** `cell_of` and `rank_key` still exist and are
+still tested, but calling them per record made Python's function-call overhead
+the dominant cost. The loop now computes the same values inline with the
+per-record constants hoisted out.
+
+### Left alone on purpose
+
+- **Per-frame array allocation in the render loop.** `Array.from(map.values())`
+  looked like an obvious target. Measured: 0.005 ms, **1% of the tick**.
+  Rewriting it would have been change without benefit.
+- **The linear bounding-box scan.** 3.2 ms at 10,000 objects. A spatial index
+  would be real complexity to justify against a measurement that does not
+  demand it (D11).
+
+Recording the rejections matters as much as the changes: it is the difference
+between a performance pass and a round of speculative rewriting.
+
+---
+
+## D36 — Tier 2 was unreachable, and the fix was at both ends
+
+**The bug.** The viewport polling tier could never fire at any zoom level the
+user could reach. On a server that had been running for an hour, `/api/health`
+reported the viewport job as **64 skipped polls and 0 successful ones**.
+
+**The cause was a mismatch between two numbers set independently**, in
+different layers, months apart in reasoning:
+
+- The backend skipped the focus poll when the viewport exceeded 400 sq deg,
+  on the argument that tier 1 already covers a zoomed-out view (D27).
+- The frontend camera's `minDistance` was `globeRadius * 1.05`, chosen as a
+  cautious "do not fly into the planet" guard.
+
+At that closest approach the visible cap is 17.8° and the bounding box spans
+**1,261 sq deg** — three times the engage threshold. The two constraints made
+the feature dead code, and nothing detected it because each number is defensible
+on its own.
+
+| Camera altitude | Cap radius | Viewport area | Tier 2? |
+|---|---|---|---|
+| 2.2 (default) | 71.8° | 20,615 | no |
+| 0.05 (old minimum) | 17.8° | 1,261 | no |
+| 0.02 | 11.4° | 517 | no |
+| 0.01 | 8.1° | 260 | **yes** |
+
+**The fix, at both ends:**
+
+- `minDistance` lowered to `globeRadius * 1.005`. The old guard was arbitrary,
+  and being able to zoom to a regional view is what a flight tracker is for.
+- The focus box now trims to **100 sq deg (2 credits) polled every 90 s**,
+  rather than 25 sq deg (1 credit) every 45 s. **Identical daily cost — 1,920
+  credits — for four times the area.** At the shallowest engaging zoom that is
+  the difference between refreshing a quarter of the screen and a twentieth of
+  it. The budget projection is unchanged at 3,072 credits/day, and a test
+  asserts the two configurations cost the same.
+
+**Verified end to end**, not just in unit tests: on the old build the viewport
+job skipped every cycle; on the new build, with a zoomed-in bounding box being
+sent, it completed a real poll within 90 seconds.
+
+### The lesson worth defending
+
+Every individual test passed, because each number was correct in isolation. The
+defect lived in the *relationship* between a backend threshold and a frontend
+camera limit — the kind of thing unit tests structurally cannot see. It was
+found by asking "does this feature actually run?" and checking the counter,
+which is now step 14 of the manual test script.

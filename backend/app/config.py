@@ -63,14 +63,18 @@ PRESETS: dict[str, tuple[PollJob, ...]] = {
         PollJob(name="global", bbox=None, interval_seconds=1200.0, tier=1),
     ),
     # 4000 credits/day. 1152 + 1920 = 3072/day, 77% of budget, 23% headroom.
+    # The viewport job polls a 100 sq deg box (2 credits) every 90 s rather than
+    # a 25 sq deg box (1 credit) every 45 s: identical cost, four times the
+    # area, and the difference between a tier that covers a quarter of the
+    # screen and one that covers a twentieth of it (D36).
     "authenticated": (
         PollJob(name="global", bbox=None, interval_seconds=300.0, tier=1),
-        PollJob(name="viewport", bbox=None, interval_seconds=45.0, tier=2),
+        PollJob(name="viewport", bbox=None, interval_seconds=90.0, tier=2),
     ),
     # 8000 credits/day. 1920 + 2880 = 4800/day, 60% of budget.
     "contributor": (
         PollJob(name="global", bbox=None, interval_seconds=180.0, tier=1),
-        PollJob(name="viewport", bbox=None, interval_seconds=30.0, tier=2),
+        PollJob(name="viewport", bbox=None, interval_seconds=60.0, tier=2),
     ),
 }
 
@@ -132,12 +136,12 @@ class Settings(BaseSettings):
 
     # ---- tier 2 (viewport) behaviour ---------------------------------------
     focus_max_area_sq_deg: float = Field(
-        default=25.0,
+        default=100.0,
         gt=0.0,
         description=(
             "Trim the snapped viewport box down to this area before polling. "
-            "25 sq deg is the top of the 1-credit band, so tier 2 always costs "
-            "exactly one credit and the daily projection stays exact."
+            "100 sq deg is the top of the 2-credit band, so tier 2 always costs "
+            "exactly two credits and the daily projection stays exact."
         ),
     )
     focus_skip_area_sq_deg: float = Field(
