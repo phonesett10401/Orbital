@@ -8,6 +8,7 @@
 
 import { DetailPanel } from './components/DetailPanel';
 import { LayerToggle } from './components/LayerToggle';
+import { Legend } from './components/Legend';
 import { SearchBar } from './components/SearchBar';
 import { StatusBar } from './components/StatusBar';
 import { GlobeView } from './globe/GlobeView';
@@ -32,6 +33,7 @@ export function App() {
       </header>
 
       <DetailPanel />
+      <Legend />
       <StatusBar />
     </div>
   );

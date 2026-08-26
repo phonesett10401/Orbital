@@ -103,7 +103,17 @@ export function GlobeView() {
 
     const resize = () => {
       world.width(container.clientWidth).height(container.clientHeight);
+      // Sprite size is derived from the viewport and field of view, so the
+      // marker layer has to be told when either changes -- otherwise markers
+      // keep the size they had for the previous window shape.
+      markers.setViewport(
+        container.clientWidth,
+        container.clientHeight,
+        (world.camera() as THREE.PerspectiveCamera).fov,
+        world.renderer().getPixelRatio(),
+      );
     };
+    resize();
     const observer = new ResizeObserver(resize);
     observer.observe(container);
 
@@ -125,7 +135,12 @@ export function GlobeView() {
       // Markers are rebuilt from the store every frame. This is the hot path:
       // it writes into pre-allocated typed arrays and issues no allocations in
       // the steady state.
-      markers.update(Array.from(state.objects.values()), nowMs, state.selectedId);
+      markers.update(
+        Array.from(state.objects.values()),
+        nowMs,
+        state.selectedId,
+        state.objectsVersion,
+      );
 
       if (now - lastSunUpdate > SUN_UPDATE_MS || lastSunUpdate === 0) {
         earth.setSunFromDate(fixedSun ?? new Date());

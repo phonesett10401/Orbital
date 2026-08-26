@@ -35,7 +35,7 @@ cannot be triggered on demand.
 | Requirement | Where | Verified by |
 |---|---|---|
 | 3D globe with rotate and zoom | `globe/GlobeView.tsx` | Manual: confirmed in a browser |
-| Aircraft markers on the globe | `globe/markers.ts` | Manual + `markers.test.ts`; 157 markers rendered |
+| Aircraft markers on the globe | `globe/markers.ts` | `markers.test.ts` + offscreen pixel readback (§11) |
 | Live positions from OpenSky | `providers/opensky.py` | `test_opensky.py` (34 tests, mock transport) |
 | Browser never calls OpenSky directly | `api/client.ts` | Only `/api/*` URLs exist in the frontend |
 | In-memory cache with TTL | `ingestion/store.py` | `test_store.py` |
@@ -80,10 +80,10 @@ cd frontend && npm test
 | `sun.test.ts` | 11 | Solar declination and subsolar longitude |
 | `viewport.test.ts` | 14 | Camera-to-bbox conversion |
 | `pointer.test.ts` | 17 | **Click-to-select through real DOM events** |
-| `markers.test.ts` | 12 | Pick tolerance in pixels, horizon test |
+| `markers.test.ts` | 28 | Pick tolerance, horizon test, **sizing model, sprite selection** |
 | `route.test.ts` | 13 | Great-circle geometry, antimeridian, colour |
 | `store.test.ts` | 18 | Snapshot application, selection races, layers |
-| **Total** | **409** | 295 backend, 114 frontend |
+| **Total** | **425** | 295 backend, 130 frontend |
 
 ### What the automated suites do not cover
 
@@ -544,3 +544,97 @@ one we cannot afford to rehearse.**
 The burst result matters on its own. Upstream will not stop a runaway poll
 loop — it will simply let it spend the day. The startup budget validation
 (D22) and the throttle ladder (D23) are the only guards.
+
+
+---
+
+## 11. Directional markers
+
+Markers are plan-view airliner silhouettes rotated to their direction of
+travel, drawn as one `THREE.Points` in a single draw call. Design and reasoning
+in D40.
+
+### 11.1 Rotation correctness — verified by pixel readback
+
+Rotation cannot be checked by eye: markers that are uniformly reversed still
+rotate correctly with heading and look entirely plausible. So it is measured.
+A single aircraft is rendered to an offscreen target, the pixels are read back,
+and the silhouette's alpha-weighted centroid — which sits toward the tail — is
+compared against the expected nose direction.
+
+| Location | Headings checked | Worst error |
+|---|---|---|
+| 0°N 0°E | 0, 90, 180, 270 | 0.0° |
+| 50°N 8°E | 0, 45, 90, 135, 225, 315 | 0.0° |
+| 33°S 151°E | 0, 270 | 0.0° |
+| 70°N 40°W | 45 | 0.0° |
+| 60°S 70°W | 315 | 0.0° |
+| 85°N 20°E | 120 | 0.0° |
+
+**This found a real defect.** `THREE.CanvasTexture` inherits `flipY = true`, so
+the atlas was uploaded vertically mirrored and every aircraft flew tail-first.
+
+It also produced a **false positive worth recording**: an early run showed
+cardinal headings exact and every diagonal off by 15.6°. That was the *probe*,
+not the shader — it rendered into a square target while the camera's projection
+matrix was still 16:9. The signature gave it away: `atan2(1.778, 1) = 60.6°`,
+exactly the value measured for a true 45°. A measurement harness is code too,
+and an aspect-ratio mismatch in the harness looks identical to one in the
+shader.
+
+### 11.2 Sizing model
+
+World-anchored, not screen-anchored: the sprite is pinned to a size on the
+ground, so it grows as the camera descends (D40).
+
+| camera distance | sprite |
+|---|---|
+| 800 (fully out) | 5 px (floor) |
+| 500 | 6 px |
+| 320 (default) | 10 px |
+| 200 | 15 px |
+| 100.5 (closest) | 31 px |
+
+Floor 5 px, ceiling 44 px, both in CSS pixels and scaled by device pixel ratio.
+GPU `ALIASED_POINT_SIZE_RANGE` checked before committing: 1–1024 on this
+machine.
+
+### 11.3 Hit tolerance across the full zoom range
+
+Re-measured after the change, because D34 was exactly this class of bug. The
+tolerance is the larger of the fixed 12 px radius and half the drawn sprite.
+
+| camera distance | sprite | hit radius |
+|---|---|---|
+| 800 | 5 px | 13 px |
+| 500 | 6 px | 15 px |
+| 320 | 10 px | 17 px |
+| 200 | 15 px | 24 px |
+| 140 | 22 px | 43 px |
+| 100 | 31 px | ≥60 px |
+
+Never below 13 px, never smaller than the sprite drawn, no dead zones at any
+reachable zoom.
+
+### 11.4 Performance against the 0.82 ms baseline
+
+| Configuration | 2,000 markers |
+|---|---|
+| Plain dots (previous baseline) | 0.82 ms |
+| Silhouettes, all attributes rewritten each frame | **1.05 ms (+28%)** |
+| Silhouettes, attributes split by update frequency | **0.79 ms (−4%)** |
+
+The regression was real and was fixed rather than accepted: only position
+changes every frame, so colour, heading, sprite cell, size and the stale flag
+are rewritten only when the object set, selection or staleness bucket changes.
+Steady state is now faster than the dots it replaced, drawing considerably
+more. Draw calls unchanged at 4 (5 with a route shown).
+
+### 11.5 Unknown heading
+
+Aircraft reporting no heading draw a **solid disc** rather than a silhouette —
+a shape with no direction, because a silhouette pointing somewhere would be a
+claim the data does not support. About one aircraft in a thousand in live data
+(§9.4).
+
+Both shapes and the altitude colour ramp are declared in an on-screen legend.

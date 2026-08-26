@@ -1116,3 +1116,116 @@ The burst result is itself worth recording: it means a runaway poll loop would
 not be stopped by upstream rate limiting. It would simply spend the day's
 credits. The budget validation at startup (D22) and the throttle ladder (D23)
 are the only things standing between a bad interval and a lost day.
+
+---
+
+## D40 — Aircraft silhouettes in one draw call, and world-anchored sizing
+
+**Decision:** markers are plan-view airliner silhouettes rotated to their
+direction of travel, still drawn as a single `THREE.Points` — and their size is
+anchored to the ground rather than to the screen.
+
+### Rotation without extra draw calls
+
+Point sprites are always screen-aligned, so the sprite itself cannot be
+rotated. Instead the **texture lookup** is rotated inside the fragment shader,
+which keeps the whole layer in one draw call (D15). Per-aircraft rotation rides
+along as a vertex attribute.
+
+The genuinely hard part is not the rotation but working out *what angle to
+rotate to*. `heading` is a compass bearing on the globe surface; the sprite
+lives in screen space. The vertex shader therefore builds the heading as a
+world vector from the local north/east tangent frame, projects both the
+aircraft and a point slightly along that vector into clip space, and takes the
+angle between them on screen.
+
+Clip space spans [-1, 1] on both axes regardless of viewport shape, so the
+x component must be scaled by the aspect ratio. Without that correction every
+aircraft flies slightly sideways on a non-square canvas — cardinal headings
+stay correct and only diagonals are wrong, which is exactly the kind of error
+that survives a casual look.
+
+### Sizing: world-anchored, clamped in pixels
+
+`gl_PointSize` is in device pixels, so a constant value is a constant *screen*
+size — a dot map that looks identical at every zoom. Dividing a world size by
+the view distance gives the opposite: a marker pinned to the ground that grows
+as the camera descends, so close zoom reads as terrain with aircraft over it.
+
+Calibrated rather than guessed. At 0.04 R, across the camera range the orbit
+controls allow:
+
+| camera distance | sprite |
+|---|---|
+| 800 (fully out) | 4 px, raised to the 5 px floor |
+| 320 (default) | 10 px — the silhouette becomes readable |
+| 200 | 15 px |
+| 100.5 (closest) | 31 px |
+
+An earlier 0.02 R was wrong: it fell below the floor almost immediately past
+the default zoom, so most of the range was fixed-size and the scaling did
+nothing. The 44 px ceiling is a guard the camera never reaches — it exists so a
+future change to `minDistance` cannot silently produce sprites that swamp the
+terrain.
+
+Both clamps are in CSS pixels and scale by device pixel ratio, since
+`gl_PointSize` is in device pixels. The GPU's own `ALIASED_POINT_SIZE_RANGE`
+was checked before committing to this: 1–1024 here, so the ceiling has ample
+headroom, but it is low enough on some hardware to be worth knowing.
+
+### Unknown heading draws a disc
+
+Roughly one aircraft in a thousand reports no heading. A silhouette must not be
+drawn for those: a shape pointing somewhere is a claim, and we do not have the
+data to make it. They get a solid disc instead — a shape with no direction,
+which is precisely the message. Both shapes and the altitude ramp are declared
+in an on-screen legend, because a colour encoding nobody can decode reads as
+decoration rather than data.
+
+### Two bugs found by measuring rather than looking
+
+**The sprite was drawn backwards.** `THREE.CanvasTexture` inherits
+`flipY = true`, which flips the canvas on upload and put texture v=0 at the
+canvas *bottom* — so every aircraft flew tail-first. This is invisible to
+inspection: the markers rotate correctly, respond to heading correctly, and are
+simply all reversed. It was caught by rendering to an offscreen target,
+reading the pixels back, and comparing the silhouette's alpha centroid against
+the expected nose direction. Fifteen cases now check that, from the equator to
+85°N and across every heading quadrant.
+
+**The first frame drew the whole buffer.** A `BufferGeometry`'s default draw
+range is everything allocated, so any render occurring before the first
+`update()` painted four thousand markers stacked at the globe's centre. The
+animation loop and globe.gl's render loop are independent, so that ordering was
+never guaranteed. The geometry now starts with an empty draw range.
+
+### Performance
+
+Adding rotation, sprite selection and per-marker sizing meant writing six
+attributes per marker per frame instead of three, which measured **1.05 ms at
+2,000 markers against the 0.82 ms dot baseline — a 28% regression**.
+
+Only *position* actually changes every frame. Colour, heading, sprite cell,
+size and the stale flag change once per poll, on selection, or when an object
+crosses the staleness threshold. Splitting the attributes by how often they
+genuinely change brings the steady state to **0.79 ms — 4% faster than the
+plain dots** while drawing considerably more. The worst case, where every frame
+forces a full style rewrite, is 1.07 ms and does not occur in practice.
+
+### Hit tolerance re-verified across the full zoom range
+
+D34 was exactly this class of bug, so the pick tolerance was re-measured after
+the change. It is now the larger of the fixed 12 px radius and half the drawn
+sprite, so a sprite bigger than the tolerance can never have an unclickable
+margin:
+
+| camera distance | sprite | measured hit radius |
+|---|---|---|
+| 800 | 5 px | 13 px |
+| 500 | 6 px | 15 px |
+| 320 | 10 px | 17 px |
+| 200 | 15 px | 24 px |
+| 140 | 22 px | 43 px |
+| 100 | 31 px | ≥60 px |
+
+Never below 13 px, never smaller than the sprite, no dead zones.
