@@ -1072,3 +1072,47 @@ This is the fourth defect in this project that every test passed while the
 feature did nothing (see the test plan's defect table). The pattern is
 consistent: they are all cases where the code was correct and the *wiring* was
 absent. Unit tests verify code. Only running the system verifies wiring.
+
+---
+
+## D39 — What can and cannot be verified against a live quota-metered API
+
+**Decision:** verify token refresh and the throttle ladder against the live
+OpenSky API. **Do not** verify 429 handling by exhausting the daily allowance.
+
+The three failure paths were mock-tested only, which is the weakest place for a
+test to be: failure paths are exactly where a mock's assumptions are least
+likely to match reality. So each was pushed as far as it could honestly go.
+
+**Token refresh — fully verified.** Three checks of increasing strength: a
+forced refresh proving the real endpoint issues a second token that works; a
+manipulated-deadline check proving the *decision* logic reuses inside the
+window and refreshes past it, against the live provider; and a natural run past
+the real 29-minute deadline proving the two work together unattended.
+
+**The throttle ladder — verified honestly, without waste.** The credit balance
+is real, read from the live `X-Rate-Limit-Remaining` header. Only the
+*allowance* it is measured against is varied, which walks the genuine balance
+through every band — normal, reduced, minimal, critical, exhausted — without
+spending a single extra credit to get there. The poller was then observed
+*acting* on each level: lengthening its tier 1 interval from 300 s to 1303 s at
+minimal, skipping the latency tier, and finally refusing to poll at all.
+
+**HTTP 429 — deliberately not verified.** A bounded burst test established that
+**OpenSky does not rate-limit short bursts**: 25 requests in 6 seconds
+(4.2 req/s) drew no 429 at all. The 429 path is therefore reachable only by
+exhausting the daily credit allowance — which costs the entire day's quota and
+locks the account out until reset, blocking every other task and any demo that
+day.
+
+That is a bad trade for observing one code path, so it stays mock-tested. This
+is a limitation to state plainly rather than paper over: **the one failure path
+we cannot afford to trigger is the one most likely to occur in practice**, since
+quota exhaustion is the expected failure mode (D7). What mitigates it is that
+the handler is small and its inputs are simple — a status code and one header —
+and both are asserted in `test_opensky.py`.
+
+The burst result is itself worth recording: it means a runaway poll loop would
+not be stopped by upstream rate limiting. It would simply spend the day's
+credits. The budget validation at startup (D22) and the throttle ladder (D23)
+are the only things standing between a bad interval and a lost day.

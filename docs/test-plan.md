@@ -424,16 +424,123 @@ secret or the access token.
   survives. Defensible — we know least about those — but it means the frontend's
   "unknown altitude" marker colour will rarely be seen on a global view.
 
-### 9.9 Still unverified
+### 9.9 Still unverified after this run
 
-- **Token refresh across the 30-minute boundary** (§9.1).
-- **HTTP 429 handling and `X-Rate-Limit-Retry-After-Seconds`.** Never triggered;
-  the run stayed far inside quota. Unit-tested against a mock only.
-- **The throttle ladder under real depletion** (D23). Never exercised, since the
-  balance never fell below 99% of the allowance.
-- **A real upstream outage.** The outage tests inject failures; OpenSky did not
-  actually go down during the run.
+At the time of §9 these were all open. **§10 closes the first and third.**
 
-These are all failure paths, which is exactly the category hardest to verify
-without waiting for a failure. The team should decide whether unit-level
-coverage of them is sufficient for sign-off.
+- ~~Token refresh across the 30-minute boundary~~ — verified, §10.1 and §10.4.
+- ~~The throttle ladder under real depletion~~ — verified, §10.2 and §10.3.
+- **HTTP 429 handling.** Still mock-tested only, and deliberately so: reaching
+  it requires exhausting the daily allowance. See §10.5 and D39.
+- **A real upstream outage.** The outage tests inject failures; OpenSky has not
+  gone down while we were watching. Not something we can schedule.
+
+---
+
+## 10. Live failure-path verification
+
+The three paths that only run when something goes wrong, and were therefore the
+weakest-covered in the project. Reproduce with:
+
+```bash
+cd backend && .venv/Scripts/python scripts/verify_token_refresh.py
+cd backend && .venv/Scripts/python scripts/verify_failure_paths.py
+```
+
+Reasoning behind what was and was not attempted is in D39.
+
+### 10.1 OAuth2 token refresh — verified against the live endpoint
+
+The highest-risk unknown: tokens last 30 minutes and a demo can run longer.
+
+| Check | Result |
+|---|---|
+| Forced refresh issues a **different** token | Yes — `b5ed9e50…` → `1c2b63ce…`, both 1,445 chars |
+| A request authenticated with the new token succeeds | Yes |
+| Inside the refresh window, the cached token is reused | Yes |
+| Past the deadline, a new token is issued by the real endpoint | Yes — `2921ca60…` |
+| Refresh deadline is lifetime minus the safety margin | 1,740 s of a nominal 1,800 s |
+| Natural refresh, unattended, past the real deadline | Yes — at 30.1 min (§10.4) |
+
+Tokens are never printed. The script compares truncated SHA-256 fingerprints,
+so two tokens can be shown to differ without either being disclosed.
+
+### 10.2 Throttle ladder — verified against a real credit balance
+
+The balance is genuine, read from the live `X-Rate-Limit-Remaining` header;
+only the allowance it is compared against is varied. That walks a real balance
+through every band without spending a credit to get there (D39).
+
+Live balance at time of test: **3,814 credits.**
+
+| Allowance | Fraction remaining | Level | Interval × | Tier 2 | Polling |
+|---|---|---|---|---|---|
+| 7,628 | 50.0% | `normal` | 1 | yes | yes |
+| 15,256 | 25.0% | `reduced` | 2 | yes | yes |
+| 30,512 | 12.5% | `minimal` | 4 | **skipped** | yes |
+| 152,560 | 2.5% | `critical` | 8 | **skipped** | yes |
+| 762,800 | 0.5% | `exhausted` | ∞ | **skipped** | **stopped** |
+
+Degrades in the documented order (D23): the latency tier is cut before the
+coverage tier, and polling stops last.
+
+### 10.3 The poller acts on the throttle, it does not merely report it
+
+Tier 1's base interval is 300 s.
+
+| Level | Tier 2 | Tier 1 | Next tier 1 delay |
+|---|---|---|---|
+| `normal` | polled | polled | 316 s |
+| `minimal` | skipped | polled | **1,303 s** |
+| `exhausted` | skipped | **stopped** | 871 s |
+
+A skipped tier 2 job returns its *base* interval rather than a multiplied one,
+which is correct — it is not polling, so the delay only governs how often it
+re-checks whether it should.
+
+### 10.4 Natural refresh over a full token lifetime — verified
+
+A 33-minute unattended run, polling every 150 s, watching for the provider to
+refresh on its own.
+
+| | |
+|---|---|
+| Refresh deadline | 1,740 s (**29.0 min**) — 1,800 s lifetime minus the 60 s margin |
+| Refresh observed at | **30.1 min**, poll 12 — the first poll after the deadline |
+| Token fingerprint | `57f03bdc2654` → `63c4303346fe` |
+| That poll still returned data | Yes, 9 aircraft |
+| Polls after refresh | Continued on the new token, no interruption |
+| Total | 13 polls over 32.6 min, **zero failures**, 32 credits |
+
+```
+01:11:56  poll  11 (27.6 min)   8 aircraft  credits=3742  token=57f03bdc2654
+01:14:28  poll  12 (30.1 min)   9 aircraft  credits=3741  token=63c4303346fe  <-- TOKEN REFRESHED
+01:16:58  poll  13 (32.6 min)  11 aircraft  credits=3740  token=63c4303346fe
+```
+
+**This closes the highest-risk unknown in the project.** A demo running past 30
+minutes will refresh its token without anyone noticing, which is exactly the
+behaviour D24 specified and the only behaviour that had never been observed.
+
+Worth noting *why* the refresh landed at 30.1 rather than 29.0 minutes: the
+provider refreshes lazily, on the next request after the deadline, not on a
+timer. With a 150 s poll interval the worst-case lag is one interval. Under the
+real tier 1 cadence of 300 s that lag could be up to five minutes — still
+harmless, because the margin exists precisely to absorb it, but it means the
+refresh is triggered by traffic rather than scheduled.
+
+### 10.5 HTTP 429 — deliberately not verified
+
+A bounded burst test established that **OpenSky does not rate-limit short
+bursts**: 25 requests in 6.0 s (4.2 req/s) drew no 429. The 429 path is
+therefore reachable only by exhausting the daily allowance, which costs the
+whole day's quota and locks the account out until reset.
+
+That trade is not worth one code path, so 429 handling remains mock-tested
+(`test_opensky.py`). The limitation is stated plainly in D39, along with its
+uncomfortable corollary: **the failure most likely to happen in practice is the
+one we cannot afford to rehearse.**
+
+The burst result matters on its own. Upstream will not stop a runaway poll
+loop — it will simply let it spend the day. The startup budget validation
+(D22) and the throttle ladder (D23) are the only guards.
