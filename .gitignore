@@ -60,3 +60,7 @@ desktop.ini
 # Kept out of git so ~4 MB of binaries do not live in history; they arrive with
 # npm install and are copied before dev and build.
 frontend/public/textures/
+
+# Session handoff notes. Local working state that tracks in-progress status and
+# open bugs, not a committed artifact — it goes stale the moment it is shared.
+HANDOFF.md
