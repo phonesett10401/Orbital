@@ -40,7 +40,11 @@ import { subsolarPoint } from './sun';
  * one is: Earth's atmosphere scatters light past the geometric edge, and a
  * hard line reads as a rendering artefact.
  */
-const globeFragmentShader = /* glsl */ `
+// The four shader sources are exported so their *coordinate frame* can be
+// asserted in lighting.test.ts. There is no GL context under vitest, so the
+// frame cannot be checked by rendering; it can be checked by reading the
+// source, and a frame mismatch is precisely the defect D41 records.
+export const globeFragmentShader = /* glsl */ `
   uniform sampler2D dayTexture;
   uniform sampler2D nightTexture;
   uniform sampler2D bumpTexture;
@@ -49,15 +53,20 @@ const globeFragmentShader = /* glsl */ `
   uniform float bumpScale;
   uniform vec2 bumpTexelSize;
 
-  varying vec3 vNormal;
+  varying vec3 vWorldNormal;
   varying vec2 vUv;
-  varying vec3 vViewPosition;
+  varying vec3 vWorldPosition;
 
   void main() {
-    vec3 normal = normalize(vNormal);
+    // World space, deliberately. Every other vector in this shader -- the sun,
+    // the polar axis, the camera -- is world space, and a normal from a
+    // different frame silently produces a plausible but wrong picture (D41).
+    vec3 normal = normalize(vWorldNormal);
 
     // Analytic tangent frame. On a sphere with equirectangular UVs, "east" is
-    // perpendicular to both the polar axis and the surface normal.
+    // perpendicular to both the polar axis and the surface normal. This is only
+    // true of a world-space normal: (0, 1, 0) is the polar axis in world space
+    // and an arbitrary direction in any other.
     vec3 up = vec3(0.0, 1.0, 0.0);
     vec3 east = normalize(cross(up, normal));
     vec3 north = cross(normal, east);
@@ -88,7 +97,7 @@ const globeFragmentShader = /* glsl */ `
 
     // Specular on water only. Blinn-Phong against the view direction.
     float water = texture2D(waterTexture, vUv).r;
-    vec3 viewDir = normalize(vViewPosition);
+    vec3 viewDir = normalize(cameraPosition - vWorldPosition);
     vec3 halfway = normalize(sunDirection + viewDir);
     float specular = pow(max(dot(perturbed, halfway), 0.0), 60.0);
     color += vec3(0.7, 0.8, 1.0) * specular * water * daylight * 0.6;
@@ -97,17 +106,26 @@ const globeFragmentShader = /* glsl */ `
   }
 `;
 
-const globeVertexShader = /* glsl */ `
-  varying vec3 vNormal;
+/**
+ * Vertex shader for the globe surface.
+ *
+ * Both varyings are **world space**. `normalMatrix` -- three.js's normal matrix
+ * -- transforms into *view* space, which rotates with the camera; using it for
+ * a normal that is later dotted against the world-space sun direction is
+ * exactly the defect described in D41, and it is why the atmosphere below,
+ * which never used it for its sun term, was right all along.
+ */
+export const globeVertexShader = /* glsl */ `
+  varying vec3 vWorldNormal;
   varying vec2 vUv;
-  varying vec3 vViewPosition;
+  varying vec3 vWorldPosition;
 
   void main() {
     vUv = uv;
-    vNormal = normalize(normalMatrix * normal);
-    vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
-    vViewPosition = -viewPosition.xyz;
-    gl_Position = projectionMatrix * viewPosition;
+    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = worldPosition.xyz;
+    gl_Position = projectionMatrix * viewMatrix * worldPosition;
   }
 `;
 
@@ -119,7 +137,7 @@ const globeVertexShader = /* glsl */ `
  * viewer — puts the glow at the limb, which is where an atmosphere is
  * actually visible from space.
  */
-const atmosphereFragmentShader = /* glsl */ `
+export const atmosphereFragmentShader = /* glsl */ `
   uniform vec3 glowColor;
   uniform vec3 sunDirection;
   varying vec3 vNormal;
@@ -135,7 +153,7 @@ const atmosphereFragmentShader = /* glsl */ `
   }
 `;
 
-const atmosphereVertexShader = /* glsl */ `
+export const atmosphereVertexShader = /* glsl */ `
   varying vec3 vNormal;
   varying vec3 vWorldNormal;
 
@@ -156,12 +174,17 @@ export interface EarthVisuals {
 }
 
 /**
- * Convert a lat/lon into the globe's local coordinate frame.
+ * Convert a lat/lon into the scene's world frame — the frame the markers and
+ * the route are placed in.
  *
  * three-globe's convention is exposed by `globe.getCoords()`, but the material
  * is built before the globe is laid out, so the conversion is duplicated here.
  * Matching it exactly matters: an inverted axis puts the sun on the wrong side
  * of the planet, and the terminator would be plausible but wrong.
+ *
+ * Note this is **not** the globe mesh's own local frame. three-globe rotates
+ * that mesh by -90 degrees about Y, which is why the shader must reach world
+ * space through `modelMatrix` rather than using its local `normal` (D41).
  */
 export function latLonToVector3(lat: number, lon: number, radius = 1): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180);
@@ -171,6 +194,32 @@ export function latLonToVector3(lat: number, lon: number, radius = 1): THREE.Vec
     radius * Math.cos(phi),
     radius * Math.sin(phi) * Math.sin(theta),
   );
+}
+
+/**
+ * The unit vector from the centre of the Earth toward the sun at `date`, in
+ * the same world frame as `latLonToVector3`.
+ *
+ * Exported because it is the expectation the pixel probe measures against: to
+ * say a rendered pixel is lit correctly, something independent of the renderer
+ * has to say where the light should be.
+ */
+export function sunDirectionFor(date: Date): THREE.Vector3 {
+  const { lat, lon } = subsolarPoint(date);
+  return latLonToVector3(lat, lon, 1).normalize();
+}
+
+/**
+ * The cosine of the sun's angle above the horizon at a point on the surface --
+ * the `lambert` term the globe fragment shader computes, before the bump map
+ * perturbs it.
+ *
+ * For a sphere the outward world-space normal at a surface point *is* the unit
+ * vector to that point, which is why this is computable on the CPU at all, and
+ * why it is a real expectation rather than a restatement of the shader.
+ */
+export function surfaceLambert(lat: number, lon: number, date: Date): number {
+  return latLonToVector3(lat, lon, 1).dot(sunDirectionFor(date));
 }
 
 export function createEarthVisuals(globeRadius: number): EarthVisuals {
@@ -238,8 +287,7 @@ export function createEarthVisuals(globeRadius: number): EarthVisuals {
   starField.name = 'starField';
 
   function setSunFromDate(date: Date): void {
-    const { lat, lon } = subsolarPoint(date);
-    sunDirection.copy(latLonToVector3(lat, lon, 1)).normalize();
+    sunDirection.copy(sunDirectionFor(date));
   }
 
   setSunFromDate(new Date());

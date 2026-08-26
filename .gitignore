@@ -34,6 +34,8 @@ coverage.xml
 node_modules/
 dist/
 dist-ssr/
+# Incremental typechecker state, written by `tsc -b` during npm run build.
+*.tsbuildinfo
 build/
 .vite/
 *.local

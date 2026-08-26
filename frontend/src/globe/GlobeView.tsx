@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import { config } from '../config';
 import { useOrbitalStore } from '../state/store';
 import { createEarthVisuals } from './earth';
+import { createLightingProbe } from './lightingProbe';
 import { createMarkerLayer } from './markers';
 import { attachPointerSelection } from './pointer';
 import { createRouteLayer } from './route';
@@ -164,10 +165,35 @@ export function GlobeView() {
     if (import.meta.env.DEV) {
       (window as unknown as Record<string, unknown>).__orbital = {
         world,
+        // three.js itself, so a console session can construct a camera or a
+        // render target without importing anything.
+        THREE,
         earth,
         markers,
         route,
         store: useOrbitalStore,
+        // Renders the real scene to an offscreen target and measures the
+        // light, which is the only way to check the terminator end to end --
+        // there is no GL context under vitest (D41). Built on demand so the
+        // render target is not allocated in ordinary use.
+        probeLighting: (when?: Date) => {
+          const probe = createLightingProbe({
+            renderer: world.renderer(),
+            scene,
+            camera: world.camera() as THREE.PerspectiveCamera,
+            material: earth.material,
+            globeRadius,
+            // Hidden while measuring: the atmosphere alone would turn every
+            // reading into a measurement of the halo instead of the planet.
+            otherLayers: [earth.atmosphere, earth.starField, markers.points, route.line],
+            setSunFromDate: earth.setSunFromDate,
+          });
+          try {
+            return probe.run(when ?? fixedSun ?? new Date());
+          } finally {
+            probe.dispose();
+          }
+        },
       };
     }
 

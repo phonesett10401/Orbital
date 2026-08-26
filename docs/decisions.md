@@ -1229,3 +1229,117 @@ margin:
 | 100 | 31 px | ≥60 px |
 
 Never below 13 px, never smaller than the sprite, no dead zones.
+
+---
+
+## D41 — The globe was lit in the wrong coordinate frame
+
+**The defect.** The globe rendered as night at every rotation. There was no lit
+hemisphere at all, and both poles were dark simultaneously — physically
+impossible, since one pole is always tilted toward the sun. The only bright
+area was a soft patch that stayed fixed relative to the camera however the
+globe was turned.
+
+**The cause**, one line in `frontend/src/globe/earth.ts`:
+
+| Where | What it was |
+|---|---|
+| Globe vertex shader | `vNormal = normalize(normalMatrix * normal)` — a **view-space** normal |
+| `setSunFromDate` | `sunDirection` from lat/lon — a **world-space** vector |
+| Globe fragment shader | `lambert = dot(perturbed, sunDirection)` — one of each |
+
+`normalMatrix` is three.js's *view*-space normal matrix. Dotting its output
+against a world-space sun direction produces a lit region that tracks the
+camera, which is exactly what was observed: not a terminator in the wrong
+place, but a terminator that was not on the planet at all.
+
+**The fix** is to derive the normal in world space, as the atmosphere shader in
+the same file always did:
+
+```glsl
+vWorldNormal = normalize(mat3(modelMatrix) * normal);
+```
+
+The atmosphere is the reason this is a correction rather than a redesign: it
+computes its sun term correctly a few dozen lines below, so the right answer
+was already in the file. `modelMatrix` rather than the raw `normal` matters
+more than it looks — three-globe's globe mesh carries a −90° rotation about Y,
+so using the local normal would have been correct in *form* and wrong by a
+quarter turn in longitude.
+
+Two further consequences of the same mismatch came with it:
+
+- **The bump map's tangent frame.** It derives east and north from
+  `up = (0, 1, 0)`, which is the polar axis in world space and an arbitrary
+  direction in view space. Terrain relief was being lit from a direction that
+  swung with the camera.
+- **The specular highlight.** Blinn-Phong halves the sun direction with the
+  view direction, so the view direction had to move to world space too:
+  `normalize(cameraPosition - vWorldPosition)`.
+
+### It was never right
+
+This is not a regression from the directional-marker work. It has been wrong
+since M4, and it looked plausible then for a specific reason: at the default
+camera position the camera-locked lit patch happens to face the viewer, so the
+globe appeared lit from the front. M4 verified that `sunDirection` was a unit
+vector and that all four textures loaded. It never verified that the
+terminator was in the *right place*, and a wrongly-lit planet is still a lit
+planet.
+
+That is the same shape as D34 and D40: a check that confirms the ingredients
+and never confirms the result.
+
+### What the regression tests can and cannot do
+
+There is no GL context under vitest, so the terminator cannot be checked by
+rendering there. The suite covers the two halves that are checkable:
+
+- **Where the light should fall**, on the CPU. For a sphere the outward
+  world-space normal at a surface point is the unit vector to that point, so
+  the shader's `lambert` term is computable without a renderer. Half the
+  planet is lit at every sampled instant, the poles are opposed, the terminator
+  passes a quarter turn from the subsolar point, and the summer pole is lit for
+  a full rotation at the solstice.
+- **That the shader consumes that frame**, by reading the shader source:
+  `normalMatrix` may not appear in the globe shaders at all, the sun must be
+  dotted against `vWorldNormal`, no view-space varying may reach the lighting,
+  and the globe must derive its sun-facing normal exactly as the atmosphere
+  does.
+
+**Worth being honest about which half caught it.** Run against the old shader,
+the nineteen geometry tests all pass — they describe the astronomy, which was
+never wrong — and only the five source-level assertions fail. The geometry
+tests are not what would have caught this defect; they are what stops the
+terminator drifting later. The source assertions are the regression.
+
+The assembled pipeline is covered instead by a committed pixel probe (§12 of
+the test plan), which renders the real scene through a real GL context and
+measures the light. That division is deliberate and is the same one D40 used.
+
+### Three ways the measurement lied first
+
+The probe is more code than the fix, and nearly all of it is defence against
+confounds that each produced a confident wrong answer:
+
+- **The atmosphere shell.** Measured with the halo visible, every reading is a
+  reading of the halo, which covers the planet completely — and it reads
+  *inverted*, because the back face of a back-side shell faces away from the
+  sun. The first probe run reported the sunward hemisphere as dark, which was
+  true of the atmosphere and false of the Earth.
+- **The build-in animation.** three-globe scales the globe from 1e-6 up to 1
+  over 600 ms, driven by `requestAnimationFrame`. In a hidden or background tab
+  rAF never fires, so the planet stays microscopic and the frame contains no
+  Earth at all — while every object in the scene still reports
+  `visible: true`. The probe now refuses to measure until the globe is really
+  there and really in frame.
+- **Texture mistaken for light.** Sunlit deep ocean is *darker* in linear light
+  than the night texture's dim blue over the same water, so a per-texel
+  day-against-night comparison reports the night side as brighter over any
+  ocean. Real, reproducible, and nothing to do with the terminator. The
+  measurements that survive are aggregates over hundreds of samples, where the
+  light dominates.
+
+Keeping the visual layers separable (D16) is what made the first of those
+fixable in one line, which is a second use for that decision beyond attributing
+frame cost.

@@ -83,22 +83,24 @@ cd frontend && npm test
 | `markers.test.ts` | 28 | Pick tolerance, horizon test, **sizing model, sprite selection** |
 | `route.test.ts` | 13 | Great-circle geometry, antimeridian, colour |
 | `store.test.ts` | 18 | Snapshot application, selection races, layers |
-| **Total** | **425** | 295 backend, 130 frontend |
+| `lighting.test.ts` | 24 | **Terminator geometry and the shader's coordinate frame** |
+| **Total** | **449** | 295 backend, 154 frontend |
 
 ### What the automated suites do not cover
 
 Stated plainly, because a test plan that implies total coverage is worse than
 one that admits its gaps:
 
-- **Rendering output.** No test asserts what appears on screen. The shaders,
-  terminator, and texture loading are verified by looking at the running
-  application.
+- **Rendering output.** No test in either suite runs a shader — there is no GL
+  context under vitest. What appears on screen is verified by pixel readback
+  from the running application (§11.1, §12.2) and by reading the shader source
+  for properties, such as its coordinate frame, that a source can carry (§12.1).
 - **Live OpenSky behaviour.** All provider tests run against a mock transport
   built from one recorded response. Real API quirks are unverified (§7).
 - **React component rendering.** Components are exercised manually and through
   the store; there are no DOM-rendering tests for them. The pointer path is the
   exception, because that is where a bug hid (§6).
-- **Wiring, in general.** Six of the eight defects in §6 were cases where
+- **Wiring, in general.** Seven of the nine defects in §6 were cases where
   correct code was never connected to anything. Tests assert on behaviour that
   runs; they cannot assert on behaviour that was never reached. Running the
   system remains a required step, not a nicety.
@@ -188,7 +190,7 @@ unreachable. Losing the backend does not clear the markers.
 
 ## 6. Defects found and fixed
 
-Recorded because three of the five were invisible to the test suites, which is
+Recorded because most of them were invisible to the test suites, which is
 itself a finding.
 
 | # | Defect | Severity | Found by | Status |
@@ -201,10 +203,11 @@ itself a finding.
 | 6 | **Tier 2 polling was unreachable at any zoom the camera could reach** | High | Verification (D36) | Fixed |
 | 7 | Responses were not compressed — 328 KB per poll where gzip gives 67 KB | Medium | Live run (D38) | Fixed |
 | 8 | Application logging was never configured, so every diagnostic line was discarded — D23 was true only on paper | Medium | Live run (D38) | Fixed |
+| 9 | **The globe was lit in view space, so the terminator followed the camera and the planet rendered as night at every rotation** — wrong since M4 | Critical | Looking at the running app (D41) | Fixed |
 
 **No open defects at any severity.**
 
-Defects 3 through 8 all passed every automated test at the time they existed.
+Defects 3 through 9 all passed every automated test at the time they existed.
 The pattern is consistent: in each case the *code* was correct and the *wiring*
 was absent or mismatched — a threshold that no reachable zoom satisfied, a
 raycast tolerance in the wrong unit, a middleware never registered, a logger
@@ -252,6 +255,7 @@ For a demo or a fresh checkout. Start both servers, open the frontend.
 | # | Step | Expected |
 |---|---|---|
 | 1 | Open the app | Textured Earth, night side lit, star field, atmospheric halo |
+| 1a | Rotate the globe a full turn | The lit hemisphere stays put over the same countries; it does **not** follow the camera, and the two poles are never dark at once (D41) |
 | 2 | Drag the globe | Rotates smoothly; no marker is selected on release |
 | 3 | Scroll to zoom | Zooms in and out; markers scale with distance |
 | 4 | Read the status bar | Aircraft count, data age, source name |
@@ -265,6 +269,7 @@ For a demo or a fresh checkout. Start both servers, open the frontend.
 | 12 | Restart the backend | Recovers without a page reload |
 | 13 | Open `/api/health` | `status: ok`, both jobs listed, quota projection shown |
 | 14 | Zoom in tight, wait ~90 s, recheck health | Viewport job shows a successful poll |
+| 15 | Run `__orbital.probeLighting()` in the console | Camera-invariance spreads at or below ~0.02, ignoring the specular outlier (§12.2) |
 
 
 ---
@@ -638,3 +643,118 @@ claim the data does not support. About one aircraft in a thousand in live data
 (§9.4).
 
 Both shapes and the altitude colour ramp are declared in an on-screen legend.
+
+---
+
+## 12. Globe lighting
+
+The day/night terminator, after the defect recorded in D41: the globe was lit
+by dotting a view-space normal against a world-space sun, so the lit region
+followed the camera and the planet read as night at every rotation.
+
+### 12.1 What the automated suite covers
+
+`lighting.test.ts`, 24 tests, no GL context required.
+
+| Group | Tests | What it pins |
+|---|---|---|
+| The sun direction | 4 | Points at the subsolar point, unit length, depends only on the date |
+| Terminator position | 4 | Sun overhead at the subsolar point, underfoot at the antipode, a quarter turn to the terminator |
+| Always half lit | 2 | A lit point and a dark point at every sampled instant; 48–52% of the surface lit, area-weighted |
+| Poles at the solstices | 5 | Midnight sun in June, reversed in December, never both poles dark at once |
+| Shader coordinate frame | 7 | No `normalMatrix` in the globe shaders, sun dotted against `vWorldNormal`, no view-space varying in the lighting, world-space specular |
+| Material uniforms | 2 | The uniform follows the date; surface and halo share one sun vector |
+
+Sampled across 24 dates spread over a year and around the clock.
+
+**Which half is the regression.** Run against the pre-fix shader, the five
+source-level assertions fail and the nineteen geometry tests pass. The geometry
+tests describe the astronomy, which was never wrong; they guard against future
+drift. The source assertions are what would have caught this defect.
+
+### 12.2 Rendered output — verified by pixel readback
+
+`lightingProbe.ts`, committed and run from the console against a dev server:
+
+```
+__orbital.probeLighting()
+```
+
+It renders the real scene with the real material through a real GL context into
+a 512×512 offscreen target, reads the pixels back, and measures the light. The
+atmosphere, star field, markers and route are hidden while measuring, so only
+the Earth is in frame.
+
+Measured 2026-08-26, sun pinned to 2026-08-26T09:30Z, subsolar point
+10.34°N 37.96°E.
+
+**Camera invariance — the headline.** The same surface texel, the same instant,
+viewed from up to nine camera orientations. Under the defect this is exactly
+what varied.
+
+| Point | Expected lambert | Views | Luminance spread |
+|---|---|---|---|
+| 0°N 38°E | +0.98 | 7 | 0.017 |
+| 0°N 98°E | +0.49 | 7 | 0.082 |
+| 40°N 2°W | +0.69 | 9 | 0.022 |
+| 30°S 158°E | −0.52 | 9 | 0.000 |
+| 55°N 152°W | −0.41 | 9 | 0.000 |
+| 0°N 142°W | −0.98 | 7 | 0.001 |
+
+Every point holds its brightness to within 0.022 across every view that can see
+it. The one outlier, 0.082 at 0°N 98°E, is the specular highlight on water,
+which is *supposed* to depend on the view direction — it is Blinn-Phong doing
+its job, over the Bay of Bengal.
+
+**The light comes from the sun's side.** Mean disc luminance from a fixed
+camera, with the sun in front of the planet and then twelve hours later with it
+behind. Same camera, same texels, so the texture cancels in the ratio.
+
+| Camera over | Sun in front | Sun behind | Ratio |
+|---|---|---|---|
+| 0°N 0°E | 0.056 | 0.012 | 4.53 |
+| 0°N 90°E | 0.044 | 0.013 | 3.51 |
+| 0°N 180°E | 0.007 | 0.016 | 0.46 |
+| 0°N 90°W | 0.009 | 0.020 | 0.43 |
+| 45°N 30°E | 0.086 | 0.024 | 3.53 |
+
+The ratio's direction matches which side the sun is on in every case. The two
+polar orientations come out near 1.0 and are excluded above: a view down a pole
+sees day and night together whichever way the sun points, so the measurement
+has nothing to say there.
+
+**The polar caps at the solstices.** The same cap at both solstices — identical
+texels, opposite illumination. Comparing the two *caps* instead would compare
+Arctic sea ice against the Antarctic ice sheet, which differ by more than the
+sun does; that mistake is what produced the first, inverted-looking run.
+
+| Cap | June | December | Polar day / polar night |
+|---|---|---|---|
+| North (72–88°N) | 0.079 | 0.038 | 2.08 |
+| South (72–88°S) | 0.054 | 0.327 | 6.09 |
+
+**The terminator, by eye on the pixels.** With the camera fixed over 0°N 180°E
+and only the sun moved, the disc is uniformly dark with the sun on the far side
+and carries a bright region with it on the near side. Under the defect the
+bright patch stayed at the centre of the frame in both.
+
+### 12.3 What the probe defends against
+
+Three confounds, each of which produced a confident wrong answer before it was
+found. They are the reason the harness is longer than the fix.
+
+| Confound | Wrong answer it produced |
+|---|---|
+| The atmosphere shell left visible | The sunward hemisphere measured as dark — true of a back-side additive halo, false of the Earth |
+| three-globe's build-in tween never running, because `requestAnimationFrame` does not fire in a hidden tab | Numbers reported about a frame containing no planet, while every object still reported `visible: true` |
+| Absolute brightness read as illumination | Sunlit deep ocean is darker in linear light than the night texture over the same water, so night measured brighter than day |
+
+The probe now asserts its own preconditions — the globe must be at its full
+world radius and every precondition sample must land on the planet — and every
+comparison is either of one texel against itself or an aggregate over hundreds
+of samples.
+
+This is the third time in this project that a measurement harness has been the
+thing that was wrong, after the aspect-ratio error in §11.1 and the health
+semantics in D29. **A measurement that disagrees with the code is evidence
+about both.**
