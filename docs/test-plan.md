@@ -17,7 +17,7 @@ here deepens the aircraft globe.
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
 | 1 | All phase 1 requirements implemented | **Met** | §2 |
-| 2 | Test plan executed, no open critical or high defects | **Met** | §3, §6 |
+| 2 | Test plan executed, no open critical or high defects | **Met** — one open defect, low and visual | §3, §6 |
 | 3 | Stable rendering performance at the target marker count | **Met** | §4, §9.6 |
 | 4 | Backend survives an OpenSky outage without breaking the frontend | **Met** | §5 |
 | 5 | Documentation complete | **Met** | §7, §9 |
@@ -49,6 +49,7 @@ cannot be triggered on demand.
 | Interpolation between polls | `globe/interpolate.ts` | `interpolate.test.ts` (29 tests) |
 | Last-known position with timestamp | `markers.ts`, `DetailPanel.tsx` | `interpolate.test.ts`, manual |
 | Marker thinning when zoomed out | `thinning.py` | `test_thinning.py` (26 tests) |
+| Selected aircraft as a 3D model | `globe/selectedAircraft.ts` | `selectedAircraft.test.ts` (50 tests) + offscreen pixel readback (§13) |
 | Layer toggle as a separate component | `LayerToggle.tsx` | Renders with one layer, by design (D19) |
 
 ---
@@ -72,7 +73,7 @@ cd frontend && npm test
 | `test_opensky.py` | 34 | Normalization, OAuth2 refresh, quota headers, failure mapping |
 | `test_quota.py` | 40 | Credit bands, daily projection, throttle ladder |
 | `test_store.py` | 29 | Merging, track history, TTL, eviction, search |
-| `test_poller.py` | 40 | Scheduling, retry, backoff, throttling, **outage** |
+| `test_poller.py` | 44 | Scheduling, retry, backoff, throttling, **outage** |
 | `test_thinning.py` | 26 | Grid, ranking, stability, determinism |
 | `test_api.py` | 43 | Endpoints, envelopes, errors, **outage over HTTP** |
 | `test_app_surface.py` | 17 | **Response compression and log output** |
@@ -84,7 +85,8 @@ cd frontend && npm test
 | `route.test.ts` | 13 | Great-circle geometry, antimeridian, colour |
 | `store.test.ts` | 18 | Snapshot application, selection races, layers |
 | `lighting.test.ts` | 24 | **Terminator geometry and the shader's coordinate frame** |
-| **Total** | **449** | 295 backend, 154 frontend |
+| `selectedAircraft.test.ts` | 50 | **Airframe geometry, heading basis, sprite handoff, sizing in screen pixels** |
+| **Total** | **499** | 295 backend, 204 frontend |
 
 ### What the automated suites do not cover
 
@@ -100,7 +102,7 @@ one that admits its gaps:
 - **React component rendering.** Components are exercised manually and through
   the store; there are no DOM-rendering tests for them. The pointer path is the
   exception, because that is where a bug hid (§6).
-- **Wiring, in general.** Seven of the nine defects in §6 were cases where
+- **Wiring, in general.** Seven of the twelve defects in §6 were cases where
   correct code was never connected to anything. Tests assert on behaviour that
   runs; they cannot assert on behaviour that was never reached. Running the
   system remains a required step, not a nicety.
@@ -204,15 +206,36 @@ itself a finding.
 | 7 | Responses were not compressed — 328 KB per poll where gzip gives 67 KB | Medium | Live run (D38) | Fixed |
 | 8 | Application logging was never configured, so every diagnostic line was discarded — D23 was true only on paper | Medium | Live run (D38) | Fixed |
 | 9 | **The globe was lit in view space, so the terminator followed the camera and the planet rendered as night at every rotation** — wrong since M4 | Critical | Looking at the running app (D41) | Fixed |
+| 10 | **The selected aircraft model grew without limit on approach** — its pixel ceiling was evaluated against the distance to the globe's centre instead of to the model, so the clamp could never bind | High | Offscreen pixel readback (D43, §13.2) | Fixed |
+| 11 | **The camera could fly inside the marker shell**, so anything directly beneath it vanished at closest zoom — sprites included; latent since D36 | High | Offscreen pixel readback (D43, §13.2) | Fixed |
+| 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint | Low, visual | Looking at the running app | **Open**, deferred |
 
-**No open defects at any severity.**
+**One open defect, low severity and visual only: #12.** The maths is right —
+the highlight moves correctly with the camera — so this is a problem of
+strength and falloff, not a coordinate-frame one, and not a recurrence of #9. The
+water mask has been ruled out by sampling `earth-water.png` at ten known
+points: ocean reads `r=255`, land reads `r=0`, and the shader multiplies
+`specular * water`, so the highlight cannot be on land at all. The next attempt
+is a retune of two numbers in `globeFragmentShader` — intensity `0.6` and
+shininess `60.0` — verified by eye across several camera orientations, since
+the pixel probe measures whether the planet is lit where it should be and not
+whether a highlight is tasteful. §12.2's camera-invariance spread at 0°N 98°E
+(0.082, against ~0.022 for the other five points) is the same highlight showing
+up as a number, and should come down after a retune.
 
-Defects 3 through 9 all passed every automated test at the time they existed.
+**No open defects at critical or high severity.**
+
+Defects 3 through 11 all passed every automated test at the time they existed.
 The pattern is consistent: in each case the *code* was correct and the *wiring*
 was absent or mismatched — a threshold that no reachable zoom satisfied, a
 raycast tolerance in the wrong unit, a middleware never registered, a logger
 with no handler. Unit tests verify code. Only running the system verifies
 wiring.
+
+Defects 10 and 11 are the same shape one level down: not a wrong formula but a
+**correct formula fed the wrong argument**, and two numbers with a required
+relationship written down independently. Both were invisible to the 38 tests
+that shipped with the feature, all of which passed throughout.
 
 Defect 5 is the sharpest lesson: the verification computed a marker's projected
 screen position and clicked exactly there, which cannot discover that a target
@@ -260,6 +283,7 @@ For a demo or a fresh checkout. Start both servers, open the frontend.
 | 3 | Scroll to zoom | Zooms in and out; markers scale with distance |
 | 4 | Read the status bar | Aircraft count, data age, source name |
 | 5 | Click a marker | Detail panel opens with callsign, altitude, speed, heading, origin country |
+| 5a | Look at the selected aircraft, zoomed out and on a close approach | Its disc is replaced by a 3D airframe pointing along its track, legible at both ends of the zoom range and over the night side, sitting above the terrain rather than in it; the swap does not jump (§13.3) |
 | 6 | Check the route | Polyline follows the observed track; caveat text is visible |
 | 7 | Click empty space | Panel closes |
 | 8 | Search a callsign | Ranked results; Enter picks the top hit |
@@ -758,3 +782,76 @@ This is the third time in this project that a measurement harness has been the
 thing that was wrong, after the aspect-ratio error in §11.1 and the health
 semantics in D29. **A measurement that disagrees with the code is evidence
 about both.**
+
+---
+
+## 13. The selected aircraft model
+
+Task 3 draws the selected aircraft as a low-poly 3D airframe and hides its
+sprite for as long as it is selected (D42). Everything below was measured on
+2026-08-27 against commit `7a96a3e`.
+
+### 13.1 What the automated suite covers
+
+`selectedAircraft.test.ts`, 50 tests. The load-bearing ones are the ones that
+cross a boundary, because that is where this project's defects live:
+
+| What is pinned | Why it matters |
+|---|---|
+| The mesh's tangent frame agrees with the marker vertex shader's, the GLSL transcribed into TypeScript rather than imported from a shared helper | A shared helper would make the test pass by construction. If the frames drift, a selected aircraft snaps to a different heading the instant it is clicked, and either one inspected alone looks correct |
+| A heading of exactly `0` still draws | The falsy check that would silently refuse every aircraft flying due north |
+| The basis is a rotation, not a reflection | A mirrored airframe is entirely plausible and entirely wrong — the same trap as the atlas's `flipY` (D40) |
+| The tallest vertex lies aft of centre | The model cannot be authored nose-backwards |
+| The mesh is placed exactly where the sprite would have been | No jump at the moment of selection |
+| A null heading yields no model and keeps the disc | A mesh commits to a direction on screen; a null heading has none to commit to (D18) |
+| The ceiling and floor hold **in screen pixels** across the reachable camera range, driven through `update()` with the camera on the ray through the aircraft | This is the check D42's suite did not have, and defect #10 is what lived in the gap |
+| One test reproduces defect #10 by deliberately passing the centre distance | The distinction cannot be quietly undone |
+| `minDistance` keeps the camera outside the marker shell, and the visible cap at that distance stays under the backend's 400 square-degree viewport threshold (D36) | Two numbers with a required relationship, asserted rather than written down twice |
+
+### 13.2 Rendered output — verified by offscreen pixel readback
+
+Neither browser surface rendered this session: the in-app pane does not
+composite, so `requestAnimationFrame` never fires and the build-in tween never
+completes, and the Chrome extension reported "not connected". The scene was
+therefore rendered into a `WebGLRenderTarget` and the pixels read back, which
+needs no rAF. Unlike `lightingProbe.ts` this harness was ad hoc and is not
+committed; §12.2's probe remains the committed one.
+
+| Property | Result |
+|---|---|
+| Sprite handoff | Sprite counts run 157 → 156 → 157 across select and deselect, with no frame drawing both |
+| Heading | Nose points along the ground track to within **1.3°** across nine positions and headings, equator to 85°N — matching the sprite's `90 − heading` exactly, so there is no snap on selection |
+| Occlusion | Drawn on the near side, hidden at the limb and on the far side |
+| Silhouette | Reads as a plan-view airliner: fuselage, full-span wings mid-body, tailplane aft, nose forward |
+| Null heading | No model; the disc stands |
+
+**Sizing, before and after the D43 fix**, measured as wingspan in pixels at a
+300 px viewport. `MODEL_MIN_PX` is 16 and `MODEL_MAX_PX` is 96:
+
+| Camera distance | Before | After |
+|---|---|---|
+| 320 (default) | 24 px | 16 px |
+| 180 | 36 px | 30 px |
+| 140 | 60 px | 60 px |
+| 120 | **124 px** | 96 px |
+| 105 | **300 px, clipping the viewport** | — |
+| 101.4 (closest reachable) | **0 px** | 96 px |
+
+The two failures in that column are defects #10 and #11. The `0 px` row is #11:
+the camera had been allowed to 1.005 R while the marker shell sits at 1.012 R,
+so at closest zoom the camera was inside the shell and anything beneath it fell
+behind the near plane. That affected sprites identically and had been latent
+since D36; the model only made it visible, because one missing aircraft is
+invisible and one missing *selection* is not.
+
+### 13.3 What is still outstanding
+
+**Nobody has looked at it.** The probe settles placement, orientation,
+occlusion and size in pixels. It cannot settle appearance: whether the shading
+and proportions read as an aeroplane at 16 px and at 96 px, whether the model
+sits convincingly above the terrain, whether it stays legible over the night
+side, and whether the sprite-to-mesh swap feels seamless. By this project's own
+record — defects 5, 6, 9 were all invisible to a green suite — that is the check
+that finds the defect, so it is listed as outstanding rather than assumed. §8
+step 5a is the check.
+
