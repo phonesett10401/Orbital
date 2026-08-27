@@ -112,6 +112,17 @@ export const config = {
    */
   cityMode: str(import.meta.env.VITE_CITY_MODE, 'on') !== 'off',
 
+  /**
+   * Globe altitude, in radii, at which city mode takes over.
+   *
+   * Tunable because it is a judgement about where the globe stops being worth
+   * looking at, and that is measured rather than felt: the colour texture is
+   * 9.8 km per texel, which at 0.35 radii is about five texels per screen
+   * pixel and at 0.05 is thirty-six (D53). `__orbital.city` reports the
+   * current altitude, so the boundary can be found by eye and set here.
+   */
+  cityEnterAltitude: num(import.meta.env.VITE_CITY_ALTITUDE, 0.35),
+
   /** Freeze the sun at a fixed time, for screenshots and deterministic demos. */
   fixedSunTime: str(import.meta.env.VITE_FIXED_SUN_TIME, ''),
 } as const;

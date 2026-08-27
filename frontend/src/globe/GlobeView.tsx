@@ -189,6 +189,7 @@ export function GlobeView() {
     let frame = 0;
     let lastSunUpdate = 0;
     let lastViewportUpdate = 0;
+    let lastCityVersion = -1;
 
     const fixedSun = config.fixedSunTime ? new Date(config.fixedSunTime) : null;
 
@@ -236,6 +237,23 @@ export function GlobeView() {
       const altitude =
         ((world.camera() as THREE.PerspectiveCamera).position.length() - globeRadius) /
         globeRadius;
+      // City mode draws the same aircraft the globe does. Only while it is up,
+      // and only when the store has actually changed -- rebuilding a GeoJSON
+      // collection every frame would be the one expensive thing in a layer
+      // that is otherwise idle.
+      if (city.isActive() && state.objectsVersion !== lastCityVersion) {
+        lastCityVersion = state.objectsVersion;
+        city.setAircraft(
+          Array.from(state.objects.values()).map((object) => ({
+            id: object.id,
+            lat: object.renderLat,
+            lon: object.renderLon,
+            heading: object.heading,
+            label: object.label,
+          })),
+        );
+      }
+
       if (config.cityMode && shouldEnterCity(altitude, city.isActive())) {
         const pov = world.pointOfView();
         void city.enter(

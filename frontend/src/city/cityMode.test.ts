@@ -15,6 +15,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+import type { CityAircraft } from './cityMode';
 import {
   BUILDINGS_MIN_ZOOM,
   CITY_ENTER_ALTITUDE,
@@ -76,14 +77,25 @@ describe('mapZoomFor', () => {
     expect(mapZoomFor(altitude, 0, 512, FOV)).toBeCloseTo(0, 6);
   });
 
-  it('hands off well short of where buildings begin', () => {
+  it('hands off far short of where buildings begin', () => {
     // The point of the spike, as a number: entering at matched scale over
-    // Bangkok lands at zoom 7.8, and buildings start at 14. The globe cannot
-    // get within six zoom levels of them, which is why a second renderer is
+    // Bangkok lands around zoom 5, and buildings start at 14. The globe cannot
+    // get within eight zoom levels of them, which is why a second renderer is
     // the only way to answer the question at all.
     const zoom = mapZoomFor(CITY_ENTER_ALTITUDE, 13.75, HEIGHT, FOV);
-    expect(zoom).toBeCloseTo(7.8, 1);
-    expect(BUILDINGS_MIN_ZOOM - zoom).toBeGreaterThan(5);
+    expect(zoom).toBeCloseTo(5, 0);
+    expect(BUILDINGS_MIN_ZOOM - zoom).toBeGreaterThan(8);
+  });
+
+  it('hands over while the globe texture still holds up', () => {
+    // The measurement that moved this threshold: the colour texture is 9.8 km
+    // per texel, and magnification past a handful of texels per screen pixel
+    // is the smear of night lights that got reported (D53). Five is soft;
+    // thirty-six, which is where the first version handed over, is nothing.
+    const TEXEL_KM = 40075 / 4096;
+    const viewKm = groundHeightKm(CITY_ENTER_ALTITUDE, FOV);
+    const texelsPerPixel = TEXEL_KM / (viewKm / 1080);
+    expect(texelsPerPixel).toBeLessThan(8);
   });
 });
 
@@ -173,7 +185,7 @@ describe('createCityLayer', () => {
     await layer.enter({ lat: 13.75, lon: 100.5, altitude: 0.04 }, FOV);
 
     // Zoomed far enough out that the globe should take over again.
-    map.getZoom.mockReturnValue(6);
+    map.getZoom.mockReturnValue(4);
     Object.defineProperty(layer.element, 'clientHeight', { value: HEIGHT });
     handlers.get('zoomend')?.();
 
@@ -191,12 +203,104 @@ describe('createCityLayer', () => {
     const { layer } = layerWith(map, onExit);
     await layer.enter({ lat: 13.75, lon: 100.5, altitude: 0.04 }, FOV);
 
-    map.getZoom.mockReturnValue(15);
+    map.getZoom.mockReturnValue(9);
     Object.defineProperty(layer.element, 'clientHeight', { value: HEIGHT });
     handlers.get('zoomend')?.();
 
     expect(onExit).not.toHaveBeenCalled();
     expect(layer.isActive()).toBe(true);
+    layer.dispose();
+  });
+});
+
+describe('aircraft in city mode', () => {
+  const aircraft: CityAircraft[] = [
+    { id: 'a1', lat: 13.75, lon: 100.5, heading: 270, label: 'THA932' },
+    { id: 'b2', lat: 13.8, lon: 100.6, heading: null, label: 'e0ge05' },
+  ];
+
+  function stub() {
+    const handlers = new Map<string, () => void>();
+    const source = { setData: vi.fn() };
+    const map = {
+      on: vi.fn((event: string, handler: () => void) => handlers.set(event, handler)),
+      easeTo: vi.fn(),
+      jumpTo: vi.fn(),
+      remove: vi.fn(),
+      getCenter: vi.fn(() => ({ lat: 13.75, lng: 100.5 })),
+      getZoom: vi.fn(() => 9),
+      getSource: vi.fn(() => source),
+      hasImage: vi.fn(() => true),
+      addImage: vi.fn(),
+      addSource: vi.fn(),
+      addLayer: vi.fn(),
+    };
+    const loadMapLibre = vi.fn(async () => ({ Map: vi.fn(() => map) })) as unknown as () => Promise<
+      typeof import('maplibre-gl')
+    >;
+    return { map, source, handlers, loadMapLibre };
+  }
+
+  it('is silent before the map exists, rather than throwing', () => {
+    // The globe pushes aircraft every time the store changes, including long
+    // before anybody zooms in.
+    const { loadMapLibre } = stub();
+    const layer = createCityLayer({ onExit: vi.fn(), loadMapLibre });
+    expect(() => layer.setAircraft(aircraft)).not.toThrow();
+    layer.dispose();
+  });
+
+  it('pushes them to the map as GeoJSON once it is up', async () => {
+    const { map, source, loadMapLibre } = stub();
+    const layer = createCityLayer({ onExit: vi.fn(), loadMapLibre });
+    await layer.enter({ lat: 13.75, lon: 100.5, altitude: 0.2 }, FOV);
+
+    layer.setAircraft(aircraft);
+    const data = source.setData.mock.calls.at(-1)?.[0] as {
+      features: Array<{ geometry: { coordinates: number[] }; properties: Record<string, unknown> }>;
+    };
+    expect(data.features).toHaveLength(2);
+    // GeoJSON is lon/lat, the contract is lat/lon, and swapping them puts every
+    // aircraft in the wrong hemisphere without anything failing.
+    expect(data.features[0].geometry.coordinates).toEqual([100.5, 13.75]);
+    expect(data.features[0].properties.heading).toBe(270);
+    expect(data.features[0].properties.label).toBe('THA932');
+    void map;
+    layer.dispose();
+  });
+
+  it('gives an unknown heading no rotation rather than pointing it north', () => {
+    // Same rule as the marker atlas and the 3D model: a null heading has no
+    // direction to draw (D40, D42). MapLibre has no way to say "no rotation",
+    // so this at least does not claim a heading it does not have.
+    const { source, loadMapLibre } = stub();
+    const layer = createCityLayer({ onExit: vi.fn(), loadMapLibre });
+    void layer.enter({ lat: 13.75, lon: 100.5, altitude: 0.2 }, FOV).then(() => {
+      layer.setAircraft(aircraft);
+      const data = source.setData.mock.calls.at(-1)?.[0] as {
+        features: Array<{ properties: Record<string, unknown> }>;
+      };
+      expect(data.features[1].properties.heading).toBe(0);
+      layer.dispose();
+    });
+  });
+});
+
+describe('a hand-off that fails', () => {
+  it('hands back instead of stranding the view behind an empty map', async () => {
+    // The failure that produced no city mode and no globe either: `active` was
+    // set before the await, so a throw left the layer permanently "active",
+    // showing a transparent div over the globe and never retrying.
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const loadMapLibre = vi.fn(async () => {
+      throw new Error('offline');
+    }) as unknown as () => Promise<typeof import('maplibre-gl')>;
+
+    const layer = createCityLayer({ onExit: vi.fn(), loadMapLibre });
+    await layer.enter({ lat: 13.75, lon: 100.5, altitude: 0.2 }, FOV);
+
+    expect(layer.isActive()).toBe(false);
+    expect(layer.element.style.display).toBe('none');
     layer.dispose();
   });
 });

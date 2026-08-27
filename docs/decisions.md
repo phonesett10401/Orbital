@@ -2304,3 +2304,64 @@ is a polygon and it is the tilt that makes it a building.
 zooms in never downloads 800 KB of map library. The stylesheet is not optional:
 without it the attribution control renders unstyled, and attribution is a
 licence condition of the tiles rather than a decoration.
+
+---
+
+## D53 — The hand-off was in the wrong place, and city mode had no aircraft
+
+**Decision:** city mode takes over at **0.35 globe radii** rather than 0.05,
+the threshold becomes configurable, aircraft are drawn on the map, and a failed
+hand-off hands back instead of stranding the view.
+
+*Alternatives:* keeping 0.05 and fixing the imagery instead; a higher
+resolution Earth texture; leaving aircraft out of city mode.
+
+**The report was that Thailand looked like gibberish, with two screenshots.**
+Neither showed city mode: they showed the globe magnified past the point where
+its texture means anything. The colour map is 4096x2048, or 9.8 km per texel,
+so against a 1080-pixel viewport:
+
+| Altitude | View | Texels per screen pixel |
+|---|---|---|
+| 0.60 | 3,565 km | 3.0 |
+| 0.35 | 2,080 km | 5.1 |
+| 0.20 | 1,188 km | 8.9 |
+| 0.12 | 713 km | 14.8 |
+| **0.05** — the old hand-off | 297 km | **35.6** |
+| 0.014 — the camera's floor | 83 km | **127** |
+
+At thirty-six texels per pixel there is no image, only a smear of night lights.
+**The globe was handing over long after it had stopped being worth looking
+at**, so the entire approach was spent staring at magnified texture. D52 picked
+0.05 by asking how close the camera could get; the question it should have
+asked is how close the *imagery* holds up.
+
+0.35 is where the label tiers already start showing cities (D45), so the rule
+is legible: when city names appear, the city map takes over. It is still 5.1
+texels per pixel — soft, not gibberish — and everything below it is now vector,
+which is sharp at every zoom by construction.
+
+**Aircraft had to follow.** Drawing none was defensible when city mode occupied
+the last sliver of zoom nobody used; at 0.35 radii it is most of the range
+somebody watching aeroplanes actually uses, and an aircraft tracker that hides
+the aircraft when you look closely is not one. They are a GeoJSON source
+updated from the same store the globe reads, drawn with the same silhouette:
+`aircraftSprite.ts` now exports the airframe as a standalone canvas, so there
+is one outline in the project rather than two that must be kept in agreement.
+A null heading gets no rotation, as everywhere else (D40, D42).
+
+**And a real defect, found by looking for why the screenshots showed no map at
+all.** `enter()` set `active = true` before awaiting the dynamic import. Any
+failure in there — an offline machine, a blocked request — left the layer
+permanently active: a transparent div over the globe, no map, and
+`shouldEnterCity` returning false forever because it thought city mode was
+already up. It now catches, hands back, and logs. A test drives a loader that
+throws and asserts the layer is inactive and hidden afterwards.
+
+### What this does not fix
+
+The globe is soft at any close zoom, hand-off or no hand-off — 3 texels per
+pixel at 0.6 radii is the best it does. A 21600x10800 Blue Marble would be
+1.85 km per texel and hold up five times closer, at the cost of a large local
+asset. That remains available through `VITE_EARTH_DAY_TEXTURE` and is not part
+of this change.

@@ -38,6 +38,7 @@
  */
 
 import { config } from '../config';
+import { createAircraftIconCanvas } from '../globe/aircraftSprite';
 
 /** Mean Earth radius, km. The globe's own scale is in radii. */
 const EARTH_RADIUS_KM = 6371;
@@ -56,10 +57,27 @@ const DEG_TO_RAD = Math.PI / 180;
 /**
  * Altitude, in globe radii, at which the globe hands over.
  *
- * Just above the camera's own floor of 0.014, so the hand-off happens while
- * the user is still zooming in rather than when they hit the stop.
+ * The first version handed over at 0.05, which was far too late. The colour
+ * texture is 9.8 km per texel, so magnification against a 1080-pixel viewport
+ * runs:
+ *
+ * | altitude | view | texels per screen pixel |
+ * |---|---|---|
+ * | 0.60 | 3,565 km | 3.0 |
+ * | 0.35 | 2,080 km | 5.1 |
+ * | 0.20 | 1,188 km | 8.9 |
+ * | 0.05 | 297 km | **35.6** |
+ * | 0.014 | 83 km | **127** |
+ *
+ * At thirty-five texels per pixel there is no image left, only a smear of
+ * night lights -- which is exactly how it was described when somebody looked
+ * at it (D53). The hand-off belongs where the globe still reads as a planet,
+ * and the map, being vector, is sharp at every zoom below that.
+ *
+ * 0.35 also happens to be where the label tiers start showing cities (D45), so
+ * the rule is legible: when city names appear, the city map takes over.
  */
-export const CITY_ENTER_ALTITUDE = 0.05;
+export const CITY_ENTER_ALTITUDE = config.cityEnterAltitude;
 
 /**
  * Altitude at which city mode hands back.
@@ -69,7 +87,7 @@ export const CITY_ENTER_ALTITUDE = 0.05;
  * two renderers; the gap is what makes the transition a decision rather than
  * an oscillation.
  */
-export const CITY_EXIT_ALTITUDE = 0.09;
+export const CITY_EXIT_ALTITUDE = config.cityEnterAltitude * 1.5;
 
 /** Buildings appear at this zoom in the OpenMapTiles schema. */
 export const BUILDINGS_MIN_ZOOM = 14;
@@ -129,10 +147,21 @@ export interface CityView {
   altitude: number;
 }
 
+/** The minimum an aircraft needs for city mode to draw it. */
+export interface CityAircraft {
+  id: string;
+  lat: number;
+  lon: number;
+  heading: number | null;
+  label: string;
+}
+
 export interface CityLayer {
   element: HTMLDivElement;
   isActive(): boolean;
   enter(view: CityView, fovDeg: number): Promise<void>;
+  /** Draw these aircraft on the map. Ignored while the map is not up. */
+  setAircraft(aircraft: CityAircraft[]): void;
   exit(): void;
   dispose(): void;
 }
@@ -175,6 +204,34 @@ export function createCityLayer({
   let map: MapLibreMap | null = null;
   let active = false;
   let fov = 50;
+  /** Held so the layer can be created with whatever is current when it loads. */
+  let pending: CityAircraft[] = [];
+
+  /**
+   * The aircraft, as GeoJSON.
+   *
+   * City mode used to draw none, which was defensible for a spike and
+   * indefensible once the hand-off moved up to 0.35 radii: that is most of the
+   * zoom range somebody watching aeroplanes actually uses, and an aircraft
+   * tracker that hides the aircraft when you look closely is not one (D53).
+   */
+  function featuresFor(aircraft: CityAircraft[]) {
+    return {
+      type: 'FeatureCollection' as const,
+      features: aircraft.map((a) => ({
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: [a.lon, a.lat] },
+        properties: {
+          label: a.label,
+          // MapLibre rotates icons clockwise from north, which is the same
+          // convention the contract uses for heading (D18), so this passes
+          // through untouched. A null heading gets no rotation and the icon
+          // reads as pointing north, so those are dropped instead.
+          heading: a.heading ?? 0,
+        },
+      })),
+    };
+  }
 
   function handBack(): void {
     if (!map || !active) return;
@@ -186,9 +243,57 @@ export function createCityLayer({
     onExit({ lat: centre.lat, lon: centre.lng, altitude });
   }
 
+  function addAircraftLayer(): void {
+    if (!map || map.getSource('orbital-aircraft')) return;
+    if (!map.hasImage('orbital-aircraft-icon')) {
+      const canvas = createAircraftIconCanvas();
+      const context = canvas.getContext('2d');
+      if (context) {
+        map.addImage(
+          'orbital-aircraft-icon',
+          context.getImageData(0, 0, canvas.width, canvas.height),
+        );
+      }
+    }
+
+    map.addSource('orbital-aircraft', { type: 'geojson', data: featuresFor(pending) });
+    map.addLayer({
+      id: 'orbital-aircraft',
+      type: 'symbol',
+      source: 'orbital-aircraft',
+      layout: {
+        'icon-image': 'orbital-aircraft-icon',
+        'icon-size': 0.2,
+        'icon-rotate': ['get', 'heading'],
+        'icon-rotation-alignment': 'map',
+        'icon-allow-overlap': true,
+        'text-field': ['get', 'label'],
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 11,
+        'text-offset': [0, 1.4],
+        'text-allow-overlap': false,
+      },
+      paint: {
+        'text-color': '#e8ecf4',
+        'text-halo-color': 'rgba(0,0,0,0.85)',
+        'text-halo-width': 1.4,
+      },
+    });
+  }
+
   const layer: CityLayer = {
     element,
     isActive: () => active,
+
+    setAircraft(aircraft) {
+      pending = aircraft;
+      const source = map?.getSource('orbital-aircraft');
+      // `setData` exists on a GeoJSON source and the union type does not know
+      // which kind this is, so the check is the narrowing.
+      if (source && 'setData' in source) {
+        (source as { setData: (data: unknown) => void }).setData(featuresFor(aircraft));
+      }
+    },
 
     async enter(view, fovDeg) {
       if (active) return;
@@ -199,21 +304,32 @@ export function createCityLayer({
       const height = element.clientHeight || 1;
       const zoom = mapZoomFor(view.altitude, view.lat, height, fovDeg);
 
-      if (!map) {
-        const maplibre = await loadMapLibre();
-        map = new maplibre.Map({
-          container: element,
-          style: config.cityStyleUrl,
-          center: [view.lon, view.lat],
-          zoom,
-          pitch: 0,
-          attributionControl: { compact: true },
-        });
-        // Zooming out past the boundary is how the user asks for the globe
-        // back, so the map itself is what watches for it.
-        map.on('zoomend', handBack);
-      } else {
-        map.jumpTo({ center: [view.lon, view.lat], zoom, pitch: 0 });
+      try {
+        if (!map) {
+          const maplibre = await loadMapLibre();
+          map = new maplibre.Map({
+            container: element,
+            style: config.cityStyleUrl,
+            center: [view.lon, view.lat],
+            zoom,
+            pitch: 0,
+            attributionControl: { compact: true },
+          });
+          // Zooming out past the boundary is how the user asks for the globe
+          // back, so the map itself is what watches for it.
+          map.on('zoomend', handBack);
+          map.on('load', () => addAircraftLayer());
+        } else {
+          map.jumpTo({ center: [view.lon, view.lat], zoom, pitch: 0 });
+        }
+      } catch (error) {
+        // A failed hand-off must hand back, not strand the view. Leaving
+        // `active` true would show an empty transparent div over the globe
+        // forever and never retry, which is a worse outcome than no city mode.
+        console.warn('[city] hand-off failed', error);
+        active = false;
+        element.style.display = 'none';
+        return;
       }
 
       // Matched scale means the first frame looks exactly like the globe with

@@ -92,9 +92,9 @@ cd frontend && npm test
 | `borders.test.ts` | 17 | **Lon/lat densification, the border shell, the vertex budget** |
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
-| `cityMode.test.ts` | 14 | **Scale matching across the renderer hand-off, hysteresis, lazy loading** |
+| `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **630** | 321 backend, 309 frontend |
+| **Total** | **635** | 321 backend, 314 frontend |
 
 ### What the automated suites do not cover
 
@@ -110,7 +110,7 @@ one that admits its gaps:
 - **React component rendering.** Components are exercised manually and through
   the store; there are no DOM-rendering tests for them. The pointer path is the
   exception, because that is where a bug hid (§6).
-- **Wiring, in general.** Seven of the fifteen defects in §6 were cases where
+- **Wiring, in general.** Seven of the sixteen defects in §6 were cases where
   correct code was never connected to anything. Tests assert on behaviour that
   runs; they cannot assert on behaviour that was never reached. Running the
   system remains a required step, not a nicety.
@@ -219,6 +219,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 16 | **City mode handed over at 0.05 radii, where the globe texture is 36 texels per screen pixel** — so the whole approach was spent looking at a magnified smear, and a failed hand-off left the layer permanently active with no map and no retry | Medium, visual | Two screenshots from Phone (D53, §18.6) | Fixed |
 | 15 | **The selected aircraft's nose and tail cones were built inside out** — each pinched to a needle where it met the fuselage and flared open at the tip, so the model read as a dart with a fork on the front | Medium, visual | A screenshot from Phone (D50, §13.4) | Fixed |
 
 **Defect #12 took two retunes**, and the second one is the interesting half:
@@ -1417,3 +1418,38 @@ would delete the border and label layers and cost the day/night terminator.
 neither answerable from a test: whether Thai building heights are tagged well
 enough to read as a city rather than a field of identical slabs, and whether
 the hand-off feels like zooming or like the app changing its mind.
+
+### 18.6 The hand-off moved, after somebody looked
+
+Reported 2026-08-28 with two screenshots: Thailand looked like gibberish.
+Neither screenshot showed city mode — both showed the globe magnified past the
+point where its texture carries information. Defect #16 in §6, reasoning in
+D53.
+
+| Altitude | View | Texels per screen pixel |
+|---|---|---|
+| 0.60 | 3,565 km | 3.0 |
+| **0.35** — the hand-off now | 2,080 km | **5.1** |
+| 0.20 | 1,188 km | 8.9 |
+| **0.05** — the hand-off before | 297 km | **35.6** |
+| 0.014 — the camera's floor | 83 km | **127** |
+
+The threshold was chosen in D52 by asking how close the camera could get. The
+question that mattered was how close the imagery holds up, and the answer is
+"not this close": the whole approach was spent looking at magnified texture.
+
+Three changes followed, all covered by `cityMode.test.ts` (14 tests to 19):
+
+- The hand-off is at 0.35 radii, configurable through `VITE_CITY_ALTITUDE`, and
+  a test asserts the texels-per-pixel figure at that altitude stays under eight
+  — the measurement, not the number, is what is pinned.
+- **Aircraft are drawn in city mode**, from the same store the globe reads and
+  with the same silhouette, which `aircraftSprite.ts` now exports as a
+  standalone canvas so there is one outline rather than two. Tests pin the
+  lon/lat order GeoJSON wants — swapping it moves every aircraft to the wrong
+  hemisphere while nothing fails — and that a null heading is not drawn as
+  north.
+- **A failed hand-off hands back.** `enter()` set `active` before awaiting the
+  dynamic import, so any failure inside left the layer permanently active: a
+  transparent div over the globe, no map, and no retry, because the guard
+  believed city mode was already up. A test drives a loader that throws.

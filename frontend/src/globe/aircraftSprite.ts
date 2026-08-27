@@ -107,6 +107,31 @@ function draw(canvas: HTMLCanvasElement): void {
 }
 
 /**
+ * The airliner silhouette on its own, as a canvas.
+ *
+ * City mode draws aircraft through MapLibre rather than through the marker
+ * layer, and a second hand-drawn aeroplane would be a second thing to keep in
+ * agreement with this one. Same outline, same orientation -- nose up, which is
+ * what MapLibre's `icon-rotate` expects to mean a heading of zero.
+ */
+export function createAircraftIconCanvas(): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = CELL;
+  canvas.height = CELL;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2D canvas context unavailable for the aircraft icon');
+
+  ctx.lineJoin = 'round';
+  traceAirframe(ctx, 0);
+  ctx.strokeStyle = 'rgba(38, 38, 46, 1)';
+  ctx.lineWidth = 7;
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+  ctx.fill();
+  return canvas;
+}
+
+/**
  * Build the sprite atlas texture.
  *
  * Mipmaps are generated because markers are drawn as small as five pixels;
