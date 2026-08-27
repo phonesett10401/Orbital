@@ -10,9 +10,10 @@
  * The layers it assembles are kept separate on purpose, so rendering cost
  * stays attributable when we profile (D16):
  *
- * - `earth.ts`   the textured, lit planet, plus atmosphere and stars
- * - `markers.ts` one THREE.Points for every tracked object
- * - `route.ts`   the observed track of the selected object
+ * - `earth.ts`             the textured, lit planet, plus atmosphere and stars
+ * - `markers.ts`           one THREE.Points for every tracked object
+ * - `route.ts`             the observed track of the selected object
+ * - `selectedAircraft.ts`  a 3D mesh standing in for the selected marker
  */
 
 import { useEffect, useRef } from 'react';
@@ -23,9 +24,10 @@ import { config } from '../config';
 import { useOrbitalStore } from '../state/store';
 import { createEarthVisuals } from './earth';
 import { createLightingProbe } from './lightingProbe';
-import { createMarkerLayer } from './markers';
+import { MARKER_ALTITUDE, createMarkerLayer } from './markers';
 import { attachPointerSelection } from './pointer';
 import { createRouteLayer } from './route';
+import { createSelectedAircraftLayer } from './selectedAircraft';
 import { bboxChanged, viewportBBox } from './viewport';
 
 /** How often to recompute the sun. The terminator moves 0.25 degrees a minute. */
@@ -61,21 +63,33 @@ export function GlobeView() {
 
     const markers = createMarkerLayer(globeRadius);
     const route = createRouteLayer(globeRadius);
+    const selectedAircraft = createSelectedAircraftLayer(globeRadius);
     // Added to the scene root, not to a globe group. globe.gl orbits the camera
     // rather than rotating the planet, so everything stays in one fixed frame —
     // verified: every object in the scene has zero rotation, and our
     // latLonToVector3 matches world.getCoords() exactly.
     scene.add(markers.points);
     scene.add(route.line);
+    scene.add(selectedAircraft.mesh);
 
     const controls = world.controls();
     controls.enableDamping = true;
     controls.dampingFactor = 0.12;
-    // 1.005 rather than a more cautious 1.05. At 1.05 the closest reachable
-    // view still spans ~1260 square degrees, which is above the threshold at
-    // which the backend will spend credits on a fast viewport poll -- so tier 2
-    // could never engage at any zoom the user could reach (D36).
-    controls.minDistance = globeRadius * 1.005;
+    // Two constraints meet here, and 1.005 satisfied only one of them.
+    //
+    // Lower bound: at 1.05 the closest reachable view still spans ~1260 square
+    // degrees, above the threshold at which the backend spends credits on a
+    // fast viewport poll, so tier 2 could never engage at any reachable zoom
+    // (D36). That is why this is not a cautious number.
+    //
+    // Upper bound: markers and the selected model sit on a shell at
+    // 1 + MARKER_ALTITUDE = 1.012 radii. At 1.005 the camera goes *inside* that
+    // shell, and every marker beneath it falls behind the near plane and
+    // vanishes at exactly the moment the user has zoomed all the way in (D43).
+    //
+    // 1.014 clears the shell while still giving a ~9.5 degree cap, about 363
+    // square degrees, comfortably under the 400 tier 2 needs.
+    controls.minDistance = globeRadius * (1 + MARKER_ALTITUDE) * 1.002;
     controls.maxDistance = globeRadius * 8;
     // Slow zoom slightly: the default overshoots badly at globe scale.
     controls.zoomSpeed = 0.6;
@@ -133,6 +147,26 @@ export function GlobeView() {
 
       const state = useOrbitalStore.getState();
 
+      // The selected object gets a real mesh instead of a sprite. This runs
+      // BEFORE markers.update, because it decides which sprite the marker
+      // layer must leave out — and returns that id rather than the two layers
+      // each deciding for themselves, which is how an object ends up drawn
+      // twice or not at all.
+      //
+      // Null selection, an object that has left the feed, and an object with
+      // no heading all come back as null, and the sprite stands as it was.
+      const selectedObject = state.selectedId
+        ? state.objects.get(state.selectedId) ?? null
+        : null;
+      markers.setHidden(
+        selectedAircraft.update(
+          selectedObject,
+          nowMs,
+          world.camera() as THREE.PerspectiveCamera,
+          container.clientHeight,
+        ),
+      );
+
       // Markers are rebuilt from the store every frame. This is the hot path:
       // it writes into pre-allocated typed arrays and issues no allocations in
       // the steady state.
@@ -171,6 +205,7 @@ export function GlobeView() {
         earth,
         markers,
         route,
+        selectedAircraft,
         store: useOrbitalStore,
         // Renders the real scene to an offscreen target and measures the
         // light, which is the only way to check the terminator end to end --
@@ -185,7 +220,13 @@ export function GlobeView() {
             globeRadius,
             // Hidden while measuring: the atmosphere alone would turn every
             // reading into a measurement of the halo instead of the planet.
-            otherLayers: [earth.atmosphere, earth.starField, markers.points, route.line],
+            otherLayers: [
+              earth.atmosphere,
+              earth.starField,
+              markers.points,
+              route.line,
+              selectedAircraft.mesh,
+            ],
             setSunFromDate: earth.setSunFromDate,
           });
           try {
@@ -221,6 +262,7 @@ export function GlobeView() {
       detachPointer();
       markers.dispose();
       route.dispose();
+      selectedAircraft.dispose();
       earth.dispose();
       world._destructor?.();
     };

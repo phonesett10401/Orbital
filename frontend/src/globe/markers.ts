@@ -47,7 +47,7 @@ export const PICK_RADIUS_PX = 12;
  * it is uniform so that altitude is conveyed by colour rather than by height
  * (which would be invisible anyway).
  */
-const MARKER_ALTITUDE = 0.012;
+export const MARKER_ALTITUDE = 0.012;
 
 /**
  * Sprite size as a fraction of globe radius — a *world* size, not a screen size.
@@ -74,7 +74,7 @@ const MARKER_ALTITUDE = 0.012;
  * sprite is exaggerated several hundredfold. It is the size at which a
  * silhouette becomes readable, which is the only thing it can usefully be.
  */
-const MARKER_WORLD_SIZE = 0.04;
+export const MARKER_WORLD_SIZE = 0.04;
 
 /**
  * Screen-size clamps, in CSS pixels.
@@ -87,7 +87,7 @@ export const MIN_MARKER_PX = 5;
 export const MAX_MARKER_PX = 44;
 
 /** Selected markers are drawn larger so the selection is unmistakable. */
-const SELECTED_SIZE_MULTIPLIER = 1.8;
+export const SELECTED_SIZE_MULTIPLIER = 1.8;
 
 /**
  * Vertex shader.

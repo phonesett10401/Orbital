@@ -1343,3 +1343,176 @@ confounds that each produced a confident wrong answer:
 Keeping the visual layers separable (D16) is what made the first of those
 fixable in one line, which is a second use for that decision beyond attributing
 frame cost.
+
+---
+
+## D42 — The selected aircraft becomes a real mesh; everything else stays a sprite
+
+**Decision:** when an object is selected, hide its sprite in the marker layer
+and draw one low-poly 3D airframe in its place, oriented by heading, built
+procedurally in code rather than loaded from a model file.
+
+*Alternatives:* meshes for every aircraft; a glTF model loaded at startup;
+per-type models chosen by aircraft category; leaving the selected marker as an
+enlarged sprite.
+
+**Meshes for everything is the thing D15 exists to prevent.** Two thousand
+markers are one draw call precisely because they are points in a single
+buffer; two thousand meshes are two thousand draw calls, and the frame rate
+that was measured and defended goes away. The mesh is affordable only because
+there is exactly one of it — the budget for this feature is one extra draw
+call, which is why it is one `THREE.Mesh` with one merged geometry and one
+material rather than a `Group` of eight parts.
+
+**The model is generated, not loaded.** A glTF pipeline for a single generic
+airframe buys nothing and costs an async load to sequence, a binary asset in
+the repository, a licence to track, and a new failure mode where the user
+clicks before the model has arrived. The sprite atlas was generated for exactly
+these reasons (D30) and the same reasoning applies unchanged. Around 200
+triangles from cylinders and boxes: fuselage, nose, tail cone, wings,
+tailplane, fin, two engines. A loader earns its place the day per-type models
+do, and not before.
+
+**An aircraft with no heading keeps its disc.** A mesh is an oriented object,
+so drawing one commits to a direction on screen, and for a null heading there
+is no direction to commit to. Pointing it north would be a confident wrong
+answer of the kind the contract's `null`-is-not-zero rule exists to prevent
+(D18), and the atlas already carries a directionless disc for this case (D40).
+So no model appears and the sprite stands.
+
+### Two places it deliberately departs from the sprite
+
+**Altitude.** The task described the model as sitting above the surface at its
+altitude. Taken literally that is wrong here: 12 km is 0.19 world units on a
+100-unit globe, six times *smaller* than the 1.2-unit legibility shell the
+markers already float on (MARKER_ALTITUDE), so a literal altitude would drop
+the model below the sprite it replaces, into the surface texture, and make it
+visibly jump at the instant of selection. The model therefore sits on the same
+shell as the sprite, and altitude stays encoded as colour exactly as D28 chose.
+Height above a sphere at this scale is not a channel that can carry altitude,
+which is what MARKER_ALTITUDE said in the first place.
+
+**Lighting.** The mesh is lit by a fixed key light in **view space** — a
+headlight that follows the camera. That is precisely the coordinate-frame
+mistake D41 spent a session removing from the globe shader, so the difference
+is worth stating: the globe is a world object whose lighting *is* the
+information, because it shows where the sun is, while this is a selection
+indicator whose job is to remain legible. Lit by the real sun, an aircraft
+selected over the night side would be a black mesh on a black ocean and the
+click would look like it had failed.
+
+### What is tested, and what a test cannot reach
+
+Thirty-eight tests, and the load-bearing one asserts that the mesh's tangent
+frame agrees with the marker vertex shader's, by transcribing the GLSL into
+TypeScript rather than importing a shared helper — a shared helper would make
+the test pass by construction. If the two frames ever drift, a selected
+aircraft snaps to a different heading the moment it is clicked, and inspecting
+either one alone would show nothing wrong. That failure mode is this project's
+most frequent (D34, D40, D41): two pieces of code each correct in isolation and
+meaningless together.
+
+Also pinned: a heading of exactly zero still draws (the falsy-check bug that
+would silently refuse every aircraft flying due north), the basis is a rotation
+rather than a reflection (a mirrored airframe is entirely plausible and
+entirely wrong — the same trap as the atlas's `flipY` in D40), the tallest
+vertex lies aft of centre so the model cannot be authored nose-backwards, and
+the model is placed exactly where the sprite would have been.
+
+> **Corrected by [D43](#d43--the-model-was-sized-against-the-wrong-distance).**
+> The paragraph below concluded the ceiling was dead code. It was dead, but not
+> for the reason given: the sizing measured to the globe's centre rather than to
+> the model, so the clamp evaluated against a distance an order of magnitude too
+> large and could never bind. The model grew without limit on approach.
+
+**The sizing ceiling is dead code, deliberately.** Across the camera range the
+orbit controls permit, the model runs from 16 px fully zoomed out — where the
+floor engages — to about 55 px on the closest approach, so `MODEL_MAX_PX` never
+binds. It is kept as a rail and the tests say both things: that it does not
+engage anywhere reachable, and that it does clamp if the camera is ever allowed
+closer. This is also where the model and sprite part company on purpose: a
+selected *sprite* is clamped to 44 px because a flat silhouette that large
+swamps the terrain, while a mesh at 55 px reads as an aircraft above it.
+
+**Not yet verified by eye.** The unit tests and a console check against the
+running bundle confirm placement, orientation, scale and the sprite handoff,
+but nobody has looked at the model on the globe. By this project's own record
+that is the check that finds the defect (D34, D40, D41 were all invisible to a
+green suite), so it remains outstanding rather than assumed.
+
+---
+
+## D43 — The model was sized against the wrong distance
+
+**Two defects, one root cause**, both found by rendering the selected model
+offscreen and measuring its wingspan in pixels — neither was visible to the 38
+tests that shipped with D42, all of which passed throughout.
+
+### The model grew without limit on approach
+
+`modelSpanWorld` clamps the model to between 16 and 96 screen pixels. The clamp
+never engaged, because the call site passed `camera.position.length()` — the
+distance from the camera to the **globe's centre** — where the function needed
+the distance from the camera to the **model**.
+
+Those two are interchangeable while the camera is far away and wildly different
+as it approaches: the model sits on a shell at 1.012 R, so a camera at 1.05 R is
+3.8 units from the model and 105 units from the centre. The clamp, evaluating
+against the larger number, concluded the model was small and left it alone.
+
+Measured at a 300 px viewport, before and after:
+
+| Camera distance | Before | After |
+|---|---|---|
+| 320 (default) | 24 px | 16 px |
+| 180 | 36 px | 30 px |
+| 140 | 60 px | 60 px |
+| 120 | **124 px** | **96 px** |
+| 105 | **300 px, clipping the viewport** | — |
+| 101.4 (closest reachable) | **0 px** | **96 px** |
+
+The sprite layer never had this bug: `gl_PointSize` divides by
+`-viewPosition.z`, which *is* the true view depth. The mesh reimplemented the
+same idea in TypeScript and reached for the wrong quantity.
+
+### The camera could fly inside the marker shell
+
+The second column explains the `0 px` above. Markers and the model sit on a
+shell at `1 + MARKER_ALTITUDE` = 1.012 R, while the orbit controls allowed the
+camera down to 1.005 R (D36). Between those two figures the camera is **inside
+the shell**, so anything directly beneath it is behind the near plane and is
+not drawn — at exactly the moment the user has zoomed all the way in.
+
+**This one is not task 3's fault.** It affects sprites identically and has been
+latent since D36 lowered `minDistance`; the model merely made it obvious,
+because one missing aircraft is invisible and one missing *selection* is not.
+
+`minDistance` is now derived from the shell itself —
+`globeRadius * (1 + MARKER_ALTITUDE) * 1.002` — rather than being an
+independent constant that happened to sit below it. Two numbers with a required
+relationship should not be written down twice, which is the same lesson as D36,
+where a backend threshold and a frontend camera limit were each correct alone
+and jointly made a feature unreachable.
+
+The tier 2 constraint that motivated D36 still holds: at 1.014 R the visible cap
+is about 9.5°, some 363 square degrees, comfortably under the 400 the backend
+requires before it will spend a credit on a viewport poll. A test asserts that,
+so the two constraints cannot silently drift apart again.
+
+### Why the existing tests missed it
+
+D42's suite tested `modelSpanWorld` with the distance the test itself chose, and
+tested that `update()` scaled the mesh *smaller* when the camera moved closer —
+which it did, because the shrinking world span still grew on screen. Nothing
+converted the result back into pixels, and nothing exercised the call site with
+a camera positioned relative to the model.
+
+Twelve tests now do. They pin the ceiling and floor in **screen pixels** across
+the reachable camera range, drive `update()` with a camera placed on the ray
+through the aircraft, and include one test that reproduces the defect by
+deliberately passing the centre distance — so the distinction cannot be quietly
+undone.
+
+This is the project's recurring shape once more, and worth naming precisely: not
+a wrong formula, but a **correct formula fed the wrong argument**, where every
+individual function was right and the composition was not.
