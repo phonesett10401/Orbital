@@ -88,12 +88,12 @@ cd frontend && npm test
 | `route.test.ts` | 13 | Great-circle geometry, antimeridian, colour |
 | `store.test.ts` | 18 | Snapshot application, selection races, layers |
 | `lighting.test.ts` | 29 | **Terminator geometry, the shader's coordinate frame, the glint's tuning** |
-| `selectedAircraft.test.ts` | 50 | **Airframe geometry, heading basis, sprite handoff, sizing in screen pixels** |
+| `selectedAircraft.test.ts` | 54 | **Airframe shape and heading basis, sprite handoff, sizing in screen pixels** |
 | `borders.test.ts` | 17 | **Lon/lat densification, the border shell, the vertex budget** |
 | `labels.test.ts` | 39 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **609** | 321 backend, 288 frontend |
+| **Total** | **613** | 321 backend, 292 frontend |
 
 ### What the automated suites do not cover
 
@@ -109,7 +109,7 @@ one that admits its gaps:
 - **React component rendering.** Components are exercised manually and through
   the store; there are no DOM-rendering tests for them. The pointer path is the
   exception, because that is where a bug hid (§6).
-- **Wiring, in general.** Seven of the fourteen defects in §6 were cases where
+- **Wiring, in general.** Seven of the fifteen defects in §6 were cases where
   correct code was never connected to anything. Tests assert on behaviour that
   runs; they cannot assert on behaviour that was never reached. Running the
   system remains a required step, not a nicety.
@@ -218,6 +218,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 15 | **The selected aircraft's nose and tail cones were built inside out** — each pinched to a needle where it met the fuselage and flared open at the tip, so the model read as a dart with a fork on the front | Medium, visual | A screenshot from Phone (D50, §13.4) | Fixed |
 
 **Defect #12 took two retunes**, and the second one is the interesting half:
 the first improved every number the probe reported and was rejected on sight
@@ -239,8 +240,8 @@ been looked at by a human — the selected aircraft model (§13.3) and the
 geography layers (§14.6), and now the retuned glint (§17.4). That is a gap in
 verification, not a known defect.
 
-Defects 3 through 11, 13 and 14 all passed every automated test at the time
-they existed, and #12 was invisible to one for a different reason: nothing in
+Defects 3 through 11 and 13 through 15 all passed every automated test at the
+time they existed, and #12 was invisible to one for a different reason: nothing in
 either suite can render, so a highlight's size was not a quantity any test
 held an opinion about until the offscreen probe made it one.
 The pattern is consistent: in each case the *code* was correct and the *wiring*
@@ -300,7 +301,7 @@ For a demo or a fresh checkout. Start both servers, open the frontend.
 | 3 | Scroll to zoom | Zooms in and out; markers scale with distance |
 | 4 | Read the status bar | Aircraft count, data age, source name |
 | 5 | Click a marker | Detail panel opens with callsign, altitude, speed, heading, origin country |
-| 5a | Look at the selected aircraft, zoomed out and on a close approach | Its disc is replaced by a 3D airframe pointing along its track, legible at both ends of the zoom range and over the night side, sitting above the terrain rather than in it; the swap does not jump (§13.3) |
+| 5a | Look at the selected aircraft, zoomed out and on a close approach | Its disc is replaced by a 3D airframe pointing along its track, legible at both ends of the zoom range and over the night side, sitting above the terrain rather than in it; the swap does not jump. **Checked 2026-08-28** (§13.4) |
 | 6 | Check the route | Polyline follows the observed track; caveat text is visible |
 | 7 | Click empty space | Panel closes |
 | 8 | Search a callsign | Ranked results; Enter picks the top hit |
@@ -870,16 +871,15 @@ behind the near plane. That affected sprites identically and had been latent
 since D36; the model only made it visible, because one missing aircraft is
 invisible and one missing *selection* is not.
 
-### 13.3 What is still outstanding
+### 13.3 What was still outstanding, and what it found
 
-**Nobody has looked at it.** The probe settles placement, orientation,
-occlusion and size in pixels. It cannot settle appearance: whether the shading
-and proportions read as an aeroplane at 16 px and at 96 px, whether the model
-sits convincingly above the terrain, whether it stays legible over the night
-side, and whether the sprite-to-mesh swap feels seamless. By this project's own
-record — defects 5, 6, 9 were all invisible to a green suite — that is the check
-that finds the defect, so it is listed as outstanding rather than assumed. §8
-step 5a is the check.
+**Nobody had looked at it.** The probe settles placement, orientation,
+occlusion and size in pixels, and cannot settle appearance. That was recorded
+here as outstanding rather than assumed, on the grounds that by this project's
+own record — defects 5, 6 and 9 were all invisible to a green suite — it is the
+check that finds the defect.
+
+It found the defect. §13.4.
 
 ---
 
@@ -1286,3 +1286,37 @@ correct, improving, and still measuring the wrong quantity.** §12.3 already
 lists three ways a probe can be wrong; this is the fourth, and the quietest —
 a probe that is right about what it measures and silent about what matters. A
 defect reported by an eye is closed by an eye.
+
+### 13.4 The airframe was the wrong shape, and the tests were looking elsewhere
+
+Reported on 2026-08-28 by Phone, with a screenshot: the model read as a dart
+with a fork at one end. Measuring the merged geometry found both cones built
+inside out — the nose pinched to a needle where it met the fuselage and flared
+open at the very front, the tail the same in reverse. Defect #15 in §6, full
+reasoning in D50.
+
+| | at the fuselage join | at the tip |
+|---|---|---|
+| Nose, before | r = 0.004 | r = 0.042 |
+| Nose, after | 0.042 | 0.004 |
+| Tail, before | 0.012 | 0.036 |
+| Tail, after | 0.036 | 0.012 |
+
+**Every test in §13.1 passed throughout, and none of them was wrong.** They pin
+orientation — the heading basis, a zero heading, the tallest vertex aft of
+centre, the sprite handoff — and the model's orientation was correct the whole
+time. The defect lived inside two primitives, along an axis no assertion
+looked down. §13.2's pixel probe measured the nose direction to 1.3° and the
+wingspan in pixels; neither changes when a cone is flipped end for end.
+
+Four tests now measure the hull itself: the nose tapers forward and the tail
+aft, **with the join asserted wide as well as the tip narrow** — checking only
+that they differ would have passed on the broken model, where the two were
+simply swapped — plus wing sweep and wing taper for the new panels.
+
+The flying surfaces are now four-cornered panels rather than boxes, so they
+sweep and taper. 220 triangles, one mesh, one material, one draw call: D42's
+budget, unchanged.
+
+**Accepted by eye** by Phone on 2026-08-28, which makes the aircraft model the
+first of the three measured-but-unseen features to clear that bar.

@@ -195,11 +195,73 @@ function bake(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4): THREE.Buff
   return flat;
 }
 
-function at(x: number, y: number, z: number, rotX = 0): THREE.Matrix4 {
+/**
+ * Place a primitive at (x, y, z), optionally laid along Z.
+ *
+ * `lieAlongZ` rotates a quarter turn about X, which is what turns a
+ * `CylinderGeometry` — built along Y, with `radiusTop` at +Y — into something
+ * running fore and aft. **After that rotation `radiusTop` is the FORWARD
+ * radius**, because +Y maps to +Z, and +Z is the nose. Every cylinder here is
+ * therefore authored as `(forwardRadius, aftRadius)`.
+ *
+ * That sentence is in the code because its absence cost a defect: the two
+ * cones were rotated the other way, which silently swapped their ends and
+ * built an aeroplane that pinched to a point where the nose met the fuselage
+ * and then flared open at the tip (D50).
+ */
+function at(x: number, y: number, z: number, lieAlongZ = false): THREE.Matrix4 {
   const matrix = new THREE.Matrix4();
-  if (rotX !== 0) matrix.makeRotationX(rotX);
+  if (lieAlongZ) matrix.makeRotationX(Math.PI / 2);
   matrix.setPosition(x, y, z);
   return matrix;
+}
+
+/**
+ * A thin flat panel with an arbitrary four-cornered plan: a wing, a tailplane
+ * or a fin.
+ *
+ * A `BoxGeometry` cannot sweep or taper, and a rectangular slab with square
+ * tips is most of what makes a low-poly airliner read as a dart. Four corners
+ * in the plan and a thickness give sweep and taper for the same twelve
+ * triangles a box costs.
+ *
+ * `corners` are [across, along] pairs in order around the outline, and
+ * `thickness` is split either side of `offset` on the remaining axis. The
+ * panel is built in the XZ plane; the fin passes `vertical` and gets the same
+ * outline stood up in XY.
+ */
+function panel(
+  corners: [number, number][],
+  thickness: number,
+  offset = 0,
+  vertical = false,
+): THREE.BufferGeometry {
+  const half = thickness / 2;
+  const place = (across: number, along: number, side: number): [number, number, number] =>
+    vertical
+      ? [offset + side * half, across, along]
+      : [across, offset + side * half, along];
+
+  const top = corners.map(([a, b]) => place(a, b, 1));
+  const bottom = corners.map(([a, b]) => place(a, b, -1));
+
+  const tri: number[] = [];
+  const push = (...points: [number, number, number][]) => {
+    for (const point of points) tri.push(...point);
+  };
+
+  // Two faces, wound opposite ways, then a quad down each of the four edges.
+  push(top[0], top[1], top[2], top[0], top[2], top[3]);
+  push(bottom[0], bottom[2], bottom[1], bottom[0], bottom[3], bottom[2]);
+  for (let i = 0; i < 4; i += 1) {
+    const j = (i + 1) % 4;
+    push(top[i], bottom[i], bottom[j], top[i], bottom[j], top[j]);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(tri), 3));
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 /**
@@ -218,24 +280,89 @@ function at(x: number, y: number, z: number, rotX = 0): THREE.Matrix4 {
  * close approach and reads as stylised, where 6 reads as broken.
  */
 export function createAircraftGeometry(): THREE.BufferGeometry {
-  const half = Math.PI / 2;
+  // Every cylinder below reads (forwardRadius, aftRadius, length) -- see `at`.
   const parts: THREE.BufferGeometry[] = [
-    // Fuselage: a cylinder laid along Z. CylinderGeometry is built along Y, so
-    // every rounded part is rotated a quarter turn about X.
-    bake(new THREE.CylinderGeometry(0.042, 0.036, 0.98, 8, 1), at(0, 0, 0, half)),
-    // Nose cone.
-    bake(new THREE.CylinderGeometry(0.004, 0.042, 0.14, 8, 1), at(0, 0, 0.56, -half)),
-    // Tail cone, tapering up into the fin root.
-    bake(new THREE.CylinderGeometry(0.012, 0.036, 0.12, 8, 1), at(0, 0.012, -0.55, half)),
-    // Wings: one slab through the fuselage, so there is no seam to line up.
-    bake(new THREE.BoxGeometry(1.0, 0.02, 0.24), at(0, -0.012, -0.02)),
-    // Tailplane.
-    bake(new THREE.BoxGeometry(0.38, 0.016, 0.12), at(0, 0.01, -0.45)),
-    // Vertical fin.
-    bake(new THREE.BoxGeometry(0.016, 0.17, 0.17), at(0, 0.1, -0.47)),
+    // Fuselage: widest at the front, tapering gently aft.
+    bake(new THREE.CylinderGeometry(0.042, 0.036, 0.98, 8, 1), at(0, 0, 0, true)),
+    // Nose cone: a point at the front, full fuselage width where it joins.
+    bake(new THREE.CylinderGeometry(0.004, 0.042, 0.14, 8, 1), at(0, 0, 0.56, true)),
+    // Tail cone: fuselage width at the front, tapering to the tail, and lifted
+    // slightly so it runs up into the fin root the way an airliner's does.
+    bake(new THREE.CylinderGeometry(0.036, 0.012, 0.12, 8, 1), at(0, 0.012, -0.55, true)),
+    // Wings, one panel per side, rooted at the centreline so they meet inside
+    // the fuselage and there is no seam to line up. Swept back and tapered:
+    // root chord 0.24, tip chord 0.09, tip trailing edge 0.16 aft of the root's.
+    bake(
+      panel(
+        [
+          [0, 0.1],
+          [-0.5, -0.06],
+          [-0.5, -0.15],
+          [0, -0.14],
+        ],
+        0.02,
+        -0.012,
+      ),
+      at(0, 0, 0),
+    ),
+    bake(
+      panel(
+        [
+          [0, 0.1],
+          [0.5, -0.06],
+          [0.5, -0.15],
+          [0, -0.14],
+        ],
+        0.02,
+        -0.012,
+      ),
+      at(0, 0, 0),
+    ),
+    // Tailplane, swept and tapered on the same rules, at a fifth of the span.
+    bake(
+      panel(
+        [
+          [-0.19, -0.46],
+          [0, -0.39],
+          [0, -0.51],
+          [-0.19, -0.52],
+        ],
+        0.016,
+        0.01,
+      ),
+      at(0, 0, 0),
+    ),
+    bake(
+      panel(
+        [
+          [0.19, -0.46],
+          [0, -0.39],
+          [0, -0.51],
+          [0.19, -0.52],
+        ],
+        0.016,
+        0.01,
+      ),
+      at(0, 0, 0),
+    ),
+    // Fin: the same panel stood up in XY, leading edge raked back.
+    bake(
+      panel(
+        [
+          [0.015, -0.4],
+          [0.185, -0.5],
+          [0.185, -0.57],
+          [0.015, -0.56],
+        ],
+        0.016,
+        0,
+        true,
+      ),
+      at(0, 0, 0),
+    ),
     // Engines, slung under and ahead of the wing as they are on a real one.
-    bake(new THREE.CylinderGeometry(0.036, 0.032, 0.17, 8, 1), at(-0.2, -0.05, 0.04, half)),
-    bake(new THREE.CylinderGeometry(0.036, 0.032, 0.17, 8, 1), at(0.2, -0.05, 0.04, half)),
+    bake(new THREE.CylinderGeometry(0.036, 0.032, 0.17, 8, 1), at(-0.2, -0.05, 0.04, true)),
+    bake(new THREE.CylinderGeometry(0.036, 0.032, 0.17, 8, 1), at(0.2, -0.05, 0.04, true)),
   ];
 
   let vertices = 0;

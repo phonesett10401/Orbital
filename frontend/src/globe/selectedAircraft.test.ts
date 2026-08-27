@@ -553,3 +553,88 @@ describe('update() sizes against the camera-to-model distance (D43 call site)', 
     expect(renderedPx(110)).toBeCloseTo(MODEL_MAX_PX, 4);
   });
 });
+
+describe('the airframe is shaped the way an airframe is', () => {
+  const geometry = createAircraftGeometry();
+  const position = geometry.getAttribute('position');
+
+  /**
+   * The widest the body gets between two stations along it.
+   *
+   * Windows are chosen so that only the body is inside them: the wings, the
+   * tailplane and the fin all live at stations this never samples, and the
+   * `|x|` bound keeps their roots out of the ones it does.
+   */
+  function bodyRadiusBetween(zFrom: number, zTo: number): number {
+    let widest = 0;
+    for (let i = 0; i < position.count; i += 1) {
+      const x = position.getX(i);
+      const y = position.getY(i);
+      const z = position.getZ(i);
+      if (z < zFrom || z > zTo) continue;
+      if (Math.abs(x) > 0.045) continue;
+      widest = Math.max(widest, Math.hypot(x, y));
+    }
+    return widest;
+  }
+
+  it('tapers the nose to a point, forward', () => {
+    // The defect this exists for: `CylinderGeometry` puts `radiusTop` at +Y,
+    // and rotating a cone the opposite way from the fuselage silently swaps
+    // its ends. Both cones were built inside out, so the nose pinched to a
+    // needle where it met the fuselage and flared open at the very front, and
+    // the tail did the same in reverse. The layout was right the whole time --
+    // nose forward, wings mid, tail aft -- which is why every orientation test
+    // above passed while the model looked like a dart (D50).
+    // `join` is asserted wide as well as `tip` narrow: under the defect the
+    // join was the needle and the tip was full width, so checking only that
+    // the two differ would have passed on the broken model too.
+    const join = bodyRadiusBetween(0.47, 0.5);
+    const tip = bodyRadiusBetween(0.6, 0.63);
+    expect(join).toBeGreaterThan(0.03);
+    expect(tip).toBeLessThan(join * 0.3);
+  });
+
+  it('tapers the tail cone away, aft', () => {
+    const join = bodyRadiusBetween(-0.5, -0.47);
+    const tip = bodyRadiusBetween(-0.63, -0.6);
+    expect(join).toBeGreaterThan(0.03);
+    expect(tip).toBeLessThan(join * 0.7);
+  });
+
+  it('sweeps the wings back rather than sticking them out square', () => {
+    // A rectangular slab with square tips is most of what made this read as a
+    // dart rather than an airliner. Sweep is the tip's leading edge sitting
+    // aft of the root's.
+    let rootLeadingEdge = -Infinity;
+    let tipLeadingEdge = -Infinity;
+    for (let i = 0; i < position.count; i += 1) {
+      const x = Math.abs(position.getX(i));
+      const y = position.getY(i);
+      const z = position.getZ(i);
+      // The wing panels are the thin surfaces slightly below the centreline.
+      if (y > 0 || y < -0.04) continue;
+      if (x < 0.05) rootLeadingEdge = Math.max(rootLeadingEdge, z);
+      if (x > 0.45) tipLeadingEdge = Math.max(tipLeadingEdge, z);
+    }
+    expect(rootLeadingEdge).toBeGreaterThan(tipLeadingEdge + 0.05);
+  });
+
+  it('tapers the wing toward the tip', () => {
+    const chordAt = (from: number, to: number) => {
+      let min = Infinity;
+      let max = -Infinity;
+      for (let i = 0; i < position.count; i += 1) {
+        const x = Math.abs(position.getX(i));
+        const y = position.getY(i);
+        if (y > 0 || y < -0.04) continue;
+        if (x < from || x > to) continue;
+        const z = position.getZ(i);
+        min = Math.min(min, z);
+        max = Math.max(max, z);
+      }
+      return max - min;
+    };
+    expect(chordAt(0.45, 0.5)).toBeLessThan(chordAt(0, 0.05) * 0.6);
+  });
+});

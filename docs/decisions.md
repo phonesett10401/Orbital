@@ -2038,3 +2038,83 @@ measured and silent about what mattered. Two guards come out of it —
 - **A defect reported by an eye is closed by an eye.** D48 marked #12 fixed on
   the strength of a probe. Only running it in front of the person who filed it
   actually closed it.
+
+---
+
+## D50 — Both cones were inside out, and every test was looking somewhere else
+
+**Decision:** the nose and tail cones are rotated the same way as the fuselage,
+every cylinder in the airframe is authored as `(forwardRadius, aftRadius,
+length)`, and the flying surfaces become swept, tapered panels instead of
+rectangular slabs.
+
+*Alternatives:* leaving the shape as it was; swapping the radii instead of the
+rotation; loading a glTF airliner after all.
+
+**The defect.** `CylinderGeometry` is built along +Y with `radiusTop` at the
++Y end. The fuselage was laid along Z with a +90° rotation about X, which maps
++Y to +Z — the nose direction. The two cones were rotated the *other* way, −90°
+for the nose and +90° for a tail authored as if it were −90°, which silently
+swapped each cone's ends. Measured on the merged geometry:
+
+| | at the fuselage join | at the tip |
+|---|---|---|
+| Nose, before | r = 0.004 — a needle | r = 0.042 — full width |
+| Nose, after | 0.042 | 0.004 |
+| Tail, before | 0.012 | 0.036 |
+| Tail, after | 0.036 | 0.012 |
+
+So the body ran out to full width, pinched to a point where the nose cone
+began, and then flared open again at the very front. On screen that is a
+trumpet, and it is what Phone photographed and called messed up.
+
+**Why every test passed.** D42 pinned the things that make an aeroplane point
+the right way: the heading basis is a rotation and not a reflection, a heading
+of exactly zero still draws, the tallest vertex lies aft of centre so the model
+cannot be authored nose-backwards, the mesh sits where the sprite would have.
+All true. All still true *with both cones inverted*, because the model was
+never backwards — the layout was right the whole time, nose forward, wings
+mid-body, tailplane and fin aft. The bug was inside two primitives, in an axis
+none of those assertions looked along. D43's pixel probe then measured heading
+to 1.3° and size in pixels, neither of which changes when a cone is flipped.
+
+**The shape of it, again.** Not a wrong formula: a correct primitive fed a
+rotation that meant the opposite of what the author intended. That is the same
+sentence as D34, D36, D40, D41 and D43, and the reason `at()` no longer takes a
+raw angle. It takes `lieAlongZ`, and the rule it establishes — after that
+rotation `radiusTop` is the *forward* radius — is written above it, because the
+absence of that sentence is what the defect was made of.
+
+### Tests that would have caught it
+
+Three, and they measure the hull rather than its orientation:
+
+- The body's radius at the nose tip is under a third of its radius where the
+  cone meets the fuselage, **and that join is asserted wide**. Checking only
+  that the two differ would have passed on the broken model, where the needle
+  and the full width were simply swapped.
+- The same for the tail cone, aft.
+- The wing's tip leading edge is aft of the root's, and the tip chord is under
+  60% of the root's — the sweep and taper below.
+
+Sampling is by window along Z, chosen so only the body is inside it. Note the
+windows must land on the cylinders' rings: these are eight-sided cones with one
+height segment, so there are no vertices between the ends, and a window in
+between measures nothing at all.
+
+### The flying surfaces
+
+Rectangular slabs with square tips are most of what made this read as a dart
+rather than an airliner, so wings, tailplane and fin are now four-cornered
+panels: root chord 0.24 tapering to 0.09 at the tip, the tip's leading edge
+0.16 aft of the root's, and the fin raked back on the same rule. A
+`BoxGeometry` cannot express any of that; a panel of four plan corners and a
+thickness costs the same twelve triangles.
+
+220 triangles, one mesh, one material, **one draw call** — the budget D42 set,
+unchanged.
+
+**Signed off by eye.** Phone looked at the result and accepted it, which makes
+this the first of the three unlooked-at features to actually clear that bar.
+The glint took two attempts to get there (D49); this one took a photograph from
+somebody looking at the running app to even start.
