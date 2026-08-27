@@ -84,6 +84,34 @@ export const config = {
   specularStrength: num(import.meta.env.VITE_SPECULAR_STRENGTH, 0.08),
   specularShininess: num(import.meta.env.VITE_SPECULAR_SHININESS, 900),
 
+  /**
+   * Basemap style for city mode, the zoom-in spike (D52).
+   *
+   * OpenFreeMap: no API key, no registration, no usage cap, OpenStreetMap data
+   * under ODbL. Its Liberty style already carries a `building-3d`
+   * fill-extrusion layer from zoom 14, which is the thing being evaluated.
+   *
+   * **This is the one request in the app that leaves for a third party**, and
+   * it contradicts D7 — the browser talks to our backend and nothing else. It
+   * is a deliberate, visible exception for a spike. If city mode becomes real,
+   * this points at a Protomaps `.pmtiles` extract served by our own backend:
+   * one static file, no third party at runtime, no limits at all.
+   */
+  cityStyleUrl: str(
+    import.meta.env.VITE_CITY_STYLE_URL,
+    'https://tiles.openfreemap.org/styles/liberty',
+  ),
+
+  /**
+   * Whether zooming past the threshold hands over to city mode at all.
+   *
+   * On by default because the spike exists to be looked at, and off with
+   * `VITE_CITY_MODE=off` — which is also the switch that restores the
+   * project's usual posture of the browser talking to nothing but our own
+   * backend (D7).
+   */
+  cityMode: str(import.meta.env.VITE_CITY_MODE, 'on') !== 'off',
+
   /** Freeze the sun at a fixed time, for screenshots and deterministic demos. */
   fixedSunTime: str(import.meta.env.VITE_FIXED_SUN_TIME, ''),
 } as const;

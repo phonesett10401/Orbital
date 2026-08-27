@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "globe.gl": "^2.35.0",
+    "maplibre-gl": "^6.6.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.185.1",

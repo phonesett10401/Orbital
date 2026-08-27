@@ -360,6 +360,13 @@ judgement rather than an omission.
 
 ---
 
+> **Reopened by [D52](#d52--city-mode-a-spike-against-d17-and-what-the-tile-research-found).**
+> Phone asked for buildings on zoom, which is exactly what this entry excluded.
+> The exclusion stands for *this renderer* — the numbers are in D52 and they
+> are not close — so the spike answers the question with a second renderer
+> rather than by pretending globe.gl can stream tiles. Whether that becomes a
+> migration is still open.
+
 ## D18 — The TypeScript contract is mirrored by hand, not generated
 
 **Decision:** `frontend/src/types.ts` is written by hand and updated in the same
@@ -2196,3 +2203,104 @@ the view is 83 km tall and the colour texture is 9.8 km per pixel; more labels
 is the only kind of "more detail" available at that scale without the tiled
 imagery and building geometry D17 rules out. See D52 if that decision is ever
 revisited.
+
+---
+
+## D52 — City mode: a spike against D17, and what the tile research found
+
+**Decision:** build a throwaway-able spike, not a feature. Below 0.05 globe
+radii the globe hands the view to a MapLibre map centred on the same point,
+with OpenStreetMap vector tiles and 3D buildings; zooming back out hands it
+back. Everything is behind `config.cityMode`, and `VITE_CITY_MODE=off` restores
+the previous behaviour exactly.
+
+*Alternatives:* leaving D17 alone; migrating the globe to MapLibre outright;
+CesiumJS; a paid tile provider.
+
+**Why the question came up.** The request was for Thailand to look real and for
+detail to appear on the way in, "like Google Maps", including buildings. D51
+did the part that was a data problem. This entry is about the part that is not:
+
+| | |
+|---|---|
+| Closest the camera can go | 89 km altitude, a view 83 km tall |
+| Altitude buildings need | 1–2 km |
+| Colour texture | 4096x2048 = 9.8 km per pixel, about **8 texels across the screen** at closest zoom |
+| Zoom levels between the globe's floor and where buildings exist | **six** |
+
+Six zoom levels is not a tuning problem. **D17 excluded tiled imagery, terrain
+meshes and streamed geometry permanently, and no amount of work inside this
+renderer gets around it** — globe.gl draws one textured sphere and has no tile
+pipeline, no level of detail, and no Mercator. Phone asked to reopen it, which
+is the only way it could be reopened.
+
+### The tile research, since "free with no limits" was the constraint
+
+| Service | Key | Limits | Buildings |
+|---|---|---|---|
+| **OpenFreeMap** | none | none published: "no limits on map views or requests, no registration, no API keys" | yes, `building` layer from z14 |
+| **Protomaps, self-hosted** | none | **none by construction** — you serve the file | yes |
+| Protomaps hosted | yes | 1M tiles/month soft cap | yes |
+| Mapbox / MapTiler / Stadia | yes | monthly caps | yes |
+| EOX Sentinel-2 cloudless (imagery) | none | fair use — explicitly not for production traffic | n/a |
+| NASA GIBS (imagery) | none | unmetered, but 250 m per pixel | n/a |
+
+Two conclusions, and the second one is the useful one:
+
+- **Vector tiles solve this and satellite imagery does not.** Every free
+  imagery service is either metered, key-gated, or too coarse to show a
+  street. The "Google Maps look" being asked for is the *vector* map anyway —
+  roads, buildings, labels — and that is available without a key or a cap.
+- **The end state is a Protomaps extract served by our own backend.** One
+  `.pmtiles` file for the region, HTTP range requests, no third party at
+  runtime and no limits of any kind. That is the same shape as every other
+  asset here (D30, D44) and it satisfies D7, which the spike currently does
+  not: OpenFreeMap is a request from the browser to somebody else, and it is
+  the only one in the app.
+
+### Why a spike, and what it deliberately does not do
+
+City mode is a second renderer. That means no aircraft in it, no terminator, no
+markers, no route, no selection — everything the globe layers draw stops at the
+boundary. **That is not a defect to fix here.** It is the cost of the cheap
+version, and the spike exists to answer two questions before anyone pays the
+expensive one:
+
+1. Does the OpenStreetMap building data over Thailand look like anything?
+   Heights are sparsely tagged outside central Bangkok, and untagged buildings
+   extrude to a default — so this may read as a uniform slab city.
+2. Is the hand-off between two renderers tolerable, or does it feel like the
+   app changed its mind?
+
+If both answers are good, the real version is a migration: MapLibre now has a
+globe projection, 3D building extrusion on that globe, and three.js scenes as
+custom layers, so one renderer could cover the whole zoom range. That would
+also delete the border and label layers, which the basemap provides — and it
+would cost the day/night terminator, which has no MapLibre equivalent and was
+D41's entire session.
+
+### The hand-off, since it is the part with real engineering in it
+
+**Matched scale.** The ground distance across the viewport is computed on both
+sides of the boundary and made equal, rather than picking a zoom that looks
+about right. Two ways to get this wrong both look plausible: MapLibre defines
+zoom against 512-pixel tiles, so the widely-quoted 256-pixel constant is a
+factor of two — the world doubling in size at the boundary; and Web Mercator's
+scale depends on latitude, so a fixed mapping jumps everywhere except the
+tropics. Both are pinned by tests, including a round trip through the inverse
+used to hand back.
+
+**Hysteresis.** Entering at 0.05 radii and leaving at 0.09. One threshold for
+both directions sits exactly where the user is scrolling and flickers between
+two renderers on every notch of the wheel.
+
+**A dive on entry.** At matched scale the first frame of city mode looks like
+the globe with the planet switched off — same scale, different renderer,
+nothing to see. Entering therefore eases from the matched zoom (7.8 over
+Bangkok) down to 13.5 and tilts to 55 degrees, because a footprint viewed flat
+is a polygon and it is the tilt that makes it a building.
+
+**MapLibre and its stylesheet are dynamic imports**, so a session that never
+zooms in never downloads 800 KB of map library. The stylesheet is not optional:
+without it the attribution control renders unstyled, and attribution is a
+licence condition of the tiles rather than a decoration.

@@ -16,6 +16,10 @@
  * - `markers.ts`           one THREE.Points for every tracked object
  * - `route.ts`             the observed track of the selected object
  * - `selectedAircraft.ts`  a 3D mesh standing in for the selected marker
+ *
+ * Below `CITY_ENTER_ALTITUDE` it hands the view over to `city/cityMode.ts`,
+ * which is a spike rather than a layer: a second renderer with tiles and 3D
+ * buildings, for the zoom range this globe cannot reach (D52).
  */
 
 import { useEffect, useRef } from 'react';
@@ -23,6 +27,11 @@ import Globe from 'globe.gl';
 import * as THREE from 'three';
 
 import { config } from '../config';
+import {
+  createCityLayer,
+  shouldEnterCity,
+  shouldExitCity,
+} from '../city/cityMode';
 import { useOrbitalStore } from '../state/store';
 import { createBorderLayer } from './borders';
 import { createEarthVisuals } from './earth';
@@ -82,6 +91,16 @@ export function GlobeView() {
     const borders = createBorderLayer(globeRadius);
     const labels = createLabelLayer(globeRadius);
     container.appendChild(labels.element);
+
+    // City mode: the spike that answers "what if you could keep zooming".
+    // Handing back is the map's decision -- it is the thing being scrolled --
+    // so it calls in with where the user ended up and the globe resumes there.
+    const city = createCityLayer({
+      onExit: (view) => {
+        world.pointOfView({ lat: view.lat, lng: view.lon, altitude: view.altitude }, 0);
+      },
+    });
+    container.appendChild(city.element);
 
     const markers = createMarkerLayer(globeRadius);
     const route = createRouteLayer(globeRadius);
@@ -210,6 +229,23 @@ export function GlobeView() {
         state.objectsVersion,
       );
 
+      // The hand-off to city mode, and only the hand-off: once the map is up
+      // it owns the interaction, and it is what decides when to give the view
+      // back. Altitude here is in globe radii, the same unit the label tiers
+      // and the camera limits use.
+      const altitude =
+        ((world.camera() as THREE.PerspectiveCamera).position.length() - globeRadius) /
+        globeRadius;
+      if (config.cityMode && shouldEnterCity(altitude, city.isActive())) {
+        const pov = world.pointOfView();
+        void city.enter(
+          { lat: pov.lat, lon: pov.lng, altitude },
+          (world.camera() as THREE.PerspectiveCamera).fov,
+        );
+      } else if (shouldExitCity(altitude, city.isActive())) {
+        city.exit();
+      }
+
       // Labels reproject every frame so they track the globe while dragging;
       // which labels to show is recomputed far less often, inside the layer.
       labels.update(
@@ -247,6 +283,7 @@ export function GlobeView() {
         earth,
         borders,
         labels,
+        city,
         markers,
         route,
         selectedAircraft,
@@ -307,6 +344,7 @@ export function GlobeView() {
       detachPointer();
       borders.dispose();
       labels.dispose();
+      city.dispose();
       markers.dispose();
       route.dispose();
       selectedAircraft.dispose();

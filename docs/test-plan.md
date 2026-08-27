@@ -92,8 +92,9 @@ cd frontend && npm test
 | `borders.test.ts` | 17 | **Lon/lat densification, the border shell, the vertex budget** |
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
+| `cityMode.test.ts` | 14 | **Scale matching across the renderer hand-off, hysteresis, lazy loading** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **616** | 321 backend, 295 frontend |
+| **Total** | **630** | 321 backend, 309 frontend |
 
 ### What the automated suites do not cover
 
@@ -1356,3 +1357,63 @@ because candidates are cached against the tier and the caps bound what follows.
 camera stops at 89 km altitude, where the view is 83 km tall and the colour
 texture is 9.8 km per pixel — about eight texels across the screen. Anything
 finer needs tiled imagery and building geometry, which D17 excludes.
+
+---
+
+## 18. City mode — the zoom-in spike
+
+Not a feature. A second renderer behind `config.cityMode`, built to answer two
+questions before anyone pays for a migration: does OpenStreetMap building data
+over Thailand look like anything, and is a hand-off between two renderers
+tolerable. Reasoning and the tile research in D52. Built 2026-08-28.
+
+### 18.1 What it does
+
+Below **0.05 globe radii** the globe hands the view to a MapLibre map on the
+same point, with OpenFreeMap vector tiles — no API key, no registration, no
+usage cap — whose Liberty style carries a `building-3d` fill-extrusion layer
+from zoom 14. Zooming back out past **0.09 radii** hands the view back to the
+globe at the position and scale the map ended on.
+
+`VITE_CITY_MODE=off` restores the previous behaviour exactly, which is also
+what restores D7: OpenFreeMap is the only request in this application that
+leaves for a third party.
+
+### 18.2 Why a second renderer at all
+
+| | |
+|---|---|
+| Closest the globe camera can go | 89 km altitude — a view 83 km tall |
+| Where buildings start | zoom 14 |
+| Zoom at the hand-off, over Bangkok | **7.8** |
+| Gap | **six zoom levels**, which no tuning of this renderer closes |
+
+### 18.3 What the automated suite covers
+
+`cityMode.test.ts`, 14 tests. MapLibre needs a WebGL context and there is none
+under vitest, so the map itself is stubbed and everything around it is pinned:
+
+| What is pinned | Why it matters |
+|---|---|
+| `mapZoomFor` round-trips through `altitudeForZoom` | The inverse is what hands the view back; a mismatch means the globe resumes at the wrong scale |
+| Zoom uses the **512-pixel** tile convention | MapLibre defines zoom against 512 px tiles. The widely-quoted 256 px constant is a factor of two — the world visibly doubling in size at the boundary |
+| Scale falls with latitude | Web Mercator's metres-per-pixel depends on latitude; a fixed mapping jumps everywhere except the tropics |
+| The entry and exit altitudes differ | One threshold for both directions flickers between two renderers on every notch of the wheel |
+| MapLibre is not loaded until the first hand-off | 800 KB for a globe nobody zooms into |
+| Entry eases toward zoom 13.5 and pitch 55 | At matched scale the first frame looks like the globe with the planet off; flat, a footprint is a polygon |
+| Handing back reports where the map ended up | The globe resumes there, not where it left |
+
+### 18.4 What it deliberately does not do
+
+No aircraft, no terminator, no markers, no route, no selection: everything the
+globe layers draw stops at the boundary. That is the cost of the cheap version
+and the reason this is a spike. The real version is a migration — MapLibre has
+a globe projection, 3D buildings on it, and three.js custom layers — which
+would delete the border and label layers and cost the day/night terminator.
+
+### 18.5 Outstanding
+
+**Nobody has looked at it**, and it exists only to be looked at. Two questions,
+neither answerable from a test: whether Thai building heights are tagged well
+enough to read as a city rather than a field of identical slabs, and whether
+the hand-off feels like zooming or like the app changing its mind.

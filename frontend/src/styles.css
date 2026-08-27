@@ -526,3 +526,20 @@ body {
   color: rgba(88, 182, 255, 0.85);
   font-weight: 600;
 }
+
+/* ---- city mode (spike, D52) ---- */
+
+/*
+ * Sits over the globe, under the chrome. The globe keeps running underneath:
+ * hiding it would mean rebuilding its state on the way back, and the whole
+ * point of the spike is that the transition is cheap to reverse.
+ */
+.city-map {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.city-map .maplibregl-ctrl-attrib {
+  font-size: 11px;
+}
