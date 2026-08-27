@@ -35,6 +35,11 @@ cd frontend && npm install && npm run dev
 Then open http://localhost:5173. The dev server proxies `/api` to the backend,
 so the browser sees a single origin.
 
+`npm run dev` first runs `npm run assets`, which copies the Earth textures and
+reduces the geography datasets out of `node_modules` into `public/`. Both
+directories are generated rather than committed, so after `npm install` the app
+is fully self-contained offline — no CDN, no tile server, no API key.
+
 ## Using live data
 
 Copy `.env.example` to `backend/.env` and fill in OpenSky OAuth2 client

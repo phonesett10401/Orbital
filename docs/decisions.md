@@ -1516,3 +1516,165 @@ undone.
 This is the project's recurring shape once more, and worth naming precisely: not
 a wrong formula, but a **correct formula fed the wrong argument**, where every
 individual function was right and the composition was not.
+
+---
+
+## D44 — Geography data is reduced at build time, and borders are drawn as arcs
+
+**Decision:** country boundaries, city names and airports come from datasets
+that arrive with `npm install`, are reduced to two small static files by
+`scripts/build-geography.mjs`, and are served from `public/geo/`. Borders are
+drawn as one `THREE.LineSegments` built from TopoJSON *arcs*, densified in
+lon/lat and lifted onto a shell just above the surface.
+
+*Alternatives:* fetching Natural Earth or OurAirports from a CDN at runtime;
+committing the reduced files; using globe.gl's built-in `polygonsData` layer;
+drawing per-country rings; interpolating borders along great circles.
+
+**Where the data comes from, and why not over the network.** A CDN fetch is a
+third-party dependency at runtime for data that has not changed since it was
+published: it breaks the offline guarantee the textures already earn (D30), and
+it adds a failure mode on every page load. So the same bargain as the textures
+applies — `world-atlas` (Natural Earth), `all-the-cities` (GeoNames) and
+`@nwpr/airport-codes` (OurAirports) are dev dependencies, the reduction runs
+before dev and build, and `public/geo/` is gitignored. 117 KB of borders and
+141 KB of labels, generated in about 5 seconds, and no API credit anywhere.
+
+**Arcs, not rings.** TopoJSON stores a boundary shared by two countries exactly
+once and has each country's rings reference it by index. Expanding to rings
+would draw the France/Germany border twice and every coastline once per country
+touching it. Emitting the 595 arcs directly is both fewer vertices and, because
+the line is translucent, the difference between a uniform hairline and one that
+doubles in brightness along every internal border.
+
+**Densified in lon/lat, not along great circles.** This is the one place where
+copying the route layer would have been wrong. `route.ts` interpolates along
+great circles because an aircraft between two observed points flew one. A
+border did not: the Canada/United States boundary west of the Lake of the Woods
+is the 49th parallel, stored as two points about 2,000 km apart, and a
+great-circle interpolation between them bows off the parallel by more than 0.1
+degrees — over 12 km inside Canada. Linear interpolation in lon/lat holds the
+parallel, which is what the boundary is. The test asserts both halves: that
+every subdivided vertex stays at latitude 49, and that a transcribed great
+circle would not.
+
+**Lifted onto a shell.** A chord between two points one degree apart sinks
+3.8e-5 radii below the sphere, and a line drawn at exactly the globe radius
+z-fights with the texture regardless. `BORDER_ALTITUDE` is 0.0008 radii —
+twenty times the worst sag, a fifteenth of `MARKER_ALTITUDE` — so borders clear
+the planet and aircraft still draw over them. The step size and the shell
+height are a pair, and a test ties them together: no segment midpoint may fall
+inside the globe.
+
+**110m, not 50m or 10m.** 8,246 source points become 20,082 vertices after
+densification, 235 KB of positions in one draw call. 50m is ten times that and
+10m fifty-eight times, for detail that sits under a fixed-resolution colour
+texture — a sharper border over a soft coast reads worse, not better. The
+resolution is one constant in the build script, and a test caps the vertex
+count so a change cannot pass unnoticed.
+
+**Not globe.gl's polygon layer.** `polygonsData` builds extruded meshes per
+feature with its own materials and its own update path; we want a hairline, one
+buffer, and a cost we can attribute (D16). One `LineSegments` is that.
+
+### The airport ranking, and what it cannot do
+
+Airports come with no traffic figure and no size class in any offline dataset
+we could find, so they are ranked by the population of the largest city within
+60 km — a real number measuring something related, rather than an invented one
+(D6 is the same rule). Within one metropolitan area that measure is flat:
+Heathrow, Gatwick, Biggin Hill and Farnborough all serve London and all score
+7.5 million. A second real signal breaks that tie — OpenFlights records the
+city each airport is filed under, and Heathrow, Gatwick and Biggin Hill are
+filed as London while Farnborough is filed as Farnborough — which lifts the
+London airports above the airfields around them but cannot separate Heathrow
+from Biggin Hill. Nothing in this data can. The label layer answers that by
+capping how many airports it will draw at once (D45) rather than pretending to
+a ranking it does not have.
+
+### Country label anchors
+
+`geoCentroid` of a whole country is wrong often enough to matter: the United
+States' lands in the Pacific, pulled there by Alaska and Hawaii. The anchor is
+therefore the centroid of the country's largest polygon, and where that still
+falls outside it — the crescent problem, Croatia and Indonesia both — a grid
+search picks the interior point furthest from the boundary. This runs 177 times
+at build time, so a crude search costs nothing, and a test pins the United
+States case specifically.
+
+---
+
+## D45 — Labels are DOM, and density is the feature
+
+**Decision:** geography labels are pooled absolutely positioned elements in an
+overlay above the canvas, written directly from the animation loop, with what
+is shown decided by camera altitude, a hard cap of 40 labels, greedy collision
+rejection, and a separate cap of 8 on airports.
+
+*Alternatives:* one canvas texture per label; a signed distance field font
+atlas; globe.gl's `htmlElementsData` layer; React components; showing every
+candidate in view.
+
+**Text is the one thing the one-draw-call rule does not fit.** Every other
+layer in this project is a single buffer because that is what keeps two
+thousand aircraft affordable (D15). Glyphs in WebGL are either a texture per
+string — one draw call each, the exact trap D15 exists to avoid — or an SDF
+atlas, which is a font pipeline, a packer and a shader for something the
+browser already does better at any device pixel ratio. Forty pooled spans cost
+one transform write each per frame, restyle from CSS, and stay crisp on a
+high-DPI display. The cost is bounded by the cap, not by how many labels happen
+to be in view.
+
+**React is kept out, exactly as it is for the markers (D3).** The elements are
+created once, hidden and rewritten in place; nothing here goes through the
+reconciler.
+
+**Density is the whole design problem.** 1,569 labels exist and 1,422 are
+candidates at the closest tier; a layer that drew what was in view would be
+unreadable. What is allowed to appear is a function of camera altitude in globe
+radii, and the thresholds are a judgement written down rather than buried:
+nothing above 3.0, the twelve largest countries from 1.0 to 3.0, thirty
+countries and cities above 5 million from 0.35, cities above 1 million from
+0.12, and airports only below that. Measured against the real dataset over
+central Europe at a 1600x900 viewport: 0, 7, 17, 8, 25, 12, 4 and 0 labels
+drawn as the camera comes in from 4.0 radii to 0.014. The count falls at the
+end because the view itself is only about 80 km across by then — over a city
+rather than over farmland the same altitude draws nine.
+
+**Airports are capped at eight** because their ranking cannot order its own
+members (D44). Without it, a London view at 0.1 radii drew 40 labels of which
+36 were three-letter codes, pushing out the city and country names above them.
+A cap is the honest answer to a ranking we do not have.
+
+**Two clocks, not one.** Positions are rewritten every frame — a label lagging
+the globe by a fifth of a second while dragging looks broken — but the decision
+about *which* labels to show walks every candidate and runs collision tests,
+and that answer does not change meaningfully at 60 Hz. It is recomputed every
+200 ms, and the candidate list is cached against the budget that produced it,
+since the budget only changes when the camera crosses a tier. That cache took
+the selection pass from 0.599 ms to 0.061 ms; a reprojection-only frame costs
+0.033 ms.
+
+**Three sphere problems a flat map does not have**, all three tested: a label
+can be on the far side, and is hidden by the same `P . C >= r^2` horizon
+condition the marker picking uses — written out rather than shared, so the two
+cannot drift into false agreement (the D42 rule); it can be behind the camera,
+which projection reports as plausible coordinates in the opposite corner unless
+the depth sign is checked; and it can be off screen entirely.
+
+**And a fourth, found by running it.** A camera built while its container
+reports zero width has an aspect of `0/0`, and every projection through it is
+NaN. Every comparison against NaN is false, so NaN satisfied neither bounds
+test and passed both, producing a transform of `translate(NaNpx, NaNpx)` —
+which browsers reject outright, leaving all forty labels stacked in the
+top-left corner. The guard is one line; the lesson is an old one, that a range
+test is not a validity test.
+
+### Verified against the running app
+
+The label layer's own projection was checked against globe.gl's
+`getScreenCoords` for six country labels in the live page: agreement within one
+pixel on both axes, which is the same independent cross-check D32 used for
+marker positions. The border layer was verified by offscreen pixel readback —
+rendering the real scene with and without the layer — since neither browser
+surface composites. Evidence in test plan §14.

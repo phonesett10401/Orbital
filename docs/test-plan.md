@@ -50,6 +50,7 @@ cannot be triggered on demand.
 | Last-known position with timestamp | `markers.ts`, `DetailPanel.tsx` | `interpolate.test.ts`, manual |
 | Marker thinning when zoomed out | `thinning.py` | `test_thinning.py` (26 tests) |
 | Selected aircraft as a 3D model | `globe/selectedAircraft.ts` | `selectedAircraft.test.ts` (50 tests) + offscreen pixel readback (§13) |
+| Country borders and geography labels | `globe/borders.ts`, `globe/labels.ts` | `borders.test.ts`, `labels.test.ts` + offscreen pixel readback (§14) |
 | Layer toggle as a separate component | `LayerToggle.tsx` | Renders with one layer, by design (D19) |
 
 ---
@@ -86,7 +87,9 @@ cd frontend && npm test
 | `store.test.ts` | 18 | Snapshot application, selection races, layers |
 | `lighting.test.ts` | 24 | **Terminator geometry and the shader's coordinate frame** |
 | `selectedAircraft.test.ts` | 50 | **Airframe geometry, heading basis, sprite handoff, sizing in screen pixels** |
-| **Total** | **499** | 295 backend, 204 frontend |
+| `borders.test.ts` | 17 | **Lon/lat densification, the border shell, the vertex budget** |
+| `labels.test.ts` | 39 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
+| **Total** | **555** | 295 backend, 260 frontend |
 
 ### What the automated suites do not cover
 
@@ -102,7 +105,7 @@ one that admits its gaps:
 - **React component rendering.** Components are exercised manually and through
   the store; there are no DOM-rendering tests for them. The pointer path is the
   exception, because that is where a bug hid (§6).
-- **Wiring, in general.** Seven of the twelve defects in §6 were cases where
+- **Wiring, in general.** Seven of the thirteen defects in §6 were cases where
   correct code was never connected to anything. Tests assert on behaviour that
   runs; they cannot assert on behaviour that was never reached. Running the
   system remains a required step, not a nicety.
@@ -209,6 +212,7 @@ itself a finding.
 | 10 | **The selected aircraft model grew without limit on approach** — its pixel ceiling was evaluated against the distance to the globe's centre instead of to the model, so the clamp could never bind | High | Offscreen pixel readback (D43, §13.2) | Fixed |
 | 11 | **The camera could fly inside the marker shell**, so anything directly beneath it vanished at closest zoom — sprites included; latent since D36 | High | Offscreen pixel readback (D43, §13.2) | Fixed |
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint | Low, visual | Looking at the running app | **Open**, deferred |
+| 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 
 **One open defect, low severity and visual only: #12.** The maths is right —
 the highlight moves correctly with the camera — so this is a problem of
@@ -225,7 +229,8 @@ up as a number, and should come down after a retune.
 
 **No open defects at critical or high severity.**
 
-Defects 3 through 11 all passed every automated test at the time they existed.
+Defects 3 through 11 and 13 all passed every automated test at the time they
+existed.
 The pattern is consistent: in each case the *code* was correct and the *wiring*
 was absent or mismatched — a threshold that no reachable zoom satisfied, a
 raycast tolerance in the wrong unit, a middleware never registered, a logger
@@ -294,6 +299,10 @@ For a demo or a fresh checkout. Start both servers, open the frontend.
 | 13 | Open `/api/health` | `status: ok`, both jobs listed, quota projection shown |
 | 14 | Zoom in tight, wait ~90 s, recheck health | Viewport job shows a successful poll |
 | 15 | Run `__orbital.probeLighting()` in the console | Camera-invariance spreads at or below ~0.02, ignoring the specular outlier (§12.2) |
+| 16 | Look at the borders at default zoom | A faint hairline, one weight everywhere, no brighter along internal borders; none visible on the far side of the globe |
+| 17 | Zoom from the whole planet to the closest view | Names resolve progressively: a few countries, then more countries and large cities, then smaller cities, then airport codes. Nothing pops in at the limb and nothing overlaps |
+| 18 | Drag the globe quickly | Labels track the planet without lagging behind it, and disappear as they cross the limb rather than sliding over the edge |
+| 19 | Watch a label over ice, over ocean, and over the night side | Legible in all three; the halo carries it |
 
 
 ---
@@ -855,3 +864,135 @@ record — defects 5, 6, 9 were all invisible to a green suite — that is the c
 that finds the defect, so it is listed as outstanding rather than assumed. §8
 step 5a is the check.
 
+---
+
+## 14. Geography: borders and labels
+
+Task 4 adds two layers, one GL and one DOM: country boundaries as a single
+`THREE.LineSegments`, and country, city and airport names as pooled DOM
+elements above the canvas. Reasoning in D44 and D45. Measured on 2026-08-27.
+
+### 14.1 The data, and what it costs
+
+Generated from dev dependencies by `npm run geography`, which also runs before
+`npm run dev` and `npm run build`. Nothing is fetched at runtime beyond the two
+generated files, and nothing here spends an API credit.
+
+| | |
+|---|---|
+| Source | Natural Earth 110m (`world-atlas`), GeoNames (`all-the-cities`), OurAirports (`@nwpr/airport-codes`) |
+| `borders.json` | 595 arcs, 8,246 points, 117 KB |
+| `labels.json` | 177 countries, 363 cities, 1,029 airports, 141 KB |
+| Build time | ~5 s |
+| Densified geometry | 20,082 vertices, 235 KB of positions, **one draw call** |
+| Border build, in the browser | 5.6 ms, once, at load |
+
+### 14.2 What the automated suite covers
+
+`borders.test.ts` (17 tests) and `labels.test.ts` (39 tests). The ones that
+carry weight:
+
+| What is pinned | Why it matters |
+|---|---|
+| A densified border holds its parallel, and a transcribed great circle would not | Copying `route.ts` here would bow the 49th parallel 12 km into Canada. Both interpolations are correct for something; only one is correct for a boundary |
+| No segment midpoint falls inside the globe | The step size and the shell height are a pair. Either alone is meaningless |
+| The vertex count stays under 30,000 | A resolution change is a fiftyfold cost change and should not pass unnoticed |
+| A segment jumping the antimeridian is dropped | The same stripe-across-the-map failure the route layer has (D6) |
+| The horizon test cuts at the tangent, `acos(r/d)`, not at 90 degrees | A hemisphere test passes with a wrong constant and lets a quarter of the far side through |
+| A point behind the camera projects to null | Projection reports it as plausible coordinates in the opposite corner |
+| **A NaN projection returns null** | Defect #13 below |
+| Airports never exceed eight, other classes are not capped | The ranking cannot order airports within one city (D44) |
+| Labels are re-tested against the horizon every frame, not only at selection | Between selections the camera keeps moving; a label that has crossed the limb must go now |
+| The generated files are sorted by rank, and the United States anchor is on land | `candidatesFor` relies on the sort; the anchor is the case that forced the largest-polygon rule |
+
+The two suites that read `public/geo/` skip themselves when it is absent: a
+fresh checkout has not run the build step yet, and a red suite there would be
+reporting on the build, not on this code.
+
+### 14.3 Label density, measured
+
+Real dataset, camera over central Europe, 1600x900 viewport. "Candidates" is
+what the altitude tier admits; "drawn" is what survives the horizon test, the
+frustum, collision rejection and the caps.
+
+| Altitude, radii | Candidates | Drawn |
+|---|---|---|
+| 4.0 | 0 | 0 |
+| 2.0 | 12 | 7 |
+| 0.9 | 76 | 17 |
+| 0.5 | 76 | 8 |
+| 0.3 | 393 | 25 |
+| 0.1 | 1,422 | 12 |
+| 0.05 | 1,422 | 4 |
+| 0.014 (closest) | 1,422 | 0 |
+
+The fall at the bottom is geometry, not a bug: at 0.014 radii the camera is
+1.4 units above a 100-unit globe and the view is about 80 km across. Over a
+city rather than over farmland the same altitude draws nine — London at 0.014
+gives `London, LCY, LHR, BQH, FAB, BBS, SEN, NHT, HYC`.
+
+Per-frame cost, same dataset:
+
+| | Before the candidate cache | After |
+|---|---|---|
+| Selection pass (every 200 ms) | 0.599 ms | **0.061 ms** |
+| Reprojection only (every frame) | 0.110 ms | **0.033 ms** |
+
+### 14.4 Rendered output — verified in the running application
+
+The in-app browser pane still does not composite, so `requestAnimationFrame`
+never fires and screenshots time out. Two techniques worked around it, and both
+found something.
+
+**Labels, against globe.gl's own projection.** The layer computes screen
+positions itself rather than asking globe.gl, so the check is the one D32 used
+for markers: compare against `world.getScreenCoords()` for the same lat/lon.
+Six country labels in the live page, agreement within one pixel on both axes:
+
+| Label | Ours | `getScreenCoords` |
+|---|---|---|
+| Russia | 728.5, 160.7 | 729, 161 |
+| Brazil | 431.1, 409.1 | 431, 409 |
+| India | 850.2, 270.1 | 850, 270 |
+| Kazakhstan | 785.9, 181.8 | 786, 182 |
+| Dem. Rep. Congo | 759.5, 374.8 | 759, 375 |
+| Algeria | 651.9, 221.0 | 652, 221 |
+
+**Borders, by offscreen pixel readback.** The real scene rendered into a
+512x512 `WebGLRenderTarget` from a camera over 48N 10E at 200 units, with the
+layer visible and then hidden. The globe's build-in tween had not run — the
+globe group was still at scale 1e-6, exactly the confound §12.3 records — so
+the probe sets it to 1 before measuring.
+
+| Measurement | Result |
+|---|---|
+| Pixels changed by the layer | 9,398 of 262,144 |
+| Of those, brighter | 9,383 |
+| Of those, bluer | 9,398 — the layer's colour is `#8fb3d9` at 0.28 opacity |
+| Two identical renders | **0 pixels differ** — no z-fighting stipple against the surface |
+| Same render with `depthTest` disabled | 13,628 pixels, **45% more** — the extra are the far-side borders, so occlusion by the planet is working |
+
+### 14.5 Defect found, and fixed
+
+Defect #13 in §6. Every label projected to NaN and the layer wrote
+`translate(NaNpx, NaNpx)` into forty elements, which browsers reject outright,
+leaving the whole set stacked in the top-left corner rather than positioned.
+
+The cause was upstream of the layer: a camera built while its container reports
+zero width — which is what the non-compositing pane does — has an aspect of
+`0/0`. The reason it survived two bounds tests is the part worth keeping:
+**every comparison against NaN is false**, so `x < -1 || x > 1` rejects
+nothing, and a range test silently became no test at all. The fix is an
+explicit finiteness check ahead of both, and two tests build a camera with a
+NaN aspect and assert that nothing is drawn through it.
+
+### 14.6 What is still outstanding
+
+**Nobody has looked at either layer.** The probe settles that borders are
+drawn, sit above the surface without z-fighting, and are hidden by the planet;
+the cross-check settles that labels land where they should. Neither settles
+appearance: whether the border hairline is too faint or too strong over bright
+terrain and over the night side, whether the label halo stays legible over ice
+and over ocean, whether the tier thresholds feel right while zooming rather
+than in a table, and whether uppercase country names read as a map or as
+shouting. §8 steps 16 to 19 are the check.

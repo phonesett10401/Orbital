@@ -11,6 +11,8 @@
  * stays attributable when we profile (D16):
  *
  * - `earth.ts`             the textured, lit planet, plus atmosphere and stars
+ * - `borders.ts`           one THREE.LineSegments for every country boundary
+ * - `labels.ts`            country, city and airport names, as pooled DOM
  * - `markers.ts`           one THREE.Points for every tracked object
  * - `route.ts`             the observed track of the selected object
  * - `selectedAircraft.ts`  a 3D mesh standing in for the selected marker
@@ -22,7 +24,9 @@ import * as THREE from 'three';
 
 import { config } from '../config';
 import { useOrbitalStore } from '../state/store';
+import { createBorderLayer } from './borders';
 import { createEarthVisuals } from './earth';
+import { createLabelLayer } from './labels';
 import { createLightingProbe } from './lightingProbe';
 import { MARKER_ALTITUDE, createMarkerLayer } from './markers';
 import { attachPointerSelection } from './pointer';
@@ -35,6 +39,20 @@ const SUN_UPDATE_MS = 60_000;
 
 /** How often to publish the camera's bounding box. */
 const VIEWPORT_UPDATE_MS = 500;
+
+/**
+ * Static geography, generated into public/geo/ at build time.
+ *
+ * Fetched once, cached by the browser like any other asset, and costing no API
+ * credit. A failure here is logged and otherwise ignored: the globe without
+ * borders is the globe, while a globe that refuses to start because a label
+ * file is missing is a broken app (D29).
+ */
+async function fetchGeography<T>(path: string): Promise<T> {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+  return (await response.json()) as T;
+}
 
 export function GlobeView() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -61,6 +79,10 @@ export function GlobeView() {
     scene.add(earth.atmosphere);
     scene.add(earth.starField);
 
+    const borders = createBorderLayer(globeRadius);
+    const labels = createLabelLayer(globeRadius);
+    container.appendChild(labels.element);
+
     const markers = createMarkerLayer(globeRadius);
     const route = createRouteLayer(globeRadius);
     const selectedAircraft = createSelectedAircraftLayer(globeRadius);
@@ -68,9 +90,20 @@ export function GlobeView() {
     // rather than rotating the planet, so everything stays in one fixed frame —
     // verified: every object in the scene has zero rotation, and our
     // latLonToVector3 matches world.getCoords() exactly.
+    scene.add(borders.line);
     scene.add(markers.points);
     scene.add(route.line);
     scene.add(selectedAircraft.mesh);
+
+    // Both files are static and are fetched once. Neither is awaited: the
+    // globe is interactive immediately and the geography appears when it
+    // arrives, which on a warm cache is the same frame.
+    void borders
+      .load(() => fetchGeography('/geo/borders.json'))
+      .catch((error) => console.warn('[geography] borders unavailable', error));
+    void labels
+      .load(() => fetchGeography('/geo/labels.json'))
+      .catch((error) => console.warn('[geography] labels unavailable', error));
 
     const controls = world.controls();
     controls.enableDamping = true;
@@ -177,6 +210,15 @@ export function GlobeView() {
         state.objectsVersion,
       );
 
+      // Labels reproject every frame so they track the globe while dragging;
+      // which labels to show is recomputed far less often, inside the layer.
+      labels.update(
+        world.camera() as THREE.PerspectiveCamera,
+        container.clientWidth,
+        container.clientHeight,
+        now,
+      );
+
       if (now - lastSunUpdate > SUN_UPDATE_MS || lastSunUpdate === 0) {
         earth.setSunFromDate(fixedSun ?? new Date());
         lastSunUpdate = now;
@@ -203,6 +245,8 @@ export function GlobeView() {
         // render target without importing anything.
         THREE,
         earth,
+        borders,
+        labels,
         markers,
         route,
         selectedAircraft,
@@ -223,6 +267,7 @@ export function GlobeView() {
             otherLayers: [
               earth.atmosphere,
               earth.starField,
+              borders.line,
               markers.points,
               route.line,
               selectedAircraft.mesh,
@@ -260,6 +305,8 @@ export function GlobeView() {
       unsubscribeRoute();
       observer.disconnect();
       detachPointer();
+      borders.dispose();
+      labels.dispose();
       markers.dispose();
       route.dispose();
       selectedAircraft.dispose();

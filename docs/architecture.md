@@ -270,7 +270,26 @@ orbital/
 │   └── tests/
 │       └── fixtures/        committed sample data + generator
 └── frontend/                                                 (M4)
+    ├── scripts/
+    │   ├── copy-textures.mjs    Earth imagery out of node_modules  (D30)
+    │   └── build-geography.mjs  borders and label anchors          (D44)
+    ├── public/
+    │   ├── textures/            generated, gitignored
+    │   └── geo/                 generated, gitignored
+    └── src/globe/
+        ├── earth.ts             the lit planet, atmosphere, stars
+        ├── borders.ts           country boundaries, one line layer (D44)
+        ├── labels.ts            country/city/airport names, DOM    (D45)
+        ├── markers.ts           every tracked object, one Points
+        ├── route.ts             the observed track of the selection
+        └── selectedAircraft.ts  the selection as a 3D airframe     (D42)
 ```
+
+Two asset directories under `public/` are generated rather than committed:
+`npm install` brings the source data, `npm run assets` reduces it, and both
+run before `npm run dev` and `npm run build`. Nothing in them is fetched from
+a third party at runtime, so the app stays as offline as the fixture provider
+makes the backend.
 
 ---
 

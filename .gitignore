@@ -66,3 +66,9 @@ frontend/public/textures/
 # Session handoff notes. Local working state that tracks in-progress status and
 # open bugs, not a committed artifact — it goes stale the moment it is shared.
 HANDOFF.md
+
+# Country borders and label anchors, generated out of node_modules by
+# scripts/build-geography.mjs. Same bargain as the textures: derived data with
+# a deterministic input, so it is rebuilt before dev and build rather than
+# committed.
+frontend/public/geo/

@@ -471,3 +471,50 @@ body {
     max-height: 45%;
   }
 }
+
+/* ---- geography labels ---- */
+
+/*
+ * The label overlay sits inside .globe-view, above the canvas and below the
+ * chrome, and never takes a pointer event -- a country name must not swallow
+ * a click meant for the aircraft underneath it.
+ */
+.geo-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  /* Isolate the transforms of forty absolutely positioned children so they
+     cannot force layout of the panels around them. */
+  contain: strict;
+}
+
+.geo-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: nowrap;
+  font: 11px/14px system-ui, -apple-system, 'Segoe UI', sans-serif;
+  letter-spacing: 0.04em;
+  /* Text over imagery needs a halo, not a heavier weight: the globe runs from
+     white ice to black ocean, so no single colour stays legible on its own. */
+  text-shadow:
+    0 0 3px rgba(0, 0, 0, 0.95),
+    0 0 6px rgba(0, 0, 0, 0.7);
+  will-change: transform;
+}
+
+.geo-label--country {
+  color: rgba(232, 236, 244, 0.92);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.geo-label--city {
+  color: rgba(232, 236, 244, 0.78);
+}
+
+.geo-label--airport {
+  color: rgba(88, 182, 255, 0.85);
+  font-weight: 600;
+}
