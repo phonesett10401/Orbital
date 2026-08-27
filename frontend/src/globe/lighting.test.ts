@@ -27,6 +27,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { config } from '../config';
 import {
   atmosphereVertexShader,
   createEarthVisuals,
@@ -327,3 +328,43 @@ interface THREEVector {
   y: number;
   z: number;
 }
+
+describe('the specular glint', () => {
+  const fragment = code(globeFragmentShader);
+
+  it('is driven by uniforms, not by literals in the shader', () => {
+    // Both numbers are tuned by eye, and a number tuned by eye that can only
+    // be changed by editing GLSL and reloading is a number nobody tunes. As
+    // uniforms they can be swept from the console against a rendered frame,
+    // which is how D48's values were chosen.
+    expect(fragment).toMatch(/uniform float specularStrength/);
+    expect(fragment).toMatch(/uniform float specularShininess/);
+    expect(fragment).toMatch(/pow\(max\(dot\(perturbed, halfway\), 0\.0\), specularShininess\)/);
+    expect(fragment).not.toMatch(/, 60\.0\)/);
+  });
+
+  it('still lands only on water, and only in daylight', () => {
+    // The mask is what keeps the highlight off land, and multiplying by
+    // `daylight` is what keeps it off the night side. Retuning the two numbers
+    // must not quietly drop either factor.
+    expect(fragment).toMatch(/float water = texture2D\(waterTexture, vUv\)\.r/);
+    expect(fragment).toMatch(/specular \* water \* daylight \* specularStrength/);
+  });
+
+  it('carries the tuned pair through to the material', () => {
+    const earth = createEarthVisuals(100);
+    expect(earth.material.uniforms.specularStrength.value).toBe(config.specularStrength);
+    expect(earth.material.uniforms.specularShininess.value).toBe(config.specularShininess);
+    earth.dispose();
+  });
+
+  it('defaults to a glint rather than a smudge', () => {
+    // The values that shipped were 0.6 and 60, which measured 14.8 degrees of
+    // arc across and 6.5% of the visible disc -- the defect. These measured
+    // 4.8 degrees and 0.69% (D48, test plan section 17). The assertion is a
+    // direction, not a magic number: a much lower exponent or a much higher
+    // strength is the old blob returning.
+    expect(config.specularShininess).toBeGreaterThanOrEqual(240);
+    expect(config.specularStrength).toBeLessThanOrEqual(0.45);
+  });
+});

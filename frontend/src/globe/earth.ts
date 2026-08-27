@@ -52,6 +52,8 @@ export const globeFragmentShader = /* glsl */ `
   uniform vec3 sunDirection;
   uniform float bumpScale;
   uniform vec2 bumpTexelSize;
+  uniform float specularStrength;
+  uniform float specularShininess;
 
   varying vec3 vWorldNormal;
   varying vec2 vUv;
@@ -96,11 +98,15 @@ export const globeFragmentShader = /* glsl */ `
     vec3 color = mix(lit, lit * 0.15 + nightColor * 1.5, nightMix);
 
     // Specular on water only. Blinn-Phong against the view direction.
+    //
+    // Both terms are uniforms rather than literals because they are tuned by
+    // eye, like bumpScale: what is being chosen is not a physical quantity but
+    // how a glint should read at this scale (D48).
     float water = texture2D(waterTexture, vUv).r;
     vec3 viewDir = normalize(cameraPosition - vWorldPosition);
     vec3 halfway = normalize(sunDirection + viewDir);
-    float specular = pow(max(dot(perturbed, halfway), 0.0), 60.0);
-    color += vec3(0.7, 0.8, 1.0) * specular * water * daylight * 0.6;
+    float specular = pow(max(dot(perturbed, halfway), 0.0), specularShininess);
+    color += vec3(0.7, 0.8, 1.0) * specular * water * daylight * specularStrength;
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -247,6 +253,8 @@ export function createEarthVisuals(globeRadius: number): EarthVisuals {
       waterTexture: { value: waterTexture },
       sunDirection: { value: sunDirection },
       bumpScale: { value: config.bumpScale },
+      specularStrength: { value: config.specularStrength },
+      specularShininess: { value: config.specularShininess },
       // Texel size for the finite difference. Assumes a 2:1 equirectangular
       // map; a wrong value only changes how pronounced the relief looks.
       bumpTexelSize: { value: new THREE.Vector2(1 / 4096, 1 / 2048) },

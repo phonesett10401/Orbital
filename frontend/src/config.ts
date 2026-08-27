@@ -61,6 +61,22 @@ export const config = {
    */
   bumpScale: num(import.meta.env.VITE_BUMP_SCALE, 0.035),
 
+  /**
+   * Strength of the specular glint on water, and how tightly it falls off.
+   *
+   * Not physical, and tuned by eye like `bumpScale` — what is being chosen is
+   * how sun glint should read at globe scale. The pair shipped at 0.6 and 60,
+   * which spread a bright patch about 15° of arc across the ocean facing the
+   * sun: a smudge rather than a glint. Measured at 0.35 and 400 it is 4.8°
+   * across with a distinct core, roughly a tenth of the area and half the peak
+   * brightness. D48 has the sweep.
+   *
+   * Raising the exponent tightens the lobe; raising the strength brightens it.
+   * They pull against each other, so change one at a time and look.
+   */
+  specularStrength: num(import.meta.env.VITE_SPECULAR_STRENGTH, 0.35),
+  specularShininess: num(import.meta.env.VITE_SPECULAR_SHININESS, 400),
+
   /** Freeze the sun at a fixed time, for screenshots and deterministic demos. */
   fixedSunTime: str(import.meta.env.VITE_FIXED_SUN_TIME, ''),
 } as const;

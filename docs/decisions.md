@@ -1860,3 +1860,97 @@ not only change performance, it changes what "now" means to every field
 computed at send time.** The audit that matters after adding one is not "is the
 data right", it is "which fields were true only at the moment they were
 written".
+
+---
+
+## D48 — The specular glint, retuned against a measurement rather than by taste
+
+**Decision:** the water highlight's strength drops from 0.6 to **0.35** and its
+Blinn-Phong exponent rises from 60 to **400**. Both become uniforms fed from
+`config`, alongside `bumpScale`, rather than literals in the GLSL.
+
+*Alternatives:* leaving it; dropping the strength alone; removing the highlight
+entirely; a physically-based sun glint model with a wave slope distribution.
+
+**What was wrong, in a number.** The complaint was that the highlight read as a
+bug rather than as sun glint — a white blob over whichever ocean faced the sun.
+Rendering the real scene offscreen with the specular term on and then off, and
+differencing the two frames, says how big and how bright it actually was: **14.8
+degrees of arc across, 6.5% of the visible disc, peaking 151/255 above the
+unlit-by-specular ocean beneath it.** Fifteen degrees of arc is about 1,600 km.
+That is not a glint, it is a weather system.
+
+**The mask was never the problem**, and this is the part worth recording,
+because it cost a session before. `earth-water.png` was sampled at ten known
+points: ocean reads 255, land reads 0, and the shader multiplies
+`specular * water`, so the highlight could not have been on land at all. What
+looked like a highlight over Indonesia was the Java, Timor and Arafura seas
+around it. The mask is fine; the lobe was enormous.
+
+### The sweep
+
+Camera placed at the subsolar point — the worst case, where the highlight is
+largest — at three distances, measuring the difference between a frame with the
+term and a frame without it:
+
+| strength | exponent | across | % of disc | peak above ocean |
+|---|---|---|---|---|
+| **0.60** | **60** | **14.8°** | **6.52%** | **151** |
+| 0.28 | 120 | 8.6° | 2.23% | 70 |
+| 0.28 | 240 | 5.9° | 1.07% | 69 |
+| 0.28 | 320 | 5.0° | 0.76% | 68 |
+| **0.35** | **400** | **4.8°** | **0.69%** | **84** |
+| 0.45 | 480 | 4.6° | 0.64% | 107 |
+| 0.28 | 800 | 3.0° | 0.27% | 64 |
+
+Stable across zoom: at 320, 180 and 140 units the chosen pair measures 4.8°,
+4.7° and 4.2°, and nothing clips to white at any distance.
+
+**Why 0.35 and 400 rather than the dimmest option.** The failure was not
+"bright", it was "broad and formless". A glint on water is small and *has a
+bright core*; a wide dim wash reads as a smudge on the texture, which is the
+same complaint in a quieter voice. So the exponent does the work — a tenth of
+the old area — and the strength comes down by less than half, keeping a core
+that reads as reflected sun. Around 5° of arc is roughly 550 km, which is the
+scale sunglint appears at in real full-disc photographs of Earth.
+
+**Not a physical glint model.** A Cox-Munk wave slope distribution is the
+correct answer to a question nobody here is asking: it needs surface wind to
+mean anything, wind is not in the data, and inventing it would be the same
+mistake as inferring a destination from a heading (D6). Blinn-Phong with a
+tuned lobe is an admitted approximation.
+
+**Uniforms, not literals**, for the same reason `bumpScale` is config-driven: a
+number tuned by eye that can only be changed by editing GLSL is a number nobody
+tunes. As uniforms both can be swept from the console against real frames,
+which is how the table above was produced, and `VITE_SPECULAR_STRENGTH` and
+`VITE_SPECULAR_SHININESS` let the values be changed for a screenshot without a
+rebuild.
+
+### Confirmed by the committed probe, not only by the ad-hoc one
+
+`__orbital.probeLighting()` already measures how much each sample point's
+brightness changes as the camera moves around it. Diffuse lighting is
+view-independent, so any spread there *is* the specular term. Same date, same
+points, only the two numbers changed:
+
+| Sample point | Before (0.6 / 60) | After (0.35 / 400) |
+|---|---|---|
+| 0°N, subsolar meridian | **0.3835** | **0.0675** |
+| 0°N, 60° east of it | 0.0797 | **0.0000** |
+| 40°N, 40° west of it | 0.2809 | **0.0090** |
+| 30°S, 120° east | 0.0036 | 0.0036 |
+| 55°N, 170° east | 0 | 0 |
+| 0°N, antimeridian | 0 | 0 |
+
+Two points that had no business being view-dependent — 60° and 40° away from
+the sun — were carrying 0.08 and 0.28 of spread, which is the blob reaching
+them. They now sit at or below the 0.009 floor of the points the highlight
+never touched. The subsolar point still moves with the camera, by a fifth of
+what it did, and it *should*: that is what a glint is.
+
+**Still not signed off by eye.** The measurement settles size, brightness and
+view dependence, and it cannot settle whether the result looks right — the
+same limitation recorded for the aircraft model (D42) and the geography layers
+(D45). What has changed is that the next person to judge it by eye has two
+numbers to turn and a probe that says what turning them did.

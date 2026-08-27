@@ -87,13 +87,13 @@ cd frontend && npm test
 | `markers.test.ts` | 28 | Pick tolerance, horizon test, **sizing model, sprite selection** |
 | `route.test.ts` | 13 | Great-circle geometry, antimeridian, colour |
 | `store.test.ts` | 18 | Snapshot application, selection races, layers |
-| `lighting.test.ts` | 24 | **Terminator geometry and the shader's coordinate frame** |
+| `lighting.test.ts` | 28 | **Terminator geometry, the shader's coordinate frame, the glint's tuning** |
 | `selectedAircraft.test.ts` | 50 | **Airframe geometry, heading basis, sprite handoff, sizing in screen pixels** |
 | `borders.test.ts` | 17 | **Lon/lat densification, the border shell, the vertex budget** |
 | `labels.test.ts` | 39 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **604** | 321 backend, 283 frontend |
+| **Total** | **608** | 321 backend, 287 frontend |
 
 ### What the automated suites do not cover
 
@@ -215,27 +215,29 @@ itself a finding.
 | 9 | **The globe was lit in view space, so the terminator followed the camera and the planet rendered as night at every rotation** — wrong since M4 | Critical | Looking at the running app (D41) | Fixed |
 | 10 | **The selected aircraft model grew without limit on approach** — its pixel ceiling was evaluated against the distance to the globe's centre instead of to the model, so the clamp could never bind | High | Offscreen pixel readback (D43, §13.2) | Fixed |
 | 11 | **The camera could fly inside the marker shell**, so anything directly beneath it vanished at closest zoom — sprites included; latent since D36 | High | Offscreen pixel readback (D43, §13.2) | Fixed |
-| 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint | Low, visual | Looking at the running app | **Open**, deferred |
+| 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 14.8° of arc across, 6.5% of the visible disc | Low, visual | Looking at the running app (D48, §17) | Fixed |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
 
-**One open defect, low severity and visual only: #12.** The maths is right —
-the highlight moves correctly with the camera — so this is a problem of
-strength and falloff, not a coordinate-frame one, and not a recurrence of #9. The
-water mask has been ruled out by sampling `earth-water.png` at ten known
-points: ocean reads `r=255`, land reads `r=0`, and the shader multiplies
-`specular * water`, so the highlight cannot be on land at all. The next attempt
-is a retune of two numbers in `globeFragmentShader` — intensity `0.6` and
-shininess `60.0` — verified by eye across several camera orientations, since
-the pixel probe measures whether the planet is lit where it should be and not
-whether a highlight is tasteful. §12.2's camera-invariance spread at 0°N 98°E
-(0.082, against ~0.022 for the other five points) is the same highlight showing
-up as a number, and should come down after a retune.
+**Defect #12 was a retune, not a repair.** The maths was always right — the
+highlight moved correctly with the camera — so it was a problem of strength and
+falloff rather than of coordinate frames, and not a recurrence of #9. The water
+mask was ruled out early by sampling `earth-water.png` at ten known points, and
+that ruling held: the fix was two numbers, an exponent from 60 to 400 and a
+strength from 0.6 to 0.35, chosen against a measured sweep (§17). The
+camera-invariance spread §12.2 recorded as "specular doing its job" was both
+that and the defect: it has fallen from 0.38 to 0.07 at the subsolar point and
+to zero at points the highlight should never have reached.
 
-**No open defects at critical or high severity.**
+**No open defects at any severity.** Two features are measured but have not
+been looked at by a human — the selected aircraft model (§13.3) and the
+geography layers (§14.6), and now the retuned glint (§17.4). That is a gap in
+verification, not a known defect.
 
 Defects 3 through 11, 13 and 14 all passed every automated test at the time
-they existed.
+they existed, and #12 was invisible to one for a different reason: nothing in
+either suite can render, so a highlight's size was not a quantity any test
+held an opinion about until the offscreen probe made it one.
 The pattern is consistent: in each case the *code* was correct and the *wiring*
 was absent or mismatched — a threshold that no reachable zoom satisfied, a
 raycast tolerance in the wrong unit, a middleware never registered, a logger
@@ -312,6 +314,7 @@ For a demo or a fresh checkout. Start both servers, open the frontend.
 | 21 | Click an aircraft whose label is its ICAO24 address | No Airline row and no caveat — nothing is guessed from an address |
 | 22 | Watch the backend's access log while the app polls | Most polls answer `304 Not Modified`; a 200 appears when the poller refreshes the store. Devtools shows 200s throughout, which is the cache resolving the 304 (§16.3) |
 | 23 | Leave the app open for two minutes without touching it | The status bar's data age counts up past the poll interval and keeps climbing, rather than resetting to a few seconds every ten seconds (§16.4) |
+| 24 | Rotate the sunlit ocean under the camera | A small bright glint travels with the camera over water, roughly a twentieth of the globe's width, with a defined core and no spill onto land or into the night side (§17.4) |
 
 
 ---
@@ -1156,3 +1159,79 @@ backend's 235.7 s, measured a few seconds apart, while 304s continued.
 
 The trade is a dependence on the client and server clocks agreeing — wrong by
 the skew rather than wrong without bound.
+
+---
+
+## 17. The specular glint
+
+Defect #12, open since 2026-08-27 and deferred as visual-only, is closed here.
+Reasoning and the full sweep in D48. Measured on 2026-08-27.
+
+### 17.1 What was wrong, measured
+
+The highlight was described as "a white blob rather than sun glint". Rendering
+the real scene offscreen with the specular term and then without it, and
+differencing the frames, turns that description into numbers:
+
+| | Before (0.6 / 60) | After (0.35 / 400) |
+|---|---|---|
+| Width across the globe | **14.8° of arc** (~1,600 km) | **4.8°** (~550 km) |
+| Share of the visible disc | **6.52%** | **0.69%** |
+| Peak brightness above the ocean under it | **151 / 255** | **84 / 255** |
+| Pixels clipped to white | 0 | 0 |
+
+Stable across the zoom range: 4.8°, 4.7° and 4.2° at camera distances of 320,
+180 and 140 units, with nothing clipping at any of them.
+
+**The water mask was never at fault**, and this is recorded so nobody spends
+another session on it: `earth-water.png` reads 255 over ocean and 0 over land
+at ten sampled points, and the shader multiplies `specular * water`, so the
+highlight could not appear on land. What looked like a highlight over Indonesia
+was the seas around it.
+
+### 17.2 Confirmed by the committed probe
+
+`__orbital.probeLighting()` measures how much a sample point's brightness
+changes as the camera moves around it. Diffuse lighting is view-independent, so
+whatever spread it reports *is* the specular term. Same date, same points, only
+the two numbers changed:
+
+| Sample point | Before | After |
+|---|---|---|
+| 0°N, subsolar meridian | 0.3835 | 0.0675 |
+| 0°N, 60° east of it | 0.0797 | 0.0000 |
+| 40°N, 40° west of it | 0.2809 | 0.0090 |
+| 30°S, 120° east | 0.0036 | 0.0036 |
+| 55°N, 170° east | 0 | 0 |
+| 0°N, antimeridian | 0 | 0 |
+
+The two points that had no business being view-dependent — 60° and 40° away
+from the sun — were carrying the blob's edge. They now sit at or below the
+0.009 floor of the points the highlight never reached. The subsolar point still
+moves with the camera, by a fifth of what it did, which is what a glint is.
+
+This also settles a question §12.2 left open. That run recorded one point
+spreading four times as much as the rest and called it "specular doing its
+job". It was both: the term working *and* the term far too wide. The spread was
+the number the defect was visible in all along.
+
+### 17.3 What the automated suite covers
+
+Four tests added to `lighting.test.ts` (24 → 28). They cannot render, so they
+pin the things a source can carry:
+
+| What is pinned | Why |
+|---|---|
+| Both terms are uniforms, and the literal `60.0` exponent is gone | A number tuned by eye that can only be changed by editing GLSL is a number nobody tunes |
+| The material receives the config values | The tuning is only real if it reaches the shader |
+| `specular * water * daylight * specularStrength` survives intact | Retuning two numbers must not quietly drop the mask or the daylight factor — the highlight would return to land, or to the night side |
+| The exponent stays ≥ 240 and the strength ≤ 0.45 | A direction rather than a magic number: a much lower exponent or a much higher strength is the old blob coming back |
+
+### 17.4 What is still outstanding
+
+**Nobody has looked at it.** Size, brightness and view dependence are measured;
+whether it *looks* like sun on water is not, and cannot be by this method. §8
+step 24 is the check. What has changed is that the person doing that check now
+has two numbers to turn — `VITE_SPECULAR_STRENGTH` and
+`VITE_SPECULAR_SHININESS`, no rebuild — and a probe that reports what turning
+them did.
