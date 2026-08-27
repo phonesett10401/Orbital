@@ -1,7 +1,7 @@
 /**
  * Details of the selected object.
  *
- * Two honesty requirements shape this panel:
+ * Three honesty requirements shape this panel:
  *
  * 1. **It says how old the data is.** The backend keeps last-known positions
  *    rather than deleting them, so a marker on screen may be minutes old. A
@@ -10,6 +10,10 @@
  *    observed since the aircraft entered our polling window, not a filed
  *    flight plan (D6). Saying so is not a caveat to bury — it is the
  *    difference between a limitation and a bug.
+ * 3. **It marks the airline as decoded.** The airline is not reported by
+ *    anything; it is read off the first three letters of the callsign (D46).
+ *    Shown without that note it would look like a field the aircraft
+ *    transmitted, which is precisely what it is not.
  *
  * `meta` is rendered generically as key/value rows, so a provider can add a
  * field without a frontend change (D4).
@@ -17,6 +21,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { useAirline } from '../airlines';
 import { useOrbitalStore } from '../state/store';
 
 const MS_PER_SECOND = 1000;
@@ -48,6 +53,10 @@ export function DetailPanel() {
   const selectedId = useOrbitalStore((s) => s.selectedId);
   const detail = useOrbitalStore((s) => s.selectedDetail);
   const select = useOrbitalStore((s) => s.select);
+
+  // Loads the designator table on the first selection of the session, and
+  // never at all if nobody clicks an aircraft.
+  const airline = useAirline(detail?.label, selectedId);
 
   // Ticks once a second so the age counts up while the panel is open, rather
   // than freezing at whatever it was when the fetch landed.
@@ -90,6 +99,17 @@ export function DetailPanel() {
           <dt>Identifier</dt>
           <dd className="mono">{detail.id}</dd>
         </div>
+        {airline && (
+          <div>
+            <dt>Airline</dt>
+            <dd>
+              {airline.name}{' '}
+              <span className="panel__derived" title="Decoded from the callsign prefix">
+                from {airline.code}
+              </span>
+            </dd>
+          </div>
+        )}
         <div>
           <dt>Altitude</dt>
           <dd>
@@ -127,6 +147,14 @@ export function DetailPanel() {
           </div>
         ))}
       </dl>
+
+      {airline && (
+        <p className="panel__caveat">
+          The airline is decoded from the callsign prefix, not reported by the
+          aircraft. Designators are occasionally reassigned, so an unfamiliar
+          name may be a previous holder of {airline.code}.
+        </p>
+      )}
 
       <section className="panel__route">
         <h3 className="panel__subtitle">Route</h3>

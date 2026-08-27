@@ -71,6 +71,29 @@ Keys currently used by the aircraft provider:
 The frontend renders `meta` generically as key/value rows, so a provider can
 add a key without a frontend change.
 
+### Why `airline` is not a field anywhere
+
+The detail panel shows an airline. Nothing in this contract carries one, and
+that is deliberate (D46).
+
+An airline is not observed. What is observed is a callsign, and the first three
+letters of a callsign are an ICAO airline designator **by convention** — a
+convention that general aviation, military and government flights do not
+follow at all. Turning `THA932` into "Thai Airways International" is a lookup
+against a published table, and a lookup is an inference about the data, not
+data.
+
+That distinction is the reason it is not in `meta` either. `meta` means fields
+the provider actually reported; if a derived value could live there, no reader
+of a `meta` row could tell which kind they were looking at. So the decode runs
+in the frontend, where presentation belongs, and the panel labels it as
+decoded.
+
+There is a second reason, and it is arithmetic. A `TrackedObject` reaches the
+browser up to 2,000 at a time, every 10 seconds. An airline name averages 21
+bytes, so carrying it in the universal shape would add roughly 42 KB to every
+list response for a value the UI shows one at a time, on click.
+
 ---
 
 ## 3. `TrackedObjectDetail` — the by-id response

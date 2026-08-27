@@ -1678,3 +1678,90 @@ pixel on both axes, which is the same independent cross-check D32 used for
 marker positions. The border layer was verified by offscreen pixel readback —
 rendering the real scene with and without the layer — since neither browser
 surface composites. Evidence in test plan §14.
+
+---
+
+## D46 — The airline is decoded in the browser, and labelled as decoded
+
+**Decision:** turn a callsign's first three letters into an airline name in the
+frontend, using an ICAO designator table generated at build time and fetched on
+the first selection of a session. The contract does not change, `meta` does not
+change, and the detail panel says the value was decoded.
+
+*Alternatives:* adding `airline` to `TrackedObject`; having the OpenSky
+provider put it in `meta`; bundling the table into the JavaScript; shipping
+only the airlines OpenFlights marks active; showing the name with no
+qualification.
+
+**An airline is not observed, and the contract only carries what is.** OpenSky
+reports a callsign. That the first three letters of a callsign are an ICAO
+airline designator is a convention — one that airlines follow and that general
+aviation, military and government flights do not. `THA932` becoming "Thai
+Airways International" is a lookup against a published table, which makes it an
+inference about the data rather than data, and this project has spent D6 and
+D18 keeping those apart. Destination is refused outright because inferring it
+would produce confident wrong answers; the airline decode is admitted because
+it is well-defined and checkable — but it is admitted *as* an inference,
+labelled in the UI and kept out of the shape every layer speaks.
+
+**Not `meta` either**, which is the closest thing to a loophole. `meta` means
+fields the provider actually reported, and it is rendered generically as
+key/value rows. Put a derived value in there and no reader of a row can tell
+which kind they are looking at, including a future maintainer deciding whether
+a field can be trusted.
+
+**And the arithmetic agrees.** A list response carries up to 2,000 objects
+every 10 seconds. Airline names average 21 bytes, so a top-level field would
+add about 42 KB to every response for something the UI shows one at a time, on
+click. The whole table is 148 KB, fetched once, and only if the user selects an
+aircraft at all — click nothing and it is never downloaded. That is a better
+trade after a single poll.
+
+### The decode rule, and what it refuses
+
+Three letters followed **immediately by a digit**. The digit is the whole rule,
+because a flight number always starts with one and a registration's fourth
+character does not:
+
+| Callsign | Result | Why |
+|---|---|---|
+| `THA932`, `UAL1`, `BAW22F` | decoded | designator then flight number |
+| `N466WN`, `ZSABC`, `VHXYZ` | refused | no digit in the fourth place — these are registrations |
+| `D-ABCD`, `OY-JJU` | refused | a hyphen is never part of a designator, and feeds differ on stripping it |
+| `THA`, blank, padding | refused | nothing to decode; OpenSky pads callsigns to eight characters, so trimming comes first |
+
+**The id guard is the subtle one.** `label` falls back to the object's id when
+upstream sent no callsign, and an ICAO24 address is six hex characters — so
+`abc123` matches the decode rule perfectly and would put an airline's name on
+an aircraft whose callsign we never received. The decode takes the id as well
+and refuses when the two are equal. This is not hypothetical: a third of the
+address space begins with three hex letters.
+
+### Every designator, not only the active ones
+
+OpenFlights flags airlines active or not, and filtering to active takes the
+table from 5,774 designators and 148 KB to 996 and 23 KB. It is also wrong in a
+way that matters: FedEx and UPS are both flagged inactive, and between them
+they are a large share of the cargo traffic in any real feed. Saving 125 KB of
+a file fetched once and cached by the browser is not worth deleting them. The
+flag is still used as a tie-break where one designator has several rows — only
+three designators have more than one active row, and two of those are
+duplicates of the same airline.
+
+**The table can be stale in the other direction too**, which is why the panel
+carries a sentence rather than only a name: designators are occasionally
+reassigned, and `TGW` resolves to a defunct Australian carrier where the code
+is now flown by another airline. A name shown bare would be a claim; a name
+shown with the designator it came from and a note that it was decoded is
+evidence the reader can judge. That is the same reasoning as the route caveat
+(D6) and the staleness line, and it is why the panel's docstring now lists
+three honesty requirements rather than two.
+
+### What this does not do
+
+It does not make airlines searchable — search still matches callsigns, as it
+always has. Searching "Lufthansa" and getting every DLH flight would be a
+genuinely useful feature and a different one: it needs a reverse index over the
+table, a decision about ranking a name match against a callsign match, and a
+say in what the result rows show. Not smuggled in under a task about a detail
+panel field.

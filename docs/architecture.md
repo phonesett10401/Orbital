@@ -272,10 +272,14 @@ orbital/
 └── frontend/                                                 (M4)
     ├── scripts/
     │   ├── copy-textures.mjs    Earth imagery out of node_modules  (D30)
-    │   └── build-geography.mjs  borders and label anchors          (D44)
+    │   ├── build-geography.mjs  borders and label anchors          (D44)
+    │   └── build-airlines.mjs   ICAO designator lookup             (D46)
     ├── public/
     │   ├── textures/            generated, gitignored
-    │   └── geo/                 generated, gitignored
+    │   ├── geo/                 generated, gitignored
+    │   └── data/                generated, gitignored
+    ├── src/
+    │   └── airlines.ts          callsign -> airline, in the client (D46)
     └── src/globe/
         ├── earth.ts             the lit planet, atmosphere, stars
         ├── borders.ts           country boundaries, one line layer (D44)
@@ -285,7 +289,7 @@ orbital/
         └── selectedAircraft.ts  the selection as a 3D airframe     (D42)
 ```
 
-Two asset directories under `public/` are generated rather than committed:
+Three asset directories under `public/` are generated rather than committed:
 `npm install` brings the source data, `npm run assets` reduces it, and both
 run before `npm run dev` and `npm run build`. Nothing in them is fetched from
 a third party at runtime, so the app stays as offline as the fixture provider

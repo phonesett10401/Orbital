@@ -331,6 +331,14 @@ body {
   padding-left: 9px;
 }
 
+/* The designator a name was decoded from, alongside the name itself. Dimmer
+   and smaller: it is the evidence for the row, not the content of it (D46). */
+.panel__derived {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
 /* ---- legend ---- */
 
 .legend {

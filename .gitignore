@@ -72,3 +72,7 @@ HANDOFF.md
 # a deterministic input, so it is rebuilt before dev and build rather than
 # committed.
 frontend/public/geo/
+
+# ICAO airline designators, reduced out of node_modules by
+# scripts/build-airlines.mjs. Generated, for the same reason.
+frontend/public/data/

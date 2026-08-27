@@ -6,7 +6,8 @@
   "scripts": {
     "textures": "node scripts/copy-textures.mjs",
     "geography": "node scripts/build-geography.mjs",
-    "assets": "npm run textures && npm run geography",
+    "airlines": "node scripts/build-airlines.mjs",
+    "assets": "npm run textures && npm run geography && npm run airlines",
     "predev": "npm run assets",
     "dev": "vite",
     "prebuild": "npm run assets",
@@ -30,6 +31,7 @@
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^4.3.0",
+    "airline-codes": "^1.1.5",
     "all-the-cities": "^3.1.0",
     "d3-geo": "^3.1.1",
     "jsdom": "^25.0.0",
