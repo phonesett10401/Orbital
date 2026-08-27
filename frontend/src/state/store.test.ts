@@ -63,7 +63,7 @@ beforeEach(() => {
     flyTo: null,
     feed: {
       stale: false,
-      ageSeconds: null,
+      fetchedAtMs: null,
       source: null,
       total: 0,
       returned: 0,
@@ -101,9 +101,23 @@ describe('applySnapshot', () => {
       .applySnapshot(response([], { stale: true, ageSeconds: 720, total: 4000, returned: 2000 }), NOW);
     const feed = useOrbitalStore.getState().feed;
     expect(feed.stale).toBe(true);
-    expect(feed.ageSeconds).toBe(720);
     expect(feed.total).toBe(4000);
     expect(feed.returned).toBe(2000);
+  });
+
+  it('keeps the absolute fetch instant, not the age at arrival', () => {
+    // The age at arrival is measured once and then reused for as long as the
+    // client keeps the body -- which, since the list endpoint became
+    // conditional, can be every poll for five minutes (D47). The instant is
+    // the same fact stated in a form that does not go out of date.
+    const fetchedAt = new Date(NOW - 90_000).toISOString();
+    useOrbitalStore.getState().applySnapshot(response([], { fetchedAt, ageSeconds: 3 }), NOW);
+    expect(useOrbitalStore.getState().feed.fetchedAtMs).toBe(NOW - 90_000);
+  });
+
+  it('tolerates an envelope with no successful poll behind it', () => {
+    useOrbitalStore.getState().applySnapshot(response([], { fetchedAt: null }), NOW);
+    expect(useOrbitalStore.getState().feed.fetchedAtMs).toBeNull();
   });
 
   it('clears a previous error on a successful poll', () => {

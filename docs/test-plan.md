@@ -52,6 +52,7 @@ cannot be triggered on demand.
 | Selected aircraft as a 3D model | `globe/selectedAircraft.ts` | `selectedAircraft.test.ts` (50 tests) + offscreen pixel readback (§13) |
 | Country borders and geography labels | `globe/borders.ts`, `globe/labels.ts` | `borders.test.ts`, `labels.test.ts` + offscreen pixel readback (§14) |
 | Airline decoded from the callsign | `airlines.ts`, `DetailPanel.tsx` | `airlines.test.ts` (21 tests) + a real selection in the running app (§15) |
+| Conditional requests on the polled endpoint | `api/etag.py`, `api/aircraft.py` | `test_etag.py` (26 tests) + `benchmarks/bench_conditional.py` (§16) |
 | Layer toggle as a separate component | `LayerToggle.tsx` | Renders with one layer, by design (D19) |
 
 ---
@@ -91,7 +92,8 @@ cd frontend && npm test
 | `borders.test.ts` | 17 | **Lon/lat densification, the border shell, the vertex budget** |
 | `labels.test.ts` | 39 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
-| **Total** | **576** | 295 backend, 281 frontend |
+| `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
+| **Total** | **604** | 321 backend, 283 frontend |
 
 ### What the automated suites do not cover
 
@@ -107,7 +109,7 @@ one that admits its gaps:
 - **React component rendering.** Components are exercised manually and through
   the store; there are no DOM-rendering tests for them. The pointer path is the
   exception, because that is where a bug hid (§6).
-- **Wiring, in general.** Seven of the thirteen defects in §6 were cases where
+- **Wiring, in general.** Seven of the fourteen defects in §6 were cases where
   correct code was never connected to anything. Tests assert on behaviour that
   runs; they cannot assert on behaviour that was never reached. Running the
   system remains a required step, not a nicety.
@@ -215,6 +217,7 @@ itself a finding.
 | 11 | **The camera could fly inside the marker shell**, so anything directly beneath it vanished at closest zoom — sprites included; latent since D36 | High | Offscreen pixel readback (D43, §13.2) | Fixed |
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint | Low, visual | Looking at the running app | **Open**, deferred |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
+| 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
 
 **One open defect, low severity and visual only: #12.** The maths is right —
 the highlight moves correctly with the camera — so this is a problem of
@@ -231,8 +234,8 @@ up as a number, and should come down after a retune.
 
 **No open defects at critical or high severity.**
 
-Defects 3 through 11 and 13 all passed every automated test at the time they
-existed.
+Defects 3 through 11, 13 and 14 all passed every automated test at the time
+they existed.
 The pattern is consistent: in each case the *code* was correct and the *wiring*
 was absent or mismatched — a threshold that no reachable zoom satisfied, a
 raycast tolerance in the wrong unit, a middleware never registered, a logger
@@ -307,6 +310,8 @@ For a demo or a fresh checkout. Start both servers, open the frontend.
 | 19 | Watch a label over ice, over ocean, and over the night side | Legible in all three; the halo carries it |
 | 20 | Click an aircraft with an airline callsign | The panel shows an Airline row naming the carrier and the designator it came from, and a line saying the value was decoded rather than reported |
 | 21 | Click an aircraft whose label is its ICAO24 address | No Airline row and no caveat — nothing is guessed from an address |
+| 22 | Watch the backend's access log while the app polls | Most polls answer `304 Not Modified`; a 200 appears when the poller refreshes the store. Devtools shows 200s throughout, which is the cache resolving the 304 (§16.3) |
+| 23 | Leave the app open for two minutes without touching it | The status bar's data age counts up past the poll interval and keeps climbing, rather than resetting to a few seconds every ten seconds (§16.4) |
 
 
 ---
@@ -1067,3 +1072,87 @@ test.
 "Lufthansa" for every DLH flight is a real feature and a different one — a
 reverse index, a ranking decision between name and callsign matches, and a say
 in what the result rows show. It is not smuggled in under a detail-panel task.
+
+---
+
+## 16. Conditional requests on the list endpoint
+
+Task 6 gives `GET /api/aircraft` a weak ETag and a 304 path. Reasoning in D47.
+Measured on 2026-08-27.
+
+### 16.1 What it saves
+
+`python benchmarks/bench_conditional.py`, through the real application stack —
+routing, dependency injection, serialization, gzip and the response write, all
+of which run on the same event loop as the poller.
+
+| Objects held | Full 200 | 304 | Saved | Wire bytes, 200 | Wire bytes, 304 |
+|---|---|---|---|---|---|
+| 2,000 | 14.01 ms | **0.60 ms** | 13.41 ms (95.7%) | 29,430 (gzipped) | 0 |
+| 10,000 | 18.61 ms | **0.68 ms** | 17.93 ms (96.3%) | 31,132 (gzipped) | 0 |
+
+The client polls every 10 s while tier 1 refreshes every 300 (D21), so
+twenty-nine polls in thirty hit the unchanged case: **about 389 ms of event
+loop returned to the poller per thirty-poll cycle, per client**, at the 2,000
+object scale the frontend actually requests.
+
+The saving is this large because the tag is computed from the store's version
+counter and the query alone, before the store is read. A 304 does no filtering,
+no thinning, no model validation, no JSON encoding and no gzip.
+
+### 16.2 What the automated suite covers
+
+`tests/test_etag.py`, 26 tests, in two halves.
+
+**What goes into a tag** — every one of these is a way of answering 304 when
+the answer has in fact changed, which is a cache's characteristic failure: not
+a crash, but a client quietly holding something wrong.
+
+| What is pinned | The failure it prevents |
+|---|---|
+| The tag is weak (`W/`) | Two responses at one store version differ in `ageSeconds`; a strong tag would be a false claim |
+| It changes with the store version | The obvious case |
+| It changes with the bbox and with the cap | Otherwise panning returns 304 and the new region never arrives |
+| **It changes when `stale` flips** | `stale` moves on a clock, not on a write. Without it, a backend whose upstream has died answers 304 forever and never reports going cold |
+| **It includes a per-process token** | The version counter restarts at zero, so a restarted backend would serve a different dataset under a tag the client holds. Restarts are how the provider gets switched |
+| Weak comparison, tag lists, and `*` are all handled | RFC 9110 13.1.2 — `If-None-Match` permits only weak comparison |
+
+**Through the real app**: the 200 carries an ETag and `Cache-Control:
+no-cache`; a repeat with the tag is a 304; the 304 has an empty body and
+repeats the tag; a nonsense tag gets the whole body; a poll invalidates the
+tag; a different viewport and a different cap are different representations;
+**the viewport hint still reaches the poller on a 304** (otherwise tier 2 goes
+idle over the region the user is watching); and search is deliberately not
+conditional.
+
+### 16.3 In the running application
+
+Fixture backend, the real frontend through the Vite dev proxy, no client code
+for the conditional path. Over one session: **15 of 17 list polls were answered
+304**, the two 200s being the first load and the poll after tier 1 refreshed.
+
+Worth writing down, because it looks like a failure: in browser devtools every
+one of those polls appears as `200 OK`. What devtools reports is the
+cache-resolved response, not the network exchange. The backend's access log is
+where the 304s are visible.
+
+### 16.4 Defect found by running it, and fixed
+
+Defect #14 in §6, and it is a category rather than an incident: a cache changes
+what "now" means to every field computed at send time.
+
+The status bar showed the data's age as the backend's `ageSeconds` plus the
+time since the response arrived. Both halves were correct until the endpoint
+became conditional; then a 304 handed the client back its own cached body —
+whose `ageSeconds` was measured when it was first fetched — while the arrival
+time reset on every poll. Measured in the running app: the backend reported
+**107.6 seconds** and the status bar read **"data age 1s"**, and it would have
+stayed there for the whole five-minute tier 1 cycle.
+
+The client now measures from `fetchedAt`, an absolute instant that says the
+same thing however many times the same body is reused, and no longer reads
+`ageSeconds` at all. Re-checked in the running app: client 227.6 s against the
+backend's 235.7 s, measured a few seconds apart, while 304s continued.
+
+The trade is a dependence on the client and server clocks agreeing — wrong by
+the skew rather than wrong without bound.

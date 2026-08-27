@@ -40,7 +40,20 @@ export const LAYERS: LayerDescriptor[] = [
 
 export interface FeedStatus {
   stale: boolean;
-  ageSeconds: number | null;
+  /**
+   * Epoch ms of the backend's last successful upstream poll, parsed from
+   * `fetchedAt`.
+   *
+   * The envelope also carries `ageSeconds`, and the status bar used to add the
+   * time since the response arrived to it. That broke the moment the list
+   * endpoint became conditional (D47): a 304 hands the client its own cached
+   * body, whose `ageSeconds` was measured when it was first fetched, while the
+   * arrival time keeps resetting on every poll -- so the age froze at a few
+   * seconds while the data quietly went minutes old. `fetchedAt` is an
+   * absolute instant and therefore says the same thing however many times the
+   * same body is reused.
+   */
+  fetchedAtMs: number | null;
   source: string | null;
   /** Objects matching the query before thinning. */
   total: number;
@@ -91,7 +104,7 @@ export interface OrbitalState {
 
 const initialFeed: FeedStatus = {
   stale: false,
-  ageSeconds: null,
+  fetchedAtMs: null,
   source: null,
   total: 0,
   returned: 0,
@@ -160,7 +173,7 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
       objectsVersion: get().objectsVersion + 1,
       feed: {
         stale: response.stale,
-        ageSeconds: response.ageSeconds,
+        fetchedAtMs: response.fetchedAt ? Date.parse(response.fetchedAt) : null,
         source: response.source,
         total: response.total,
         returned: response.returned,

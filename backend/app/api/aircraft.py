@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from app.api.schemas import ObjectListResponse
 from app.api.deps import get_poller, get_settings_dep, get_store
+from app.api.etag import compute_etag, if_none_match_matches
 from app.config import Settings
 from app.ingestion.poller import Poller
 from app.ingestion.store import ObjectStore
@@ -65,6 +66,7 @@ def _envelope(
 )
 def list_aircraft(
     request: Request,
+    response: Response,
     bbox: str | None = Query(
         default=None,
         description="latMin,lonMin,latMax,lonMax. Omit for the whole globe. "
@@ -86,17 +88,47 @@ def list_aircraft(
     when it is older than the TTL. Returning an error because upstream is down
     would push a backend problem into the rendering layer, which is exactly
     what the three-layer split exists to prevent (D10).
+
+    Answers 304 when the client already holds this exact representation. The
+    tag is weak, because two responses for one store version differ in
+    `ageSeconds` and in nothing else that matters (D47).
     """
     box = _parse_bbox(bbox)
 
     # Telling the poller what the client is looking at is what drives tier 2.
     # It is a hint, not a command: the poller decides whether the box is worth
     # a credit (D21, D27).
+    #
+    # This happens before the conditional check on purpose: a client that is
+    # holding still and getting 304s is still looking somewhere, and dropping
+    # its viewport hint would let tier 2 go idle over exactly the region the
+    # user is watching (D47).
     if box is not None:
         poller.set_viewport(box)
 
-    matching = store.get(box)
     cap = limit or settings.max_objects_per_response
+    etag = compute_etag(
+        version=store.updates_applied,
+        object_type=settings.object_type.value,
+        bbox=box,
+        limit=cap,
+        stale=store.is_stale(),
+        source=store.source,
+    )
+
+    # `no-cache` is not `no-store`: it tells the browser to keep the body and
+    # revalidate it every time, which is what makes the 304 path happen at all
+    # without a line of client code (D47).
+    headers = {"ETag": etag, "Cache-Control": "no-cache"}
+
+    if if_none_match_matches(request.headers.get("if-none-match"), etag):
+        # Returned before the store is read, which is the entire point: no
+        # filtering, no thinning, no serialization, no gzip.
+        return Response(status_code=304, headers=headers)
+
+    response.headers.update(headers)
+
+    matching = store.get(box)
     selected = thin(matching, cap, box)
 
     return _envelope(selected, store=store, settings=settings, total=len(matching))

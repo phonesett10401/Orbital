@@ -1765,3 +1765,98 @@ genuinely useful feature and a different one: it needs a reverse index over the
 table, a decision about ranking a name match against a callsign match, and a
 say in what the result rows show. Not smuggled in under a task about a detail
 panel field.
+
+---
+
+## D47 — The list endpoint answers 304, with a weak validator
+
+**Decision:** `GET /api/aircraft` computes a weak ETag from the store's version
+counter and the query, answers `304 Not Modified` when the client already holds
+that representation, and sends `Cache-Control: no-cache` so browsers
+revalidate. The tag is computed **before the store is read**, so a 304 never
+builds a response at all. No client code was added; the fix that *was* needed
+in the client is at the bottom of this entry, and it is not the one anybody
+expected.
+
+*Alternatives:* a strong ETag; `Last-Modified`; caching the serialized body and
+re-sending it; a shorter client poll interval negotiated some other way;
+leaving it alone.
+
+**The waste is real and it is on the event loop.** The client polls every 10
+seconds; tier 1 refreshes every 300 (D21). So twenty-nine polls in thirty ask
+for a snapshot that has not changed, and each one filters, thins, validates two
+thousand Pydantic models into JSON, gzips the result and writes it — on the
+single thread the poller also runs on, which is the same argument D35 used for
+thinning. Measured through the real stack at 2,000 objects: **14.01 ms per full
+response against 0.60 ms for a 304**, a 95.7% saving, and 29.4 KB of gzipped
+body against nothing. Over a thirty-poll cycle that is about 389 ms of event
+loop returned to the poller, per client.
+
+**Weak, not strong, and the distinction is the whole design.** Two responses
+for one store version are not byte-identical: `ageSeconds` counts up between
+them. A strong validator would be a lie, and the honest strong alternative —
+hashing the serialized body — costs exactly the serialization the ETag exists
+to avoid. A weak validator says the two representations are *semantically
+equivalent* (RFC 9110 8.8.1), which is precisely the claim being made, and
+`If-None-Match` is defined to use weak comparison anyway (RFC 9110 13.1.2).
+
+**Not `Last-Modified`.** It has one-second resolution, and the store's version
+changes on a poll boundary that can fall anywhere. A counter is exact and
+already exists.
+
+**Three inputs that are easy to leave out**, each a way of returning 304 when
+the answer really has changed:
+
+- **The query.** Two viewports are two representations. Without the bbox and
+  the cap in the tag, panning returns 304 and the new region never arrives.
+- **Staleness.** `stale` flips on a clock, not on a write. Left out, a backend
+  whose upstream has died keeps answering 304 from its frozen version, and the
+  client is never told the data went cold — the one moment the envelope has
+  something new to say.
+- **A per-process token.** The version counter starts at zero on every boot, so
+  without it a restarted backend serves version 3 of a *different* dataset
+  under a tag the client already holds. Restarts are how the provider gets
+  switched, so this is a normal event, not a disaster case.
+
+**The viewport hint is sent before the conditional check**, deliberately. A
+client holding still gets 304s and is still looking somewhere; dropping its
+viewport hint would let tier 2 go idle over exactly the region under
+inspection (D21, D27). A test pins it.
+
+**`no-cache`, not `no-store`.** They read like synonyms and are opposites:
+`no-store` forbids keeping the body, so there would be nothing to revalidate
+and no 304s at all. `no-cache` means keep it and ask every time — which is what
+makes this work through `fetch()` with no client code, because the browser
+attaches `If-None-Match` and turns the 304 back into a resolved response before
+JavaScript ever sees it. Verified in the running app through the Vite proxy:
+15 of 17 polls in one session were 304 at the backend. In devtools they appear
+as 200s, because what devtools reports is the cache-resolved response; the
+server's access log is where the 304s are visible.
+
+**Search is left alone.** It is user-driven and debounced, its result changes
+with the query, and the repetition the ETag exists to remove is not there to
+remove. The detail endpoint likewise: it is fetched once per selection, not
+polled.
+
+### What running it found: the frozen age
+
+Transparent caching is transparent to the *code* and not to the *meaning*. The
+status bar computed the data's age as the backend's `ageSeconds` plus the time
+since the response arrived. Both halves were right until the endpoint became
+conditional; then a 304 handed the client back its own cached body — whose
+`ageSeconds` was measured when it was first fetched — while the arrival time
+reset on every poll. **The age froze at a few seconds while the data quietly
+went minutes old.** Caught in the running app: the server reported 107.6
+seconds and the status bar read "data age 1s".
+
+The fix is to state the same fact in a form that does not go out of date. The
+envelope already carries `fetchedAt`, an absolute instant, which is identical
+however many times the same body is reused, so the client now measures from
+that and no longer reads `ageSeconds` at all. The trade is a dependence on the
+two clocks agreeing — wrong by the skew, rather than wrong without bound.
+
+This is worth naming because it is a category, not an incident: **a cache does
+not only change performance, it changes what "now" means to every field
+computed at send time.** The audit that matters after adding one is not "is the
+data right", it is "which fields were true only at the moment they were
+written".

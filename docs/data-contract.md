@@ -71,6 +71,22 @@ Keys currently used by the aircraft provider:
 The frontend renders `meta` generically as key/value rows, so a provider can
 add a key without a frontend change.
 
+### `ageSeconds` is true at send time; `fetchedAt` is true always
+
+Both describe the same instant, and a client should read `fetchedAt`.
+
+`ageSeconds` is computed when the response is written. That was harmless while
+every poll produced a fresh response, and stopped being harmless when the list
+endpoint began answering `304 Not Modified` (D47): a client then keeps and
+reuses a body for up to a full tier 1 cycle, and the age inside it is as old as
+the body. `fetchedAt` is an absolute instant, so it says the same thing however
+many times the same body is reused.
+
+`ageSeconds` stays in the envelope. It is the right form for a human reading a
+response by hand or a health check comparing one number against a threshold,
+and removing it would be a breaking change to buy nothing. But anything
+rendering a live age must derive it from `fetchedAt`.
+
 ### Why `airline` is not a field anywhere
 
 The detail panel shows an airline. Nothing in this contract carries one, and

@@ -26,18 +26,22 @@ export function StatusBar() {
   const feed = useOrbitalStore((s) => s.feed);
   const count = useOrbitalStore((s) => s.objects.size);
 
-  // Age is reported by the backend at fetch time; ticking locally keeps it
-  // honest between polls instead of showing a number frozen ten seconds ago.
+  // Ticks once a second so the age counts up between polls instead of
+  // freezing at whatever it was when the last response arrived.
   const [, setTick] = useState(0);
   useEffect(() => {
     const timer = window.setInterval(() => setTick((t) => t + 1), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
+  // Measured from the backend's own timestamp for its last successful upstream
+  // poll, not from when this response arrived. Those two agreed until the list
+  // endpoint became conditional; now a 304 hands back a body whose `ageSeconds`
+  // was measured on first fetch, and only the absolute instant still tells the
+  // truth (D47). The cost is a dependence on the two clocks agreeing, which is
+  // wrong by the skew rather than wrong without bound.
   const localAge =
-    feed.ageSeconds !== null && feed.lastUpdatedMs !== null
-      ? feed.ageSeconds + (Date.now() - feed.lastUpdatedMs) / 1000
-      : null;
+    feed.fetchedAtMs !== null ? (Date.now() - feed.fetchedAtMs) / 1000 : null;
 
   const thinned = feed.total > feed.returned;
 

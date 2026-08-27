@@ -265,6 +265,7 @@ orbital/
 │   │   │   ├── store.py     object cache + track history     (M2)
 │   │   │   └── poller.py    two-tier scheduling, backoff     (M2)
 │   │   ├── api/             REST endpoints                   (M3)
+│   │   │   └── etag.py      weak validators, so the polled endpoint can 304 (D47)
 │   │   ├── thinning.py      server-side marker reduction     (M3)
 │   │   └── logging_config.py  handler setup for app.* loggers
 │   └── tests/
