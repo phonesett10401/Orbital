@@ -87,13 +87,13 @@ cd frontend && npm test
 | `markers.test.ts` | 28 | Pick tolerance, horizon test, **sizing model, sprite selection** |
 | `route.test.ts` | 13 | Great-circle geometry, antimeridian, colour |
 | `store.test.ts` | 18 | Snapshot application, selection races, layers |
-| `lighting.test.ts` | 28 | **Terminator geometry, the shader's coordinate frame, the glint's tuning** |
+| `lighting.test.ts` | 29 | **Terminator geometry, the shader's coordinate frame, the glint's tuning** |
 | `selectedAircraft.test.ts` | 50 | **Airframe geometry, heading basis, sprite handoff, sizing in screen pixels** |
 | `borders.test.ts` | 17 | **Lon/lat densification, the border shell, the vertex budget** |
 | `labels.test.ts` | 39 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **608** | 321 backend, 287 frontend |
+| **Total** | **609** | 321 backend, 288 frontend |
 
 ### What the automated suites do not cover
 
@@ -215,9 +215,14 @@ itself a finding.
 | 9 | **The globe was lit in view space, so the terminator followed the camera and the planet rendered as night at every rotation** — wrong since M4 | Critical | Looking at the running app (D41) | Fixed |
 | 10 | **The selected aircraft model grew without limit on approach** — its pixel ceiling was evaluated against the distance to the globe's centre instead of to the model, so the clamp could never bind | High | Offscreen pixel readback (D43, §13.2) | Fixed |
 | 11 | **The camera could fly inside the marker shell**, so anything directly beneath it vanished at closest zoom — sprites included; latent since D36 | High | Offscreen pixel readback (D43, §13.2) | Fixed |
-| 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 14.8° of arc across, 6.5% of the visible disc | Low, visual | Looking at the running app (D48, §17) | Fixed |
+| 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+
+**Defect #12 took two retunes**, and the second one is the interesting half:
+the first improved every number the probe reported and was rejected on sight
+anyway, because no number measured the highlight against the ocean beneath it
+(§17.5).
 
 **Defect #12 was a retune, not a repair.** The maths was always right — the
 highlight moved correctly with the camera — so it was a problem of strength and
@@ -314,7 +319,7 @@ For a demo or a fresh checkout. Start both servers, open the frontend.
 | 21 | Click an aircraft whose label is its ICAO24 address | No Airline row and no caveat — nothing is guessed from an address |
 | 22 | Watch the backend's access log while the app polls | Most polls answer `304 Not Modified`; a 200 appears when the poller refreshes the store. Devtools shows 200s throughout, which is the cache resolving the 304 (§16.3) |
 | 23 | Leave the app open for two minutes without touching it | The status bar's data age counts up past the poll interval and keeps climbing, rather than resetting to a few seconds every ten seconds (§16.4) |
-| 24 | Rotate the sunlit ocean under the camera | A small bright glint travels with the camera over water, roughly a twentieth of the globe's width, with a defined core and no spill onto land or into the night side (§17.4) |
+| 24 | Rotate the sunlit ocean under the camera | A faint sheen travels with the camera over water — around 3° of arc, a little brighter than the sea it sits on, never a glowing ball — and never spills onto land or into the night side (§17.5). `__orbital.earth.setGlint(strength, shininess)` retunes it live |
 
 
 ---
@@ -1235,3 +1240,49 @@ step 24 is the check. What has changed is that the person doing that check now
 has two numbers to turn — `VITE_SPECULAR_STRENGTH` and
 `VITE_SPECULAR_SHININESS`, no rebuild — and a probe that reports what turning
 them did.
+
+### 17.5 The first retune was rejected on sight, and why the probe let it through
+
+Everything in §17.1 to §17.4 was measured, correct, and insufficient. Shown the
+globe, Phone reported the same white glow blob — twice, in two screenshots of
+two different views, on 2026-08-28.
+
+**The probe measured the highlight and never measured what it sits on.** The
+Blue Marble ocean at this scale reads about **9/255**. §17.1's "peak 84" is
+therefore roughly **ten times brighter than the water the highlight is
+reflecting off**, which is why it read as a lamp behind the planet rather than
+as sun on the sea. Size was never the complaint; contrast was, and no number in
+this section was measuring it.
+
+Adding the underlying brightness to the same difference-the-frames probe makes
+the choice legible:
+
+| strength | exponent | across | % of disc | peak | peak ÷ ocean beneath |
+|---|---|---|---|---|---|
+| 0.60 | 60 | 18.0° | 9.56% | 153 | 17.5× |
+| 0.35 | 400 (§17.1) | 6.2° | 1.17% | 89 | 9.5× |
+| 0.12 | 1200 | 2.8° | 0.23% | 30 | 3.4× |
+| **0.08** | **900** — shipped | **2.8°** | **0.24%** | **20** | **2.4×** |
+
+Stable across the zoom range: 2.8°, 2.9° and 2.8° at camera distances of 320,
+180 and 140, clipping nowhere.
+
+**Three candidates were measured and put to Phone**, who chose 0.08 and 900
+after looking at them: subtle, barely-there, and removing the highlight
+altogether. `EarthVisuals.setGlint(strength, shininess)` was added so the
+person judging can change both terms from the console rather than through a
+rebuild — `__orbital.earth.setGlint(0.08, 900)`.
+
+Before checking anything else, the probe confirmed what the blob was made of.
+Rendering the frame and hiding one layer at a time: atmosphere peak 12, star
+field 52 (background stars, off the disc), borders 159 (the lines themselves),
+markers 0. Only the specular term moved with the blob. It was never the
+atmosphere shell, and the water mask remained blameless.
+
+**What this costs the record.** §6's defect #12 was marked fixed on the
+strength of §17.1 to §17.4 and was not. The lesson is in D49 and is worth
+repeating here, because it is about this document: **a measurement can be
+correct, improving, and still measuring the wrong quantity.** §12.3 already
+lists three ways a probe can be wrong; this is the fourth, and the quietest —
+a probe that is right about what it measures and silent about what matters. A
+defect reported by an eye is closed by an eye.

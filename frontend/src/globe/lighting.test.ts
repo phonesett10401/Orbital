@@ -359,12 +359,24 @@ describe('the specular glint', () => {
   });
 
   it('defaults to a glint rather than a smudge', () => {
-    // The values that shipped were 0.6 and 60, which measured 14.8 degrees of
-    // arc across and 6.5% of the visible disc -- the defect. These measured
-    // 4.8 degrees and 0.69% (D48, test plan section 17). The assertion is a
-    // direction, not a magic number: a much lower exponent or a much higher
-    // strength is the old blob returning.
-    expect(config.specularShininess).toBeGreaterThanOrEqual(240);
-    expect(config.specularStrength).toBeLessThanOrEqual(0.45);
+    // Two retunes deep (D48, then D49). The first shrank the lobe and was
+    // still rejected by eye, because the quantity that mattered was contrast:
+    // the ocean under the glint sits at 9/255, so a peak of 89 is ten times
+    // brighter than the water it reflects off. Phone chose 0.08 and 900 from a
+    // measured shortlist, where the peak is roughly twice the sea beneath it.
+    // The bounds are a direction, not the chosen pair: anything looser is the
+    // lamp coming back.
+    expect(config.specularShininess).toBeGreaterThanOrEqual(600);
+    expect(config.specularStrength).toBeLessThanOrEqual(0.15);
+  });
+
+  it('can be retuned live, because a number cannot settle how it looks', () => {
+    // The whole point of the setter: whoever is looking at the globe changes
+    // both terms from the console, rather than editing GLSL and reloading.
+    const earth = createEarthVisuals(100);
+    earth.setGlint(0.09, 2000);
+    expect(earth.material.uniforms.specularStrength.value).toBe(0.09);
+    expect(earth.material.uniforms.specularShininess.value).toBe(2000);
+    earth.dispose();
   });
 });

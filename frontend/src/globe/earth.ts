@@ -176,6 +176,15 @@ export interface EarthVisuals {
   starField: THREE.Mesh;
   /** Point the lighting at the sun's real position for `date`. */
   setSunFromDate(date: Date): void;
+  /**
+   * Change the water glint live, without a rebuild.
+   *
+   * Exists because this is a judgement nobody can make from a number: the
+   * glint was tuned against measurements and still read as a glowing ball to
+   * the person looking at it (D49). A setter turns a rebuild-and-squint loop
+   * into a console call, so whoever can actually see the globe settles it.
+   */
+  setGlint(strength: number, shininess: number): void;
   dispose(): void;
 }
 
@@ -305,6 +314,10 @@ export function createEarthVisuals(globeRadius: number): EarthVisuals {
     atmosphere,
     starField,
     setSunFromDate,
+    setGlint(strength: number, shininess: number) {
+      material.uniforms.specularStrength.value = strength;
+      material.uniforms.specularShininess.value = shininess;
+    },
     dispose() {
       material.dispose();
       atmosphere.geometry.dispose();

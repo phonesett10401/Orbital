@@ -1954,3 +1954,87 @@ view dependence, and it cannot settle whether the result looks right — the
 same limitation recorded for the aircraft model (D42) and the geography layers
 (D45). What has changed is that the next person to judge it by eye has two
 numbers to turn and a probe that says what turning them did.
+
+> **Amended by [D49](#d49--the-glint-was-still-a-lamp-contrast-was-the-quantity-that-mattered).**
+> That sign-off then failed. The values above were rejected on sight, and the
+> reason is recorded in D49: every number in this entry improved, and none of
+> them measured the highlight against the ocean it sits on, which at 89 against
+> 9 was still ten to one. The sweep below remains a correct record of how the
+> lobe width behaves; the conclusion that the defect was fixed was not.
+
+---
+
+## D49 — The glint was still a lamp: contrast was the quantity that mattered
+
+**Decision:** the water glint drops again, to strength **0.08** and exponent
+**900**, chosen by Phone from a measured shortlist after looking at the globe.
+`EarthVisuals.setGlint(strength, shininess)` is added so both terms can be
+changed from the console without a rebuild.
+
+*Alternatives:* keeping D48's 0.35 and 400; 0.12 and 1200; removing the
+highlight entirely; a textured or two-lobe glint.
+
+**D48 measured the wrong quantity, and passed.** It reported the highlight
+shrinking from 18° of arc to 6°, and from 9.6% of the visible disc to 1.2% —
+every number better, the camera-invariance spread down by a factor of five, the
+suite green. Phone then looked at the globe and it was still a glowing ball.
+Two screenshots settled it in a way no number had: a soft white sphere sitting
+on an almost black ocean, in two different views, at two different places on
+the planet.
+
+**What the numbers had missed is what the light sits on.** Measuring the
+highlight in isolation says how big and how bright it is. It never says how
+bright it is *relative to the water it is supposed to be reflecting off*. The
+Blue Marble ocean at this scale reads about **9/255**. D48's peak was **89** —
+ten times the sea beneath it. Nothing that outshines its own surface by an
+order of magnitude reads as a reflection; it reads as a light source behind the
+planet, which is exactly the phrase the original report used.
+
+Adding the underlying brightness to the probe turns the choice into one line:
+
+| strength | exponent | across | % of disc | peak | peak ÷ ocean under it |
+|---|---|---|---|---|---|
+| 0.60 | 60 | 18.0° | 9.56% | 153 | **17.5×** |
+| 0.35 | 400 | 6.2° | 1.17% | 89 | **9.5×** |
+| 0.12 | 1200 | 2.8° | 0.23% | 30 | 3.4× |
+| **0.08** | **900** | **2.8°** | **0.24%** | **20** | **2.4×** |
+
+Stable across the zoom range — 2.8°, 2.9°, 2.8° at 320, 180 and 140 units — and
+clipping nowhere.
+
+**The verdict was Phone's, from a shortlist.** Three candidates were measured
+and offered — subtle, barely-there, and off entirely — and 0.08 with 900 was
+chosen after seeing them. That is the right shape for this kind of decision:
+the measurement narrows a continuum to a few defensible points, and the person
+who can see the screen picks between them.
+
+**`setGlint` exists because of the loop, not the values.** Tuning by eye
+against a rebuild is a minute per attempt; against a console call it is
+instant, and the person doing the judging does not need the repository open.
+This is the same reasoning that made the pair uniforms in D48, carried one step
+further.
+
+**Not removed.** Off was a real option and was offered. A sheen that appears
+when the sun angle is right is a cue that the surface is water, and at 2.4×
+the sea beneath it that is what it now is.
+
+> **Amends [D48](#d48--the-specular-glint-retuned-against-a-measurement-rather-than-by-taste).**
+> D48's reasoning about lobe width stands and its sweep is still the record of
+> how the exponent behaves. What it got wrong was believing the job was done
+> because the numbers improved: it measured the highlight, never the contrast,
+> and closed a visual defect without anyone having looked at the result.
+
+### The lesson, stated plainly
+
+**A measurement can be correct, improve, and still be measuring the wrong
+thing.** This project already knew that a probe can be wrong (§12.3 records
+three ways). D48 is the other failure: a probe that was right about what it
+measured and silent about what mattered. Two guards come out of it —
+
+- **Measure the thing against its context, not in isolation.** A highlight has
+  a surface under it; a label has terrain behind it; a marker has a globe
+  around it. The ratio is usually the perceptual quantity, and the absolute
+  number usually is not.
+- **A defect reported by an eye is closed by an eye.** D48 marked #12 fixed on
+  the strength of a probe. Only running it in front of the person who filed it
+  actually closed it.

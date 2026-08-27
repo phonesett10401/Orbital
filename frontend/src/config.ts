@@ -65,17 +65,24 @@ export const config = {
    * Strength of the specular glint on water, and how tightly it falls off.
    *
    * Not physical, and tuned by eye like `bumpScale` — what is being chosen is
-   * how sun glint should read at globe scale. The pair shipped at 0.6 and 60,
-   * which spread a bright patch about 15° of arc across the ocean facing the
-   * sun: a smudge rather than a glint. Measured at 0.35 and 400 it is 4.8°
-   * across with a distinct core, roughly a tenth of the area and half the peak
-   * brightness. D48 has the sweep.
+   * how sun glint should read at globe scale.
+   *
+   * The history is worth carrying, because it is a lesson about measuring the
+   * wrong quantity. It shipped at 0.6 and 60: a patch 18° of arc across, which
+   * was plainly a smudge. Retuned to 0.35 and 400 it measured 6° across and a
+   * tenth of the area — better by every number recorded, and still a glowing
+   * ball to somebody looking at it. The number that mattered was never the
+   * size: the ocean beneath the glint sits at 9/255, so a peak of 89 is ten
+   * times brighter than the water it is supposed to be reflecting off, which
+   * reads as a lamp behind the planet rather than as sun on the sea. At 0.08
+   * and 900 the peak is 20, about twice the water under it: a sheen you catch
+   * at the right sun angle rather than a light source (D49).
    *
    * Raising the exponent tightens the lobe; raising the strength brightens it.
-   * They pull against each other, so change one at a time and look.
+   * `__orbital.earth.setGlint(strength, shininess)` changes both live.
    */
-  specularStrength: num(import.meta.env.VITE_SPECULAR_STRENGTH, 0.35),
-  specularShininess: num(import.meta.env.VITE_SPECULAR_SHININESS, 400),
+  specularStrength: num(import.meta.env.VITE_SPECULAR_STRENGTH, 0.08),
+  specularShininess: num(import.meta.env.VITE_SPECULAR_SHININESS, 900),
 
   /** Freeze the sun at a fixed time, for screenshots and deterministic demos. */
   fixedSunTime: str(import.meta.env.VITE_FIXED_SUN_TIME, ''),
