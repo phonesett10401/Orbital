@@ -2118,3 +2118,81 @@ unchanged.
 this the first of the three unlooked-at features to actually clear that bar.
 The glint took two attempts to get there (D49); this one took a photograph from
 somebody looking at the running app to even start.
+
+---
+
+## D51 — The label thresholds were hiding most of the world
+
+**Decision:** cities enter the generated table at 100,000 people rather than a
+million, airports at any settlement of 25,000 rather than 500,000, and two
+finer altitude tiers are added so the extra data appears only as the camera
+comes in. At the closest tier an airport is labelled with its name instead of
+its three-letter code.
+
+*Alternatives:* leaving the thresholds; lowering them without adding tiers;
+lowering them only for one country; a runtime request for detail as the camera
+moves.
+
+**The report was that Thailand looked empty, and it was.** The whole country
+had exactly one city label — Bangkok — and two airports. Not Chiang Mai, Hat
+Yai, Udon Thani, Nakhon Ratchasima or the sixteen other Thai cities above a
+hundred thousand; not Phuket, Krabi, Samui, Chiang Rai or U-Tapao. Nothing was
+broken. The filters were simply set where most of the world falls off:
+
+| | Old floor | Thailand's reality |
+|---|---|---|
+| Cities | 1,000,000 | one city qualifies; 20 are above 100,000 |
+| Airports | a city of 500,000 within 60 km | Phuket serves a city of 89,000, Samui 50,000, Krabi 31,000 |
+
+**An airport's importance has very little to do with the size of the town it is
+named after**, and that is the assumption the old floor encoded. Phuket and
+Samui are among the busiest airports in the region and both serve settlements
+under a hundred thousand people. The floor now exists only to exclude airfields
+with no settlement near them at all.
+
+**Lowering the floors is not the same as showing more labels.** The table grew
+from 363 cities and 1,029 airports to 4,442 and 4,072, and what appears on
+screen did not change at any altitude that existed before — the tiers and the
+caps decide that (D45), and the file only decides what is *available* to them.
+Two tiers were added below the old bottom step so the new data has somewhere to
+appear:
+
+| Altitude, radii | Reads as | Shown |
+|---|---|---|
+| 0.12 to 0.35 | a large country | cities above 1 million |
+| 0.06 to 0.12 | a region | cities above 300,000, airports as codes |
+| below 0.06 | a province | cities above 100,000, **airports by name** |
+
+**The code gives way to the name at the last step.** `HKT` is right for a
+regional view and useless when you are looking at one island; "Phuket
+International Airport" is what somebody at that zoom is asking for. It is also
+three times as wide, which is why it waits for a tier where few labels compete.
+Both strings come from the same row, so the switch costs a branch.
+
+### What it costs
+
+| | Before | After |
+|---|---|---|
+| `labels.json` | 141 KB raw, 45 KB gzipped | 629 KB raw, **187 KB gzipped** |
+| Selection pass, closest tier | 0.061 ms | **0.080 ms** |
+| Reprojection, per frame | 0.033 ms | 0.036 ms |
+| Candidates at the closest tier | 1,422 | 8,544 |
+
+187 KB gzipped, fetched once and cached, against an aircraft payload of 29 KB
+every ten seconds: it pays for itself before the fourth poll. The per-frame
+cost barely moves because the candidate list is cached against the tier that
+produced it and the caps bound the work that follows.
+
+**The build step got 140 times faster on the way.** Ranking every airport
+against every city was 7,698 x 9,062 great-circle distances and took a minute
+of every `npm run dev`. Cities now go into one-degree buckets and each airport
+looks at the nine around it — the search radius is 60 km, comfortably inside
+one degree of latitude. 62 s to 0.43 s, same output.
+
+### What this does not do
+
+It does not add detail the globe cannot show. The camera stops at 89 km, where
+the view is 83 km tall and the colour texture is 9.8 km per pixel; more labels
+is the only kind of "more detail" available at that scale without the tiled
+imagery and building geometry D17 rules out. See D52 if that decision is ever
+revisited.

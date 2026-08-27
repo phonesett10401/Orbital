@@ -54,14 +54,32 @@ const RESOLUTION = '110m';
  */
 const PRECISION = 3;
 
-/** Cities below this are never labelled, at any zoom. */
-const MIN_CITY_POPULATION = 1_000_000;
+/**
+ * Cities below this are never labelled, at any zoom.
+ *
+ * A million was far too coarse for most of the world: it put exactly one label
+ * on Thailand — Bangkok — and none on Chiang Mai, Udon Thani, Hat Yai or the
+ * eighteen other Thai cities over a hundred thousand people (D51). A hundred
+ * thousand takes the table from 363 cities to 4,442, which is a bigger file
+ * and no more labels on screen: what appears is decided by the altitude tiers
+ * and the caps, not by what the file happens to contain.
+ */
+const MIN_CITY_POPULATION = 100_000;
 
 /** How near a city an airport must be to be considered to serve it. */
 const AIRPORT_CITY_RADIUS_KM = 60;
 
-/** Cities this size or larger let an airport through. */
-const MIN_AIRPORT_CITY_POPULATION = 500_000;
+/**
+ * Cities this size or larger let an airport through.
+ *
+ * Also far too coarse, and for a reason worth stating: an airport's importance
+ * has very little to do with the size of the town it is named after. Every one
+ * of Thailand's international airports was excluded by a 500,000 floor —
+ * Phuket serves a city of 89,000, Krabi one of 31,000, Samui one of 50,000 —
+ * while all of them are among the busiest in the region (D51). The floor now
+ * only exists to keep out airfields with no settlement near them at all.
+ */
+const MIN_AIRPORT_CITY_POPULATION = 25_000;
 
 const EARTH_RADIUS_KM = 6371;
 
@@ -192,6 +210,19 @@ function poleOfInaccessibility(polygon) {
  * airports it will draw at once rather than by pretending to a ranking.
  */
 export function rankAirports(airports, cities) {
+  // Every airport against every city is 7,698 x 9,062 great-circle distances,
+  // which took a minute of every `npm run dev`. Cities go into one-degree
+  // buckets first and each airport only looks at the nine around it -- the
+  // search radius is 60 km, well inside one degree of latitude.
+  const buckets = new Map();
+  const key = (lat, lon) => `${Math.floor(lat)}|${Math.floor(lon)}`;
+  for (const city of cities) {
+    const [lon, lat] = city.loc.coordinates;
+    const k = key(lat, lon);
+    if (!buckets.has(k)) buckets.set(k, []);
+    buckets.get(k).push(city);
+  }
+
   const ranked = [];
   for (const airport of airports) {
     if (!/^[A-Z]{3}$/.test(airport.iata ?? '')) continue;
@@ -199,29 +230,45 @@ export function rankAirports(airports, cities) {
 
     let served = 0;
     let servedName = '';
-    for (const city of cities) {
-      const km =
-        geoDistance([airport.longitude, airport.latitude], city.loc.coordinates) *
-        EARTH_RADIUS_KM;
-      if (km <= AIRPORT_CITY_RADIUS_KM && city.population > served) {
-        served = city.population;
-        servedName = city.name;
+    for (let dLat = -1; dLat <= 1; dLat += 1) {
+      for (let dLon = -1; dLon <= 1; dLon += 1) {
+        const near = buckets.get(
+          key(Math.floor(airport.latitude) + dLat, Math.floor(airport.longitude) + dLon),
+        );
+        if (!near) continue;
+        for (const city of near) {
+          if (city.population <= served) continue;
+          const km =
+            geoDistance([airport.longitude, airport.latitude], city.loc.coordinates) *
+            EARTH_RADIUS_KM;
+          if (km <= AIRPORT_CITY_RADIUS_KM) {
+            served = city.population;
+            servedName = city.name;
+          }
+        }
       }
     }
     if (served < MIN_AIRPORT_CITY_POPULATION) continue;
 
+    // `primary` decides ties at build time and is not written out: the runtime
+    // reads the order, not the flag.
     ranked.push({
-      name: airport.name,
-      iata: airport.iata,
-      lat: round(airport.latitude),
-      lon: round(airport.longitude),
-      rank: served,
       primary:
         (airport.city ?? '').trim().toLowerCase() === servedName.trim().toLowerCase(),
+      entry: {
+        name: airport.name,
+        iata: airport.iata,
+        lat: round(airport.latitude),
+        lon: round(airport.longitude),
+        rank: served,
+      },
     });
   }
-  ranked.sort((a, b) => b.rank - a.rank || Number(b.primary) - Number(a.primary));
-  return ranked;
+
+  ranked.sort(
+    (a, b) => b.entry.rank - a.entry.rank || Number(b.primary) - Number(a.primary),
+  );
+  return ranked.map((r) => r.entry);
 }
 
 // ---- main ------------------------------------------------------------------

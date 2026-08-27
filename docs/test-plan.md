@@ -90,10 +90,10 @@ cd frontend && npm test
 | `lighting.test.ts` | 29 | **Terminator geometry, the shader's coordinate frame, the glint's tuning** |
 | `selectedAircraft.test.ts` | 54 | **Airframe shape and heading basis, sprite handoff, sizing in screen pixels** |
 | `borders.test.ts` | 17 | **Lon/lat densification, the border shell, the vertex budget** |
-| `labels.test.ts` | 39 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
+| `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **613** | 321 backend, 292 frontend |
+| **Total** | **616** | 321 backend, 295 frontend |
 
 ### What the automated suites do not cover
 
@@ -899,7 +899,7 @@ generated files, and nothing here spends an API credit.
 |---|---|
 | Source | Natural Earth 110m (`world-atlas`), GeoNames (`all-the-cities`), OurAirports (`@nwpr/airport-codes`) |
 | `borders.json` | 595 arcs, 8,246 points, 117 KB |
-| `labels.json` | 177 countries, 363 cities, 1,029 airports, 141 KB |
+| `labels.json` | 177 countries, 4,442 cities, 4,072 airports, 629 KB (187 KB gzipped) — see §14.7 |
 | Build time | ~5 s |
 | Densified geometry | 20,082 vertices, 235 KB of positions, **one draw call** |
 | Border build, in the browser | 5.6 ms, once, at load |
@@ -1320,3 +1320,39 @@ budget, unchanged.
 
 **Accepted by eye** by Phone on 2026-08-28, which makes the aircraft model the
 first of the three measured-but-unseen features to clear that bar.
+
+### 14.7 Label coverage, after the thresholds were lowered
+
+Reported on 2026-08-28: Thailand looked empty. It was — one city label and two
+airports for the whole country. Reasoning in D51; this is what the change does,
+measured against the real generated table.
+
+**Thailand, zooming in** (1600x900 viewport, camera centred on each place):
+
+| Camera altitude | Over Bangkok | Over Phuket | Over Chiang Mai |
+|---|---|---|---|
+| 0.20 | Bangkok, Ho Chi Minh City, Phnom Penh… | regional cities only | Bangkok, Yangon, Mandalay… |
+| 0.10 | + Samut Prakan, DMK, UTP, NAK | HDY, URT, AOR, SGZ | CNX, LPT, KKC, UTH |
+| 0.04 | + Nonthaburi, Pak Kret, Si Racha, Nakhon Pathom | Nakhon Si Thammarat, **Phuket International Airport**, Krabi Airport, Trang Airport | Chiang Mai, Lampang, Phrae Airport |
+| 0.014 (closest) | **Don Mueang International**, **Suvarnabhumi**, and the metro cities | Phuket International Airport | Chiang Mai, Chiang Mai International Airport |
+
+Before the change every one of those cells except the first row was empty.
+
+**Cost**, same probe as §14.3:
+
+| | Before | After |
+|---|---|---|
+| `labels.json` | 141 KB raw / 45 KB gzipped | 629 KB / **187 KB gzipped** |
+| Candidates at the closest tier | 1,422 | 8,544 |
+| Selection pass (every 200 ms) | 0.061 ms | **0.080 ms** |
+| Reprojection (every frame) | 0.033 ms | 0.036 ms |
+| `npm run geography` | 62 s | **0.43 s** |
+
+The build speed-up is a spatial bucket in the airport ranking: one-degree cells,
+nine cells searched per airport, same output. The per-frame cost barely moves
+because candidates are cached against the tier and the caps bound what follows.
+
+**What it does not do.** It adds labels, not detail the globe can render. The
+camera stops at 89 km altitude, where the view is 83 km tall and the colour
+texture is 9.8 km per pixel — about eight texels across the screen. Anything
+finer needs tiled imagery and building geometry, which D17 excludes.

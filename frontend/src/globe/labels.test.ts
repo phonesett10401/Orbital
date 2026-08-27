@@ -82,11 +82,26 @@ describe('labelBudget', () => {
     }
   });
 
-  it('holds airports back until the closest tier', () => {
+  it('holds airports back until the closer tiers', () => {
     expect(labelBudget(0.12).airports).toBe(false);
     expect(labelBudget(0.119).airports).toBe(true);
     // The closest the camera can go is 1.014 radii, an altitude of 0.014.
     expect(labelBudget(0.014).airports).toBe(true);
+  });
+
+  it('swaps airport codes for names only at the last step', () => {
+    // A regional view wants HKT; a view of one province wants Phuket
+    // International Airport, which is also three times as wide and would crowd
+    // out everything else a step earlier (D51).
+    expect(labelBudget(0.119).airportNames).toBe(false);
+    expect(labelBudget(0.06).airportNames).toBe(false);
+    expect(labelBudget(0.059).airportNames).toBe(true);
+  });
+
+  it('keeps letting smaller cities through as the camera comes in', () => {
+    expect(labelBudget(0.34).cityMinRank).toBe(1_000_000);
+    expect(labelBudget(0.11).cityMinRank).toBe(300_000);
+    expect(labelBudget(0.05).cityMinRank).toBe(100_000);
   });
 
   it('is defined at the exact thresholds, not only between them', () => {
@@ -104,7 +119,7 @@ describe('candidatesFor', () => {
   });
 
   it('takes only as many countries as the budget allows', () => {
-    const budget = { countries: 2, cityMinRank: Infinity, airports: false };
+    const budget = { countries: 2, cityMinRank: Infinity, airports: false, airportNames: false };
     const candidates = candidatesFor(data, budget, GLOBE_RADIUS);
     expect(candidates).toHaveLength(2);
     expect(candidates.map((c) => c.text)).toEqual(['Russia', 'Canada']);
@@ -117,11 +132,18 @@ describe('candidatesFor', () => {
     expect(cities.map((c) => c.text)).toEqual(['Shanghai', 'London']);
   });
 
-  it('labels an airport with its IATA code, not its name', () => {
-    const airports = candidatesFor(data, labelBudget(0.05), GLOBE_RADIUS).filter(
+  it('labels an airport with its IATA code at the regional tier', () => {
+    const airports = candidatesFor(data, labelBudget(0.1), GLOBE_RADIUS).filter(
       (c) => c.kind === 'airport',
     );
     expect(airports.map((c) => c.text)).toEqual(['LHR']);
+  });
+
+  it('labels it with its full name at the closest tier', () => {
+    const airports = candidatesFor(data, labelBudget(0.02), GLOBE_RADIUS).filter(
+      (c) => c.kind === 'airport',
+    );
+    expect(airports.map((c) => c.text)).toEqual(['London Heathrow Airport']);
   });
 
   it('anchors every label on the label shell', () => {

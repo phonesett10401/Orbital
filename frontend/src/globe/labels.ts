@@ -111,22 +111,34 @@ export interface PlacedLabel extends LabelCandidate {
  * | 1.0 to 3.0 | a hemisphere | the twelve largest countries |
  * | 0.35 to 1.0 | a continent | thirty countries, cities above 5 million |
  * | 0.12 to 0.35 | a large country | cities above 1 million |
- * | below 0.12 | a region, a few hundred km across | airports as well |
+ * | 0.06 to 0.12 | a region, several hundred km across | cities above 300,000, airports as codes |
+ * | below 0.06 | a province, under 200 km across | cities above 100,000, airports by name |
  *
- * Airports arrive last and only at the closest zoom because there are 1,029 of
- * them and they are the densest layer: shown a step earlier, western Europe
- * becomes a wall of three-letter codes.
+ * Airports arrive late because they are the densest class and their ranking
+ * cannot order its own members (D44); at the last step the three-letter code
+ * gives way to the airport's name, which is the level of detail somebody
+ * looking at one province actually wants (D51).
+ *
+ * The two bottom steps exist because the table used to stop at a million
+ * people, which put one label on Thailand and none on Chiang Mai, Hat Yai or
+ * Udon Thani. The data now goes down to a hundred thousand, and these tiers
+ * are what let it appear without crowding the view when it should not.
  */
 export function labelBudget(altitude: number): {
   countries: number;
   cityMinRank: number;
   airports: boolean;
+  airportNames: boolean;
 } {
-  if (altitude >= 3) return { countries: 0, cityMinRank: Infinity, airports: false };
-  if (altitude >= 1) return { countries: 12, cityMinRank: Infinity, airports: false };
-  if (altitude >= 0.35) return { countries: 30, cityMinRank: 5_000_000, airports: false };
-  if (altitude >= 0.12) return { countries: 30, cityMinRank: 1_000_000, airports: false };
-  return { countries: 30, cityMinRank: 1_000_000, airports: true };
+  const tier = (countries: number, cityMinRank: number, airports = false, airportNames = false) =>
+    ({ countries, cityMinRank, airports, airportNames });
+
+  if (altitude >= 3) return tier(0, Infinity);
+  if (altitude >= 1) return tier(12, Infinity);
+  if (altitude >= 0.35) return tier(30, 5_000_000);
+  if (altitude >= 0.12) return tier(30, 1_000_000);
+  if (altitude >= 0.06) return tier(30, 300_000, true, false);
+  return tier(30, 100_000, true, true);
 }
 
 /**
@@ -169,7 +181,10 @@ export function candidatesFor(
     for (const airport of data.airports) {
       out.push({
         kind: 'airport',
-        text: airport.iata ?? airport.name,
+        // The code is the compact form for a regional view; the name is what
+        // somebody looking at one province is asking for. Both come from the
+        // same row, so this costs nothing but a branch.
+        text: budget.airportNames ? airport.name ?? airport.iata ?? '' : airport.iata ?? airport.name ?? '',
         rank: airport.rank,
         position: latLonToVector3(airport.lat, airport.lon, radius),
       });
