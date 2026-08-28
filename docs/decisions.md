@@ -2914,3 +2914,41 @@ each tested an ingredient while the two real faults sat in the *assembly*: how
 Vite serves the library, and when the container is measured. The one instrument
 that would have found it sooner is the one never read on the machine where it
 failed — the browser console, where a broken worker announces itself.
+
+---
+
+## D64 — The observed track, ported to the map
+
+**Decision:** the selected aircraft's track is a GeoJSON line source with two
+layers — a dark casing under a bright line — densified along great circles, and
+made continuous across the antimeridian by unwrapping longitudes rather than by
+splitting the line.
+
+*Alternatives:* drawing the raw sample points; splitting at the antimeridian as
+the globe layer does; a single line without a casing.
+
+**Great circles, and this is the opposite of the border rule.** The backend
+samples at the poll interval, so consecutive points can be hundreds of
+kilometres apart. On a Mercator map a straight segment between two of them is a
+rhumb line — from London to Tokyo it runs hundreds of kilometres south of the
+path actually flown. D44 densifies borders in lon/lat for precisely the
+opposite reason: a boundary follows a parallel because that is what a boundary
+is, and an aircraft follows a great circle because that is what an aircraft
+flies. Same operation, opposite rule, and a test pins the difference by
+checking the London–Tokyo midpoint bows north.
+
+**Unwrapped, not split.** The globe layer drops a segment that crosses the
+antimeridian, because a line through the scene's three-dimensional coordinates
+would otherwise sweep the wrong way round the planet (D6). A map has a cheaper
+answer: let the longitude run past 180. MapLibre draws that as the short way
+across, so a two-degree hop is drawn as two degrees, and the gap the globe
+accepts is not needed here.
+
+**A casing under the line**, for the same reason the roads have one (D59): a
+white line disappears over pale terrain, a dark one disappears over water, and
+the route is the answer to "where has this aircraft been", so it has to survive
+both.
+
+**Redrawn on detail change, not per frame.** The track grows once per poll, and
+densifying it is the only expensive thing this layer does — the same reasoning
+the globe layer used, and the same subscription.

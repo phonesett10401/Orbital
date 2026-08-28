@@ -30,6 +30,7 @@ import {
   aircraftLayers,
 } from './aircraftLayer';
 import { loadPlanetStyle } from './basemap';
+import { ROUTE_SOURCE, emptyRoute, routeFeatures, routeLayers } from './routeLayer';
 import { createAircraftIconCanvas, createUnknownIconCanvas } from '../globe/aircraftSprite';
 import { whenRenderable } from './container';
 import { createDiagnosticsPanel } from './diagnostics';
@@ -112,6 +113,11 @@ export function PlanetView() {
           });
         }
 
+        // The route goes in first, so the aircraft symbols draw over their own
+        // track rather than under it.
+        map.addSource(ROUTE_SOURCE, { type: 'geojson', data: emptyRoute() });
+        for (const layer of routeLayers()) map.addLayer(layer);
+
         map.addSource(AIRCRAFT_SOURCE, {
           type: 'geojson',
           data: aircraftFeatures([], Date.now()),
@@ -172,8 +178,20 @@ export function PlanetView() {
           .setViewport(coversWholeWorld(bounds) ? null : boundsToBBox(bounds));
       });
 
-      // A search hit flies the camera, as it does on the globe.
       unsubscribe = useOrbitalStore.subscribe((state, previous) => {
+        // The route is redrawn only when the selected object's detail changes,
+        // not every frame: the track only grows once per poll, and rebuilding
+        // a densified polyline is the expensive part of this layer (D6).
+        if (state.selectedDetail !== previous.selectedDetail && map) {
+          const source = map.getSource(ROUTE_SOURCE);
+          if (source && 'setData' in source) {
+            (source as { setData: (data: unknown) => void }).setData(
+              routeFeatures(state.selectedDetail?.track),
+            );
+          }
+        }
+
+        // A search hit flies the camera, as it does on the globe.
         if (state.flyTo !== previous.flyTo && state.flyTo && map) {
           map.flyTo({ center: [state.flyTo.lon, state.flyTo.lat], zoom: 9, duration: 1600 });
         }

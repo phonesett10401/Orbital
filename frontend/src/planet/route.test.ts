@@ -1,0 +1,162 @@
+/**
+ * Tests for the observed track on the planet view.
+ *
+ * Two things carry the layer, and they pull in opposite directions from the
+ * border layer's rules, which is why both are pinned rather than assumed: a
+ * route follows a great circle because that is what an aircraft flies, where a
+ * boundary follows a parallel because that is what a boundary is (D44); and a
+ * track across the antimeridian is made continuous rather than dropped.
+ */
+
+import { describe, expect, it } from 'vitest';
+
+import type { TrackPoint } from '../types';
+import {
+  ROUTE_CASING_LAYER,
+  ROUTE_LAYER,
+  ROUTE_SOURCE,
+  greatCircleLatLon,
+  routeFeatures,
+  routeLayers,
+  unwrapLongitudes,
+} from './routeLayer';
+
+function point(lat: number, lon: number): TrackPoint {
+  return { lat, lon, altitude: 10_000, timestamp: '2026-08-28T12:00:00Z' };
+}
+
+describe('greatCircleLatLon', () => {
+  it('keeps the endpoints', () => {
+    const arc = greatCircleLatLon({ lat: 51.5, lon: -0.1 }, { lat: 35.7, lon: 139.7 }, 8);
+    expect(arc[0][0]).toBeCloseTo(-0.1, 6);
+    expect(arc[0][1]).toBeCloseTo(51.5, 6);
+    expect(arc[arc.length - 1][0]).toBeCloseTo(139.7, 6);
+    expect(arc[arc.length - 1][1]).toBeCloseTo(35.7, 6);
+  });
+
+  it('bows toward the pole, which is the path actually flown', () => {
+    // London to Tokyo: the great circle runs far north of the straight line a
+    // Mercator map would draw between them. Drawing the straight line would
+    // put the aircraft hundreds of kilometres from where it went.
+    const london = { lat: 51.5, lon: -0.1 };
+    const tokyo = { lat: 35.7, lon: 139.7 };
+    const arc = greatCircleLatLon(london, tokyo, 12);
+    const midpoint = arc[6];
+    const straightLat = (london.lat + tokyo.lat) / 2;
+    expect(midpoint[1]).toBeGreaterThan(straightLat + 10);
+  });
+
+  it('handles coincident points without dividing by zero', () => {
+    const arc = greatCircleLatLon({ lat: 13.75, lon: 100.5 }, { lat: 13.75, lon: 100.5 });
+    expect(arc).toHaveLength(2);
+    expect(arc[0]).toEqual([100.5, 13.75]);
+  });
+});
+
+describe('unwrapLongitudes', () => {
+  it('leaves an ordinary line alone', () => {
+    const line: Array<[number, number]> = [
+      [100, 13],
+      [101, 13],
+      [102, 13],
+    ];
+    expect(unwrapLongitudes(line)).toEqual(line);
+  });
+
+  it('carries a crossing past 180 instead of jumping back', () => {
+    // Two degrees of travel. Drawn from the raw coordinates it is a stripe all
+    // the way back across the map; unwrapped it is two degrees.
+    const crossing: Array<[number, number]> = [
+      [179, 10],
+      [-179, 10],
+    ];
+    const [first, second] = unwrapLongitudes(crossing);
+    expect(first[0]).toBe(179);
+    expect(second[0]).toBe(181);
+    expect(Math.abs(second[0] - first[0])).toBe(2);
+  });
+
+  it('works westward too, and across several turns', () => {
+    const westward: Array<[number, number]> = [
+      [-179, 0],
+      [179, 0],
+      [177, 0],
+    ];
+    const unwrapped = unwrapLongitudes(westward);
+    expect(unwrapped.map(([lon]) => lon)).toEqual([-179, -181, -183]);
+  });
+});
+
+describe('routeFeatures', () => {
+  it('draws nothing for a track too short to be a path', () => {
+    // One point is a position. The panel already explains that a route builds
+    // up as the aircraft is watched (D6).
+    expect(routeFeatures(null).features).toHaveLength(0);
+    expect(routeFeatures([]).features).toHaveLength(0);
+    expect(routeFeatures([point(13, 100)]).features).toHaveLength(0);
+  });
+
+  it('is one line, densified, from a two-point track', () => {
+    const collection = routeFeatures([point(13, 100), point(14, 101)]);
+    expect(collection.features).toHaveLength(1);
+    const { coordinates } = collection.features[0].geometry;
+    expect(coordinates.length).toBeGreaterThan(2);
+    expect(coordinates[0]).toEqual([100, 13]);
+    expect(coordinates[coordinates.length - 1][0]).toBeCloseTo(101, 6);
+  });
+
+  it('does not repeat the sample where two arcs meet', () => {
+    // Each arc ends where the next begins; keeping both would duplicate every
+    // reported position and put a visible kink at each one.
+    const collection = routeFeatures([point(0, 0), point(0, 10), point(0, 20)]);
+    const { coordinates } = collection.features[0].geometry;
+    const at10 = coordinates.filter(([lon]) => Math.abs(lon - 10) < 1e-9);
+    expect(at10).toHaveLength(1);
+  });
+
+  it('stays continuous across the antimeridian', () => {
+    const collection = routeFeatures([point(10, 178), point(10, -178)]);
+    const { coordinates } = collection.features[0].geometry;
+    for (let i = 1; i < coordinates.length; i += 1) {
+      expect(Math.abs(coordinates[i][0] - coordinates[i - 1][0])).toBeLessThan(180);
+    }
+    expect(coordinates[coordinates.length - 1][0]).toBeGreaterThan(180);
+  });
+});
+
+describe('routeLayers', () => {
+  it('draws a dark casing under a bright line', () => {
+    // A single white line vanishes over pale terrain and a single dark one
+    // over water. The route is the answer to "where has this aircraft been",
+    // so it has to survive both (D59).
+    const [casing, line] = routeLayers();
+    expect(casing.id).toBe(ROUTE_CASING_LAYER);
+    expect(line.id).toBe(ROUTE_LAYER);
+    expect(String((casing as { paint: Record<string, unknown> }).paint['line-color'])).toContain(
+      '0, 0, 0',
+    );
+    expect((line as { paint: Record<string, unknown> }).paint['line-color']).toBe('#ffffff');
+  });
+
+  it('reads both layers from the one source', () => {
+    // Narrowed rather than indexed: `LayerSpecification` is a union and a
+    // background layer has no source at all, so asserting the kind first is
+    // part of the test.
+    for (const layer of routeLayers()) {
+      expect(layer.type).toBe('line');
+      expect((layer as { source: string }).source).toBe(ROUTE_SOURCE);
+    }
+  });
+
+  it('keeps the casing wider than the line at every zoom it defines', () => {
+    const width = (layer: { paint: Record<string, unknown> }) =>
+      (layer.paint['line-width'] as unknown[]).filter((v) => typeof v === 'number') as number[];
+    const [casing, line] = routeLayers();
+    const casingWidths = width(casing as { paint: Record<string, unknown> });
+    const lineWidths = width(line as { paint: Record<string, unknown> });
+    // Pairs are [zoom, width, zoom, width]; compare the widths only.
+    for (let i = 1; i < casingWidths.length; i += 2) {
+      expect(casingWidths[i]).toBeGreaterThan(lineWidths[i]);
+    }
+  });
+});

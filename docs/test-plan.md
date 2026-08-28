@@ -94,8 +94,9 @@ cd frontend && npm test
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
 | `planet.test.ts` | 53 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
+| `route.test.ts` (planet) | 13 | **Great-circle densification, antimeridian unwrapping, the casing** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **688** | 321 backend, 367 frontend |
+| **Total** | **701** | 321 backend, 380 frontend |
 
 ### What the automated suites do not cover
 
@@ -1748,3 +1749,21 @@ was called "probably not the reported failure" — it was necessary. And the
 worker was ruled out by a test run *after* the exclusion had already been
 applied, so it could only exonerate; on that basis the exclusion was nearly
 deleted. Before removing a change as unnecessary, remove it and measure.
+
+### 19.14 The observed track on the planet view
+
+The route line, ported (D64). 13 tests in `route.test.ts`:
+
+| What is pinned | Why |
+|---|---|
+| The London–Tokyo midpoint bows north of the straight line | An aircraft flies a great circle; a Mercator straight line is a rhumb line, hundreds of km from the truth |
+| Endpoints survive densification | The drawn path has to start and end where the aircraft was reported |
+| A crossing of the antimeridian stays continuous, past 180 | The alternative is a stripe back across the whole map |
+| Unwrapping works westward and across several turns | One direction working is not evidence for the other |
+| The shared sample between two arcs appears once | Duplicating every reported position puts a visible kink at each one |
+| A track under two points draws nothing | One point is a position, not a path |
+| The casing is darker and wider than the line at every zoom | It is what makes the route legible over both terrain and water |
+
+Verified in the running app: a three-point track densifies to 25 coordinates
+with endpoints intact, and a track from 170°E to 175°W unwraps to 185° with no
+step larger than 1.3°.
