@@ -148,11 +148,12 @@ describe('withImagery', () => {
     expect(IMAGERY_CROSSFADE_END).toBeLessThanOrEqual(IMAGERY_FAR_MAX_ZOOM);
   });
 
-  it('carries imagery far closer than the far tier reaches', () => {
-    // 500 m per pixel is a continent from space; 10 m is the field next to the
-    // runway. Without the second tier there is nothing under the cartography
-    // past zoom 8 but its own colours.
+  it('carries imagery to where individual buildings are visible', () => {
+    // 500 m per pixel is a continent from space. The close tier has to reach
+    // the zoom where a person expects to see a building, which is around 18,
+    // or the map stops being a map and becomes a blur (D58).
     expect(IMAGERY_NEAR_MAX_ZOOM).toBeGreaterThan(IMAGERY_FAR_MAX_ZOOM);
+    expect(IMAGERY_NEAR_MAX_ZOOM).toBeGreaterThanOrEqual(18);
   });
 
   it('keeps the vector source it was given', () => {
@@ -168,8 +169,11 @@ describe('withImagery', () => {
     for (const id of ['orbital-imagery-far', 'orbital-imagery-near']) {
       const source = style.sources[id];
       const url = source && 'tiles' in source ? source.tiles?.[0] ?? '' : '';
-      expect(url).toContain('/{z}/{y}/{x}.');
-      expect(url).not.toContain('/{z}/{x}/{y}.');
+      // No trailing dot in the match: Esri's path ends at {x} with no file
+      // extension, and requiring one would pass a wrongly-ordered URL that
+      // happened to end in `.jpg`.
+      expect(url).toContain('/{z}/{y}/{x}');
+      expect(url).not.toContain('/{z}/{x}/{y}');
     }
   });
 
@@ -179,7 +183,7 @@ describe('withImagery', () => {
       return source && 'attribution' in source ? source.attribution ?? '' : '';
     };
     expect(attribution('orbital-imagery-far')).toContain('NASA');
-    expect(attribution('orbital-imagery-near')).toContain('Copernicus');
+    expect(attribution('orbital-imagery-near')).toContain('Esri');
   });
 
   it('survives a style with nothing but fills', () => {

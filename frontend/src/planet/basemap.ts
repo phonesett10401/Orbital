@@ -19,14 +19,15 @@
  * | | Source | Resolution | Reaches | Terms |
  * |---|---|---|---|---|
  * | Far | NASA GIBS `BlueMarble_NextGeneration` | 500 m | z8 | open data, unmetered |
- * | Near | EOX Sentinel-2 cloudless | 10 m | z15 | no key, **fair use** |
+ * | Near | Esri World Imagery | **sub-metre** | z19 | no key, attribution, not unlimited |
  * | Over both | OpenFreeMap vector | — | z14+ | no key, no cap |
  *
- * Two imagery sources rather than one because their terms differ. GIBS is
- * NASA's public service and carries every view of the planet; Sentinel-2 is a
- * courtesy from a company that asks not to be pointed at production traffic,
- * and is only reached by zooming past a continent. If this ever needs to
- * survive real traffic, both are configuration.
+ * Two imagery sources rather than one because their terms differ, and the
+ * split is deliberate rather than incidental: NASA's open data is unmetered
+ * and carries every ordinary view of the planet, while the close tier — which
+ * is only reached by zooming past a continent — comes from a commercial
+ * provider that serves it without a key but does not promise to forever
+ * (D58). If this ever needs to survive real traffic, both are configuration.
  *
  * ## What the vector tiles are allowed to draw
  *
@@ -43,7 +44,7 @@ import { config } from '../config';
 
 /** Where each imagery tier stops having tiles of its own. */
 export const IMAGERY_FAR_MAX_ZOOM = 8;
-export const IMAGERY_NEAR_MAX_ZOOM = 15;
+export const IMAGERY_NEAR_MAX_ZOOM = config.imageryCloseMaxZoom;
 
 /** Where the close imagery fades in over the far one. */
 export const IMAGERY_CROSSFADE_START = 5;
@@ -52,8 +53,16 @@ export const IMAGERY_CROSSFADE_END = 7;
 export const GIBS_ATTRIBUTION =
   'Imagery <a href="https://earthdata.nasa.gov/gibs">NASA EOSDIS GIBS</a>';
 
-export const SENTINEL_ATTRIBUTION =
-  '<a href="https://s2maps.eu">Sentinel-2 cloudless</a> by EOX IT Services GmbH ' +
+/**
+ * Whatever the close tier is, it is somebody's imagery and wants crediting.
+ *
+ * Both candidates require attribution, so this names both rather than guessing
+ * from the URL: showing one line too many is a smaller fault than showing the
+ * wrong one, or none.
+ */
+export const CLOSE_IMAGERY_ATTRIBUTION =
+  'Close imagery <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics ' +
+  '· or <a href="https://s2maps.eu">Sentinel-2 cloudless</a> by EOX IT Services GmbH ' +
   '(Contains modified Copernicus Sentinel data)';
 
 /**
@@ -118,7 +127,7 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
         tiles: [config.imageryCloseTileUrl],
         tileSize: 256,
         maxzoom: IMAGERY_NEAR_MAX_ZOOM,
-        attribution: SENTINEL_ATTRIBUTION,
+        attribution: CLOSE_IMAGERY_ATTRIBUTION,
       },
     },
     // Imagery first so it is the ground; cartography over it, in the order the

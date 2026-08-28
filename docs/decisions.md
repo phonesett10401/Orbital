@@ -2602,3 +2602,47 @@ the panel exists to surface.
 Stripped from production by the `DEV` guard, like the globe's `__orbital`
 console handle. It is deliberately plain — it is there to be photographed, not
 admired.
+
+---
+
+## D58 — Sub-metre imagery, and the terms that come with it
+
+**Decision:** the close imagery tier becomes Esri World Imagery, reaching zoom
+19, with Sentinel-2 cloudless kept as a one-variable alternative.
+
+**The previous answer was wrong, and worth recording as wrong.** Asked whether
+zoom 15 was the limit, D56's setup said yes: Sentinel-2 is 10 m per pixel and
+stops having tiles of its own at 15. What that answered was "how far does *this
+source* go", not "how far can the map go" — the same substitution as D53 and
+D56, three entries in a row. Measured over Bangkok:
+
+| Zoom | Sentinel-2 | Esri World Imagery |
+|---|---|---|
+| 12 | 33 KB | 21 KB |
+| 15 | 17 KB | 26 KB |
+| 17 | 8 KB — upscaled | 24 KB |
+| 18 | 5 KB — upscaled | 21 KB |
+| 19 | **404** | 16 KB |
+
+Esri has real tiles four zoom levels further, at sub-metre resolution: the
+level where individual buildings, road markings and vehicles are visible.
+
+**And the terms are worse, which is the whole reason this is a decision.**
+Esri serves the endpoint without a key and it is what most open-source mapping
+uses, but its terms expect attribution and an account for production traffic,
+and it may rate-limit. That is a weaker guarantee than NASA's open data, and it
+is why the split into tiers stays: **GIBS carries every ordinary view of the
+planet and is unmetered; the commercial tier is only reached by zooming past a
+continent.** Sentinel-2 remains a cleaner licence at a third of the reach, one
+environment variable away.
+
+Neither is a promise. Self-hosting is the only real answer to "no limits", and
+for imagery that means gigabytes — which is why the recommendation for the
+end state is still a Protomaps extract for vector and a mirror for imagery,
+both behind our own backend (D52).
+
+### What this does not fix
+
+Street names and building outlines are not imagery, and they are still not
+drawing. That is a vector-tile problem, unrelated to how sharp the photograph
+underneath is, and D57's readout exists to find it.

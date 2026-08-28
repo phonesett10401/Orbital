@@ -1598,3 +1598,26 @@ Four tests, on the pure parts:
 | **Glyph requests are not counted as vector tiles** | Both are `.pbf`; conflating them hides the exact failure the panel exists to show |
 | "NO VECTOR TILES" appears only once the style has loaded | Before that it is normal and the warning would be noise |
 | The most recent errors are shown, not the first | The first error is usually a consequence of an earlier state; the last is what is true now |
+
+### 19.8 The imagery ceiling, measured
+
+"Is this the most I can zoom in?" — asked on 2026-08-28, answered wrongly the
+first time. Reasoning in D58; the measurement, over Bangkok:
+
+| Zoom | Sentinel-2 (10 m) | Esri World Imagery |
+|---|---|---|
+| 12 | 33 KB | 21 KB |
+| 15 | 17 KB | 26 KB |
+| 17 | 8 KB — upscaled | 24 KB |
+| 18 | 5 KB — upscaled | 21 KB |
+| 19 | **404** | 16 KB |
+
+The close tier is now Esri, to zoom 19 — sub-metre, where individual buildings
+are visible. Verified from the browser with CORS. Sentinel-2 stays available
+through `VITE_IMAGERY_CLOSE_TILE_URL` and has the cleaner licence.
+
+A test pins that the close tier reaches at least zoom 18, since below that the
+map stops being a map on approach. Another was corrected in the process: it
+asserted `/{z}/{y}/{x}.` with a trailing dot, which Esri's extensionless path
+fails — and which would have passed a wrongly ordered URL that happened to end
+in `.jpg`.
