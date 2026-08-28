@@ -33,9 +33,10 @@ import {
   colourFor,
 } from './aircraftLayer';
 import {
-  IMAGERY_FADE_END,
-  IMAGERY_FADE_START,
-  IMAGERY_MAX_ZOOM,
+  IMAGERY_CROSSFADE_END,
+  IMAGERY_CROSSFADE_START,
+  IMAGERY_FAR_MAX_ZOOM,
+  IMAGERY_NEAR_MAX_ZOOM,
   loadPlanetStyle,
   withImagery,
 } from './basemap';
@@ -87,8 +88,16 @@ const bareStyle: StyleSpecification = {
   version: 8,
   sources: { openmaptiles: { type: 'vector', url: 'https://example.invalid/planet' } },
   layers: [
-    { id: 'background', type: 'background', paint: { 'background-color': '#000' } },
+    { id: 'background', type: 'background', paint: { 'background-color': '#f8f4f0' } },
     { id: 'water', type: 'fill', source: 'openmaptiles', 'source-layer': 'water' },
+    { id: 'road', type: 'line', source: 'openmaptiles', 'source-layer': 'transportation' },
+    { id: 'place', type: 'symbol', source: 'openmaptiles', 'source-layer': 'place' },
+    {
+      id: 'building-3d',
+      type: 'fill-extrusion',
+      source: 'openmaptiles',
+      'source-layer': 'building',
+    },
   ],
   glyphs: 'https://example.invalid/{fontstack}/{range}.pbf',
 };
@@ -100,53 +109,84 @@ describe('withImagery', () => {
     expect(style.projection).toEqual({ type: 'globe' });
   });
 
-  it('puts the imagery directly above the background, under the cartography', () => {
-    // Above the background so it is visible; below everything else so water,
-    // roads and labels still draw on top and are what remains when it fades.
+  it('makes imagery the ground and puts cartography over it', () => {
     const ids = style.layers.map((layer) => layer.id);
-    expect(ids).toEqual(['background', 'orbital-imagery', 'water']);
+    expect(ids).toEqual([
+      'orbital-imagery-far',
+      'orbital-imagery-near',
+      'road',
+      'place',
+      'building-3d',
+    ]);
   });
 
-  it('fades the imagery out where it stops being able to keep up', () => {
-    const layer = style.layers.find((l) => l.id === 'orbital-imagery');
-    expect(layer).toBeDefined();
-    expect(asRaster(layer!).paint?.['raster-opacity']).toEqual([
+  it('drops the background and every area fill', () => {
+    // This is the defect it exists for. A fill's job is to colour ground, and
+    // the basemap's background is #f8f4f0 -- so under the old ordering,
+    // zooming anywhere without roads faded real imagery out into a cream
+    // screen (D56).
+    const types = style.layers.map((layer) => layer.type);
+    expect(types).not.toContain('background');
+    expect(types).not.toContain('fill');
+  });
+
+  it('crossfades the close imagery in over the far one', () => {
+    // A dissolve between two photographs of the same ground, rather than a cut
+    // between a photograph and a colour.
+    const near = style.layers.find((l) => l.id === 'orbital-imagery-near');
+    expect(asRaster(near!).paint?.['raster-opacity']).toEqual([
       'interpolate',
       ['linear'],
       ['zoom'],
-      IMAGERY_FADE_START,
-      1,
-      IMAGERY_FADE_END,
+      IMAGERY_CROSSFADE_START,
       0,
+      IMAGERY_CROSSFADE_END,
+      1,
     ]);
-    // Gone before the tiles run out, so the last thing seen is imagery that
-    // still has pixels rather than one stretched over four zoom levels.
-    expect(IMAGERY_FADE_END).toBeLessThan(IMAGERY_MAX_ZOOM);
+    // Fully arrived before the far tier runs out of tiles of its own.
+    expect(IMAGERY_CROSSFADE_END).toBeLessThanOrEqual(IMAGERY_FAR_MAX_ZOOM);
+  });
+
+  it('carries imagery far closer than the far tier reaches', () => {
+    // 500 m per pixel is a continent from space; 10 m is the field next to the
+    // runway. Without the second tier there is nothing under the cartography
+    // past zoom 8 but its own colours.
+    expect(IMAGERY_NEAR_MAX_ZOOM).toBeGreaterThan(IMAGERY_FAR_MAX_ZOOM);
   });
 
   it('keeps the vector source it was given', () => {
     expect(style.sources.openmaptiles).toEqual(bareStyle.sources.openmaptiles);
-    expect(style.sources['orbital-imagery']).toMatchObject({ type: 'raster' });
+    expect(style.sources['orbital-imagery-far']).toMatchObject({ type: 'raster' });
+    expect(style.sources['orbital-imagery-near']).toMatchObject({ type: 'raster' });
   });
 
-  it('requests GIBS tiles in WMTS row/column order', () => {
-    // GIBS is WMTS: the path is {z}/{row}/{col}, which is {z}/{y}/{x}. An XYZ
-    // service would be {z}/{x}/{y}, and swapping them returns tiles of the
+  it('requests both imagery tiers in WMTS row/column order', () => {
+    // Both are WMTS: the path is {z}/{row}/{col}, which is {z}/{y}/{x}. An XYZ
+    // template would be {z}/{x}/{y}, and swapping them returns tiles of the
     // wrong place rather than an error -- a mirrored, plausible-looking Earth.
-    const source = style.sources['orbital-imagery'];
-    const url = source && 'tiles' in source ? source.tiles?.[0] ?? '' : '';
-    expect(url).toContain('/{z}/{y}/{x}.');
-    expect(url).not.toContain('/{z}/{x}/{y}.');
+    for (const id of ['orbital-imagery-far', 'orbital-imagery-near']) {
+      const source = style.sources[id];
+      const url = source && 'tiles' in source ? source.tiles?.[0] ?? '' : '';
+      expect(url).toContain('/{z}/{y}/{x}.');
+      expect(url).not.toContain('/{z}/{x}/{y}.');
+    }
   });
 
-  it('credits NASA, because the licence asks it to', () => {
-    const source = style.sources['orbital-imagery'];
-    expect(source && 'attribution' in source ? source.attribution : '').toContain('NASA');
+  it('credits both imagery providers, because both licences ask it to', () => {
+    const attribution = (id: string) => {
+      const source = style.sources[id];
+      return source && 'attribution' in source ? source.attribution ?? '' : '';
+    };
+    expect(attribution('orbital-imagery-far')).toContain('NASA');
+    expect(attribution('orbital-imagery-near')).toContain('Copernicus');
   });
 
-  it('survives a style with no background layer', () => {
-    const styleless = withImagery({ ...bareStyle, layers: [bareStyle.layers[1]] });
-    expect(styleless.layers[0].id).toBe('orbital-imagery');
+  it('survives a style with nothing but fills', () => {
+    const fillsOnly = withImagery({ ...bareStyle, layers: bareStyle.layers.slice(0, 2) });
+    expect(fillsOnly.layers.map((l) => l.id)).toEqual([
+      'orbital-imagery-far',
+      'orbital-imagery-near',
+    ]);
   });
 });
 
@@ -158,7 +198,8 @@ describe('loadPlanetStyle', () => {
       return bareStyle;
     });
     expect(requested).toBe(config.cityStyleUrl);
-    expect(style.sources['orbital-imagery']).toBeDefined();
+    expect(style.sources['orbital-imagery-far']).toBeDefined();
+    expect(style.sources['orbital-imagery-near']).toBeDefined();
   });
 
   it('rejects rather than degrading, because there is no map without a style', async () => {

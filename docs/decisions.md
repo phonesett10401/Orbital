@@ -2512,3 +2512,58 @@ note:
 
 The threshold is 32 pixels rather than zero, because a box of a few pixels is
 the same mistake with the same symptom and would otherwise pass.
+
+---
+
+## D56 — Imagery is the ground, not a layer that fades away
+
+**Decision:** imagery covers every zoom, in two tiers, and the vector basemap
+contributes only lines, labels and buildings. Every area fill and the
+background are dropped from the style.
+
+**What was wrong.** D54 layered imagery *under* the vector basemap and faded it
+out at zoom 7.5, on the reasoning that vector detail takes over where imagery
+runs out. Looked at, it does something else entirely: the basemap's background
+is `#f8f4f0`, so past the fade the ground is cream. Zoom into anywhere without
+roads — a desert, a coastline, most of the planet — and the screen turns white.
+Fading a photograph out into a blank fill is precisely backwards.
+
+**Two tiers, because their terms differ.**
+
+| | Source | Resolution | Reaches | Terms |
+|---|---|---|---|---|
+| Far | NASA GIBS `BlueMarble_NextGeneration` | 500 m | z8 | open data, unmetered |
+| Near | EOX Sentinel-2 cloudless | **10 m** | z15 | no key, **fair use** |
+
+Fifty times finer, and the difference between "a continent from space" and "the
+field beside the runway". One source would have been simpler; two is honest.
+GIBS is NASA's public service and carries every ordinary view of the planet.
+Sentinel-2 is a courtesy from a company that asks not to be pointed at
+production traffic, and is only reached by zooming past a continent — so the
+service that publishes no limits absorbs the load, and the one that asks for
+restraint gets it. The near tier crossfades in over the far one across zooms
+5 to 7: a dissolve between two photographs of the same ground rather than a
+cut between a photograph and a colour.
+
+**The vector tiles keep their job, which was never to be the ground.** Only
+`line`, `symbol` and `fill-extrusion` layers survive the filter — roads,
+boundaries, rivers, labels, buildings. Every `fill` and the `background` are
+dropped, because a fill's entire purpose is to colour an area that imagery is
+already showing, better. A hundred layers of tuned cartography still decide
+where roads go, what earns a label and how buildings extrude; they simply no
+longer paint the dirt.
+
+**What this is, stated plainly:** the satellite-with-labels hybrid every mapping
+product offers, assembled from two free sources and one free vector basemap,
+with no key anywhere.
+
+### The lesson, which is not a new one here
+
+D54 chose the fade by asking "where does imagery stop having tiles?" The
+question that mattered was "what is underneath it when it goes?" — and the
+answer was a colour nobody had looked at. It is the same shape as D53, where
+the hand-off altitude was chosen by asking how close the camera could get
+rather than how close the imagery held up, and D48, where the glint was
+measured in isolation rather than against the ocean beneath it. **Three times
+now: the quantity that mattered was a relationship, and it was measured as a
+property.**

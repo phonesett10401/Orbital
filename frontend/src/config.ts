@@ -151,6 +151,25 @@ export const config = {
       '/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg',
   ),
 
+  /**
+   * Close-range imagery, where the 500 m one runs out.
+   *
+   * Sentinel-2 cloudless from EOX: 10 m per pixel, cloud-free, global, to zoom
+   * 15 — fifty times finer than GIBS and the difference between "a continent
+   * from space" and "the field next to the runway". No API key.
+   *
+   * **Its terms are fair use rather than unlimited**, which the low-zoom
+   * source is not, and that is why there are two: GIBS carries every view of
+   * the planet and this one is only reached by zooming past a continent. The
+   * attribution EOX asks for is carried on the source. Self-hosting is the
+   * answer if this ever sees real traffic.
+   */
+  imageryCloseTileUrl: str(
+    import.meta.env.VITE_IMAGERY_CLOSE_TILE_URL,
+    'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default' +
+      '/GoogleMapsCompatible/{z}/{y}/{x}.jpg',
+  ),
+
   /** Freeze the sun at a fixed time, for screenshots and deterministic demos. */
   fixedSunTime: str(import.meta.env.VITE_FIXED_SUN_TIME, ''),
 } as const;

@@ -93,9 +93,9 @@ cd frontend && npm test
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
-| `planet.test.ts` | 32 | **The MapLibre style, aircraft as GeoJSON, bounds to the bbox, the container guard** |
+| `planet.test.ts` | 34 | **The MapLibre style, aircraft as GeoJSON, bounds to the bbox, the container guard** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **667** | 321 backend, 346 frontend |
+| **Total** | **669** | 321 backend, 348 frontend |
 
 ### What the automated suites do not cover
 
@@ -111,7 +111,7 @@ one that admits its gaps:
 - **React component rendering.** Components are exercised manually and through
   the store; there are no DOM-rendering tests for them. The pointer path is the
   exception, because that is where a bug hid (§6).
-- **Wiring, in general.** Eight of the seventeen defects in §6 were cases where
+- **Wiring, in general.** Eight of the eighteen defects in §6 were cases where
   correct code was never connected to anything. Tests assert on behaviour that
   runs; they cannot assert on behaviour that was never reached. Running the
   system remains a required step, not a nicety.
@@ -220,6 +220,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 18 | **The map turned white on the way in** — imagery faded out at zoom 7.5 and the vector basemap's `#f8f4f0` background became the ground | High, visual | Four screenshots from Phone (D56, §19.6) | Fixed |
 | 17 | **The MapLibre map rendered into a container collapsed to zero height** by MapLibre's own stylesheet winning the cascade — no error, no failed request, a blank screen | High | A screenshot from Phone (D55, §19.5) | Fixed |
 | 16 | **City mode handed over at 0.05 radii, where the globe texture is 36 texels per screen pixel** — so the whole approach was spent looking at a magnified smear, and a failed hand-off left the layer permanently active with no map and no retry | Medium, visual | Two screenshots from Phone (D53, §18.6) | Fixed |
 | 15 | **The selected aircraft's nose and tail cones were built inside out** — each pinched to a needle where it met the fuselage and flared open at the tip, so the model read as a dart with a fork on the front | Medium, visual | A screenshot from Phone (D50, §13.4) | Fixed |
@@ -1549,3 +1550,30 @@ reader would look.
 **`.city-map` had the same bug**, which means the city-mode spike (§18) was
 very likely blank when it was looked at and set aside. It is superseded either
 way, but the record should not claim it was rejected on its merits.
+
+### 19.6 Defect: the map turned white on the way in
+
+Reported 2026-08-28 with four screenshots: the globe correct from space, tiles
+arriving progressively, then washing out on approach, then a wholly white
+screen. Defect #18 in §6, reasoning in D56.
+
+The imagery faded out at zoom 7.5 and the vector basemap became the ground —
+and its background is `#f8f4f0`. Anywhere without roads to draw, that cream
+fill *is* the map.
+
+| | Before | After |
+|---|---|---|
+| Imagery coverage | z0–8, faded out by 7.5 | z0–15, no fade-out |
+| Close-range source | none | EOX Sentinel-2 cloudless, **10 m/px** |
+| Vector's role | the ground below zoom 7.5 | lines, labels, buildings only |
+| Background and area fills | drawn | dropped from the style |
+
+Five new tests in `planet.test.ts` (28 → 32 → 36 with the container guard):
+the layer list is imagery-then-cartography with no `background` and no `fill`
+anywhere; the crossfade completes before the far tier runs out of its own
+tiles; the near tier reaches closer than the far one; both tiers request
+`{z}/{y}/{x}`; and both carry the attribution their licences require.
+
+**Verified from the browser:** Sentinel-2 answers `200 image/jpeg` at zooms 2,
+8, 12, 14 and 15, with CORS. **Not verified: how it looks.** No agent-driven
+browser here composites, so tile loading never begins.
