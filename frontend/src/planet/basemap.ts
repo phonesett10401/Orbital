@@ -75,6 +75,65 @@ export const CLOSE_IMAGERY_ATTRIBUTION =
 export const KEPT_LAYER_TYPES = new Set(['line', 'symbol', 'fill-extrusion']);
 
 /**
+ * Restyle one cartographic layer to read over imagery.
+ *
+ * The basemap is a light style: white roads on cream, dark text with a white
+ * halo. Every one of those choices is correct against its own background and
+ * close to invisible against a satellite photograph of a city, which is grey
+ * and white and busy. Google's satellite mode does the same thing this does —
+ * light roads with dark casings, bright labels with dark halos — because it is
+ * what survives on top of a photograph (D59).
+ *
+ * The geometry, the zoom rules and the label placement are untouched: those are
+ * the hundred layers of tuned cartography worth keeping. Only colour changes.
+ */
+export function styleForImagery(layer: LayerSpecification): LayerSpecification {
+  if (layer.type === 'symbol') {
+    return {
+      ...layer,
+      paint: {
+        ...layer.paint,
+        'text-color': '#ffffff',
+        'text-halo-color': 'rgba(0, 0, 0, 0.85)',
+        'text-halo-width': 1.6,
+        'icon-halo-color': 'rgba(0, 0, 0, 0.85)',
+        'icon-halo-width': 1.2,
+      },
+    };
+  }
+
+  if (layer.type === 'line') {
+    // Casings are the wider line drawn under a road to outline it. Over
+    // imagery they are what makes a road legible at all, so they go dark and
+    // the road itself stays bright.
+    const isCasing = /casing|outline/.test(layer.id);
+    return {
+      ...layer,
+      paint: {
+        ...layer.paint,
+        'line-color': isCasing ? 'rgba(0, 0, 0, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+        'line-opacity': isCasing ? 0.85 : 0.95,
+      },
+    };
+  }
+
+  if (layer.type === 'fill-extrusion') {
+    return {
+      ...layer,
+      paint: {
+        ...layer.paint,
+        'fill-extrusion-color': '#d7dee8',
+        // Translucent so the building reads as a volume over its own footprint
+        // in the photograph rather than replacing it.
+        'fill-extrusion-opacity': 0.6,
+      },
+    };
+  }
+
+  return layer;
+}
+
+/**
  * Build the planet style from a vector basemap style.
  *
  * The vector style is fetched rather than written here: it is a hundred layers
@@ -82,7 +141,9 @@ export const KEPT_LAYER_TYPES = new Set(['line', 'symbol', 'fill-extrusion']);
  * a label, how buildings extrude — survives this filter intact.
  */
 export function withImagery(style: StyleSpecification): StyleSpecification {
-  const cartography = style.layers.filter((layer) => KEPT_LAYER_TYPES.has(layer.type));
+  const cartography = style.layers
+    .filter((layer) => KEPT_LAYER_TYPES.has(layer.type))
+    .map(styleForImagery);
 
   const far: LayerSpecification = {
     id: 'orbital-imagery-far',

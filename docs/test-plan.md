@@ -93,9 +93,9 @@ cd frontend && npm test
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
-| `planet.test.ts` | 38 | **The MapLibre style, aircraft as GeoJSON, bounds to the bbox, the container guard, diagnostics** |
+| `planet.test.ts` | 43 | **The MapLibre style, cartography over imagery, aircraft as GeoJSON, bounds to the bbox, diagnostics** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **673** | 321 backend, 352 frontend |
+| **Total** | **678** | 321 backend, 357 frontend |
 
 ### What the automated suites do not cover
 
@@ -1621,3 +1621,30 @@ map stops being a map on approach. Another was corrected in the process: it
 asserted `/{z}/{y}/{x}.` with a trailing dot, which Esri's extensionless path
 fails — and which would have passed a wrongly ordered URL that happened to end
 in `.jpg`.
+
+### 19.9 Cartography over imagery
+
+Street names, roads and buildings were invisible at every zoom while imagery
+was correct. Reasoning in D59.
+
+**Ruled out by measurement before changing anything:** the vector tiles serve
+(200, 450 KB of MVT at zoom 14 over Bangkok, with CORS); the layer filter keeps
+93 of 111 layers including 30 road and 25 label layers; and the composed style
+validates against MapLibre's own spec with **zero errors** and no layer
+referencing a removed source.
+
+That leaves two causes which look identical in a screenshot — not drawn, or
+drawn invisibly — and the second had not been considered. The basemap is a
+*light* style: white roads, dark labels with white halos, all correct on cream
+and nearly invisible on a photograph of a grey-and-white city.
+
+Nine tests cover the recolour and the readout:
+
+| What is pinned | Why |
+|---|---|
+| Labels become white with a dark halo | The inversion is the fix |
+| Road casings go dark, roads stay bright | The casing is what makes a road legible over imagery |
+| Buildings become translucent | So they read as volumes over their own footprints |
+| **Geometry, filters, zoom rules and layout are untouched** | Only colour was wrong; the cartography is worth keeping |
+| `TILES BUT NO FEATURES` appears only with tiles and no features | It separates a source that never loaded from one that drew nothing |
+| A working map prints neither warning | A diagnostic that cries wolf gets ignored |

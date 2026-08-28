@@ -2646,3 +2646,57 @@ both behind our own backend (D52).
 Street names and building outlines are not imagery, and they are still not
 drawing. That is a vector-tile problem, unrelated to how sharp the photograph
 underneath is, and D57's readout exists to find it.
+
+---
+
+## D59 — Cartography styled for imagery, and a readout that names which failure it is
+
+**Decision:** recolour the vector layers for a photographic background — bright
+labels with dark halos, dark road casings under light roads, translucent
+buildings — and add a rendered-feature count to the diagnostics readout.
+
+**The report:** imagery reaches zoom 19 and looks right; street names, roads and
+buildings are still not visible at any zoom.
+
+**What was ruled out first**, because guessing at rendering is how the last
+three defects each cost a round trip:
+
+- The vector tiles serve. Fetched from the page: 200, 450 KB of MVT at zoom 14
+  over Bangkok, with CORS.
+- The filter keeps them. 93 of the basemap's 111 layers survive it, including
+  30 road layers and 25 label layers.
+- The composed style is valid. Checked against MapLibre's own spec with
+  `validateStyleMin`: **zero errors**, and no layer references a source that
+  the filter removed.
+
+So the style is right and the data is there. That leaves two explanations, and
+**they are indistinguishable in a screenshot**: the tiles are not being drawn,
+or they are being drawn invisibly.
+
+**The second is entirely plausible and had not been considered.** The basemap is
+a *light* style. Its roads are white with pale casings and its labels are dark
+grey with a white halo — every one of those correct against its own cream
+background, and close to invisible over a satellite photograph of a city, which
+is itself grey and white and busy. Fading white roads onto a white-grey city is
+the same mistake as D56's cream background, one layer up.
+
+So the cartography is recoloured for what is actually underneath it: labels
+white with a dark halo, casings dark under bright roads, buildings translucent
+so they read as volumes over their own footprints. This is what Google's
+satellite mode does, and for the same reason. **Geometry, zoom rules, filters
+and label placement are untouched** — those are the hundred layers of tuned
+cartography worth keeping; only colour was wrong.
+
+**And the readout now says which failure it is.** `queryRenderedFeatures()`
+reports how many features MapLibre is currently drawing, which separates the
+two cases at a glance:
+
+| Readout | Meaning |
+|---|---|
+| `NO VECTOR TILES` | the source never loaded — nothing can draw |
+| `TILES BUT NO FEATURES` | the source loaded and drew nothing |
+| features in the thousands, nothing visible | it is drawing, and the colour is the problem |
+
+That third row is the one this entry exists for. If the recolour is the fix,
+the map will simply be right; if it is not, the readout now distinguishes the
+remaining two causes without another round trip.

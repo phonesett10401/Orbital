@@ -49,25 +49,34 @@ export function requestCounts(names: string[]): Record<string, number> {
   return counts;
 }
 
-/** The readout's text, as lines. Pure, so it can be tested. */
+/**
+ * The readout's text, as lines. Pure, so it can be tested.
+ *
+ * `features` is how many cartographic features MapLibre says it is currently
+ * drawing. It is the line that separates the two explanations for an empty
+ * map, which look identical in a screenshot: no features means the tiles never
+ * arrived, while thousands of features with nothing visible means they are
+ * being drawn in a colour that does not survive the imagery beneath them
+ * (D59).
+ */
 export function readoutLines(state: {
   styleLoaded: boolean;
   zoom: number;
   layers: number;
+  features: number;
   counts: Record<string, number>;
   errors: string[];
 }): string[] {
-  const { styleLoaded, zoom, layers, counts, errors } = state;
+  const { styleLoaded, zoom, layers, features, counts, errors } = state;
   const lines = [
     `style ${styleLoaded ? 'loaded' : 'LOADING'} · z${zoom.toFixed(1)} · ${layers} layers`,
     `tiles: gibs ${counts.gibs} · sentinel ${counts.sentinel} · vector ${counts.vector}`,
-    `glyphs ${counts.glyphs} · sprite ${counts.sprite}`,
+    `glyphs ${counts.glyphs} · sprite ${counts.sprite} · features drawn ${features}`,
   ];
-  // Zero vector tiles with a loaded style is the interesting failure: every
-  // road, label and building comes from that source, so nothing cartographic
-  // draws and the imagery underneath looks like the whole map.
   if (styleLoaded && counts.vector === 0) {
     lines.push('NO VECTOR TILES — roads and labels cannot draw');
+  } else if (styleLoaded && counts.vector > 0 && features === 0) {
+    lines.push('TILES BUT NO FEATURES — the source loaded and drew nothing');
   }
   for (const error of errors.slice(-ERROR_LIMIT)) lines.push(`! ${error}`);
   return lines;
@@ -99,6 +108,16 @@ export function createDiagnosticsPanel(): DiagnosticsPanel {
           // thing being reported.
           layers = 0;
         }
+        // Everything MapLibre is drawing right now, from the vector source.
+        // `queryRenderedFeatures` with no filter answers for the whole map,
+        // which is the question being asked.
+        let features = 0;
+        try {
+          features = map.queryRenderedFeatures().length;
+        } catch {
+          features = 0;
+        }
+
         element.textContent = '';
         for (const line of readoutLines({
           // `isStyleLoaded` is typed as possibly returning void in this
@@ -106,6 +125,7 @@ export function createDiagnosticsPanel(): DiagnosticsPanel {
           styleLoaded: map.isStyleLoaded() === true,
           zoom: map.getZoom(),
           layers,
+          features,
           counts: requestCounts(names),
           errors,
         })) {

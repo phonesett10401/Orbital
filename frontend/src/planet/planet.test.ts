@@ -38,6 +38,7 @@ import {
   IMAGERY_FAR_MAX_ZOOM,
   IMAGERY_NEAR_MAX_ZOOM,
   loadPlanetStyle,
+  styleForImagery,
   withImagery,
 } from './basemap';
 import { isRenderable, unrenderableMessage } from './container';
@@ -428,20 +429,123 @@ describe('the diagnostics readout', () => {
     // Every road, label and building comes from that one source. If it is
     // silent the imagery underneath looks like the whole map, which is what
     // was reported and what no screenshot could explain.
-    const lines = readoutLines({ styleLoaded: true, zoom: 14, layers: 95, counts, errors: [] });
+    const lines = readoutLines({ styleLoaded: true, zoom: 14, layers: 95, features: 0, counts, errors: [] });
     expect(lines.join('\n')).toContain('NO VECTOR TILES');
   });
 
   it('says nothing of the sort while the style is still loading', () => {
-    const lines = readoutLines({ styleLoaded: false, zoom: 2, layers: 0, counts, errors: [] });
+    const lines = readoutLines({ styleLoaded: false, zoom: 2, layers: 0, features: 0, counts, errors: [] });
     expect(lines.join('\n')).not.toContain('NO VECTOR TILES');
     expect(lines[0]).toContain('LOADING');
   });
 
   it('shows the most recent errors, not the first ones', () => {
     const errors = ['one', 'two', 'three', 'four'];
-    const lines = readoutLines({ styleLoaded: true, zoom: 14, layers: 95, counts, errors });
+    const lines = readoutLines({ styleLoaded: true, zoom: 14, layers: 95, features: 900, counts, errors });
     expect(lines.join('\n')).toContain('four');
     expect(lines.join('\n')).not.toContain('one');
+  });
+});
+
+describe('styling cartography for imagery', () => {
+  it('inverts label colours, because the basemap is a light style', () => {
+    // Dark text with a white halo is correct on cream and close to invisible
+    // on a satellite photograph of a city, which is grey and white and busy.
+    const styled = styleForImagery({
+      id: 'place_label',
+      type: 'symbol',
+      source: 'openmaptiles',
+      'source-layer': 'place',
+      paint: { 'text-color': '#333', 'text-halo-color': '#fff' },
+    });
+    expect(styled.type).toBe('symbol');
+    const paint = (styled as { paint: Record<string, unknown> }).paint;
+    expect(paint['text-color']).toBe('#ffffff');
+    expect(String(paint['text-halo-color'])).toContain('0, 0, 0');
+  });
+
+  it('darkens road casings and brightens the roads themselves', () => {
+    // The casing is the wider line drawn underneath to outline a road. Over
+    // imagery it is what makes the road legible at all.
+    const casing = styleForImagery({
+      id: 'road_minor_casing',
+      type: 'line',
+      source: 'openmaptiles',
+      'source-layer': 'transportation',
+      paint: { 'line-color': '#e0e0e0' },
+    });
+    const road = styleForImagery({
+      id: 'road_minor',
+      type: 'line',
+      source: 'openmaptiles',
+      'source-layer': 'transportation',
+      paint: { 'line-color': '#ffffff' },
+    });
+    expect(String((casing as { paint: Record<string, unknown> }).paint['line-color'])).toContain(
+      '0, 0, 0',
+    );
+    expect(String((road as { paint: Record<string, unknown> }).paint['line-color'])).toContain(
+      '255, 255, 255',
+    );
+  });
+
+  it('leaves the geometry and zoom rules alone', () => {
+    // The hundred layers of tuned cartography are worth keeping; only colour
+    // is wrong over imagery.
+    const original = {
+      id: 'road_major',
+      type: 'line' as const,
+      source: 'openmaptiles',
+      'source-layer': 'transportation',
+      minzoom: 6,
+      filter: ['==', ['get', 'class'], 'motorway'] as unknown,
+      layout: { 'line-cap': 'round' as const },
+      paint: { 'line-width': 3 },
+    };
+    const styled = styleForImagery(original as never) as typeof original;
+    expect(styled.minzoom).toBe(6);
+    expect(styled.filter).toEqual(original.filter);
+    expect(styled.layout).toEqual(original.layout);
+    expect((styled.paint as Record<string, unknown>)['line-width']).toBe(3);
+  });
+
+  it('makes buildings translucent so they sit over their own footprint', () => {
+    const styled = styleForImagery({
+      id: 'building-3d',
+      type: 'fill-extrusion',
+      source: 'openmaptiles',
+      'source-layer': 'building',
+      paint: { 'fill-extrusion-height': 10 },
+    });
+    const paint = (styled as { paint: Record<string, unknown> }).paint;
+    expect(paint['fill-extrusion-opacity']).toBeLessThan(1);
+    expect(paint['fill-extrusion-height']).toBe(10);
+  });
+});
+
+describe('the tiles-but-no-features line', () => {
+  it('separates a missing source from an invisible one', () => {
+    // The two explanations for an empty map look identical in a screenshot.
+    const counts = { style: 1, gibs: 4, sentinel: 8, vector: 40, glyphs: 2, sprite: 1 };
+    const invisible = readoutLines({
+      styleLoaded: true,
+      zoom: 15,
+      layers: 95,
+      features: 0,
+      counts,
+      errors: [],
+    }).join('\n');
+    expect(invisible).toContain('TILES BUT NO FEATURES');
+
+    const working = readoutLines({
+      styleLoaded: true,
+      zoom: 15,
+      layers: 95,
+      features: 1200,
+      counts,
+      errors: [],
+    }).join('\n');
+    expect(working).not.toContain('TILES BUT NO FEATURES');
+    expect(working).not.toContain('NO VECTOR TILES');
   });
 });
