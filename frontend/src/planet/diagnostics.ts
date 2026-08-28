@@ -40,7 +40,11 @@ export function requestCounts(names: string[]): Record<string, number> {
     // Whichever close tier is configured. Naming one provider here is how the
     // readout came to report "sentinel 0" while Esri tiles were streaming in.
     ['close', /maps\.eox\.at|arcgisonline\.com/],
-    ['vector', /\.pbf(\?|$)/],
+    // Kept for completeness and NOT trusted: MapLibre fetches vector tiles
+    // inside a Web Worker, and `performance.getEntriesByType` on the main
+    // thread cannot see a worker's requests. This counter could only ever
+    // read zero, which is precisely what it did while being believed (D61).
+    ['vectorMainThread', /\.pbf(\?|$)/],
     ['glyphs', /\/fonts\//],
     ['sprite', /\/sprites?\//],
   ];
@@ -66,22 +70,62 @@ export function readoutLines(state: {
   zoom: number;
   layers: number;
   features: number;
+  vector: VectorSourceState;
   counts: Record<string, number>;
   errors: string[];
 }): string[] {
-  const { styleLoaded, zoom, layers, features, counts, errors } = state;
+  const { styleLoaded, zoom, layers, features, vector, counts, errors } = state;
   const lines = [
     `style ${styleLoaded ? 'loaded' : 'LOADING'} · z${zoom.toFixed(1)} · ${layers} layers`,
-    `tiles: gibs ${counts.gibs} · close ${counts.close} · vector ${counts.vector}`,
-    `glyphs ${counts.glyphs} · sprite ${counts.sprite} · features drawn ${features}`,
+    `imagery: gibs ${counts.gibs} · close ${counts.close}`,
+    `vector src ${vector.present ? 'yes' : 'MISSING'} · loaded ${vector.loaded ? 'yes' : 'no'}` +
+      ` · cached tiles ${vector.tiles} · features ${features}`,
   ];
-  if (styleLoaded && counts.vector === 0) {
-    lines.push('NO VECTOR TILES — roads and labels cannot draw');
-  } else if (styleLoaded && counts.vector > 0 && features === 0) {
-    lines.push('TILES BUT NO FEATURES — the source loaded and drew nothing');
+
+  if (!vector.present) {
+    lines.push('NO VECTOR SOURCE — the style has no tiles to draw roads from');
+  } else if (vector.tiles === 0) {
+    lines.push('SOURCE HAS NO TILES — nothing was ever fetched for this view');
+  } else if (features === 0) {
+    lines.push('TILES BUT NO FEATURES — fetched and drew nothing');
   }
+
   for (const error of errors.slice(-ERROR_LIMIT)) lines.push(`! ${error}`);
   return lines;
+}
+
+/**
+ * What the map's own source cache says about the vector source.
+ *
+ * Authoritative in a way request counting is not: this is the state MapLibre
+ * decides what to draw from, on the main thread, regardless of which thread
+ * fetched the bytes.
+ */
+export interface VectorSourceState {
+  present: boolean;
+  loaded: boolean;
+  tiles: number;
+}
+
+/** Read that state, tolerating the internals moving. */
+export function vectorSourceState(map: import('maplibre-gl').Map, id: string): VectorSourceState {
+  let present = false;
+  let loaded = false;
+  let tiles = 0;
+
+  try {
+    present = Boolean(map.getSource(id));
+    loaded = present && map.isSourceLoaded(id) === true;
+    const caches = (map as unknown as { style?: { sourceCaches?: Record<string, unknown> } }).style
+      ?.sourceCaches;
+    const cache = caches?.[id] as { _tiles?: Record<string, unknown> } | undefined;
+    tiles = Object.keys(cache?._tiles ?? {}).length;
+  } catch {
+    // Internals are not API; a readout that throws is worse than one that
+    // under-reports.
+  }
+
+  return { present, loaded, tiles };
 }
 
 export function createDiagnosticsPanel(): DiagnosticsPanel {
@@ -122,6 +166,7 @@ export function createDiagnosticsPanel(): DiagnosticsPanel {
 
         element.textContent = '';
         for (const line of readoutLines({
+          vector: vectorSourceState(map, 'openmaptiles'),
           // `isStyleLoaded` is typed as possibly returning void in this
           // version; the readout wants a definite answer either way.
           styleLoaded: map.isStyleLoaded() === true,

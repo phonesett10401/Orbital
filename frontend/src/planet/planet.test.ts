@@ -43,7 +43,7 @@ import {
   withImagery,
 } from './basemap';
 import { isRenderable, unrenderableMessage } from './container';
-import { readoutLines, requestCounts } from './diagnostics';
+import { readoutLines, requestCounts, vectorSourceState } from './diagnostics';
 import { boundsToBBox, coversWholeWorld, wrapLongitude } from './viewport';
 
 const NOW = Date.parse('2026-08-28T12:00:00Z');
@@ -413,43 +413,123 @@ describe('the container guard', () => {
 });
 
 describe('the diagnostics readout', () => {
-  const counts = { style: 1, gibs: 12, close: 30, vector: 0, glyphs: 0, sprite: 0 };
+  const counts = { style: 1, gibs: 12, close: 30, vectorMainThread: 0, glyphs: 0, sprite: 0 };
+  const drawing = { present: true, loaded: true, tiles: 24 };
 
-  it('counts requests by kind from the browser timings', () => {
+  it('counts imagery requests by kind from the browser timings', () => {
     const names = [
       'https://tiles.openfreemap.org/styles/liberty',
       'https://gibs.earthdata.nasa.gov/wmts/.../3/2/4.jpeg',
-      'https://tiles.maps.eox.at/wmts/1.0.0/.../12/1721/3300.jpg',
-      'https://tiles.openfreemap.org/planet/20260823/14/12765/7560.pbf',
+      'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/12/1/2',
       'https://tiles.openfreemap.org/fonts/Noto%20Sans%20Regular/0-255.pbf',
     ];
     const result = requestCounts(names);
     expect(result.gibs).toBe(1);
+    // Whichever close tier is configured, not a named vendor: the readout
+    // once reported "sentinel 0" while Esri tiles were streaming (D60).
     expect(result.close).toBe(1);
-    // The glyph request is also a .pbf, and counting it as a vector tile would
-    // hide exactly the failure this panel exists to surface.
     expect(result.glyphs).toBe(1);
   });
 
-  it('calls out a loaded style with no vector tiles', () => {
-    // Every road, label and building comes from that one source. If it is
-    // silent the imagery underneath looks like the whole map, which is what
-    // was reported and what no screenshot could explain.
-    const lines = readoutLines({ styleLoaded: true, zoom: 14, layers: 95, features: 0, counts, errors: [] });
-    expect(lines.join('\n')).toContain('NO VECTOR TILES');
+  it('calls out a style with no vector source at all', () => {
+    const lines = readoutLines({
+      styleLoaded: true,
+      zoom: 14,
+      layers: 95,
+      features: 0,
+      vector: { present: false, loaded: false, tiles: 0 },
+      counts,
+      errors: [],
+    });
+    expect(lines.join('\n')).toContain('NO VECTOR SOURCE');
   });
 
-  it('says nothing of the sort while the style is still loading', () => {
-    const lines = readoutLines({ styleLoaded: false, zoom: 2, layers: 0, features: 0, counts, errors: [] });
-    expect(lines.join('\n')).not.toContain('NO VECTOR TILES');
-    expect(lines[0]).toContain('LOADING');
+  it('separates a source with no tiles from tiles with no features', () => {
+    // The two look identical in a screenshot, and the difference is where to
+    // start looking: the network, or the paint.
+    const noTiles = readoutLines({
+      styleLoaded: true,
+      zoom: 14,
+      layers: 95,
+      features: 0,
+      vector: { present: true, loaded: false, tiles: 0 },
+      counts,
+      errors: [],
+    }).join('\n');
+    expect(noTiles).toContain('SOURCE HAS NO TILES');
+
+    const noFeatures = readoutLines({
+      styleLoaded: true,
+      zoom: 14,
+      layers: 95,
+      features: 0,
+      vector: drawing,
+      counts,
+      errors: [],
+    }).join('\n');
+    expect(noFeatures).toContain('TILES BUT NO FEATURES');
+  });
+
+  it('says nothing of the sort when the map is working', () => {
+    // A diagnostic that cries wolf gets ignored.
+    const lines = readoutLines({
+      styleLoaded: true,
+      zoom: 14,
+      layers: 95,
+      features: 1200,
+      vector: drawing,
+      counts,
+      errors: [],
+    }).join('\n');
+    expect(lines).not.toContain('NO VECTOR SOURCE');
+    expect(lines).not.toContain('SOURCE HAS NO TILES');
+    expect(lines).not.toContain('TILES BUT NO FEATURES');
   });
 
   it('shows the most recent errors, not the first ones', () => {
     const errors = ['one', 'two', 'three', 'four'];
-    const lines = readoutLines({ styleLoaded: true, zoom: 14, layers: 95, features: 900, counts, errors });
-    expect(lines.join('\n')).toContain('four');
-    expect(lines.join('\n')).not.toContain('one');
+    const lines = readoutLines({
+      styleLoaded: true,
+      zoom: 14,
+      layers: 95,
+      features: 900,
+      vector: drawing,
+      counts,
+      errors,
+    }).join('\n');
+    expect(lines).toContain('four');
+    expect(lines).not.toContain('one');
+  });
+
+  it('reports the source cache rather than counting requests', () => {
+    // Vector tiles are fetched inside a Web Worker, and
+    // `performance.getEntriesByType` on the main thread cannot see a worker's
+    // requests -- so the old counter could only ever read zero, which is
+    // exactly what it did while being believed (D61).
+    const map = {
+      getSource: () => ({ type: 'vector' }),
+      isSourceLoaded: () => true,
+      style: { sourceCaches: { openmaptiles: { _tiles: { a: 1, b: 2, c: 3 } } } },
+    } as unknown as import('maplibre-gl').Map;
+    expect(vectorSourceState(map, 'openmaptiles')).toEqual({
+      present: true,
+      loaded: true,
+      tiles: 3,
+    });
+  });
+
+  it('survives the internals it reads not being there', () => {
+    const map = {
+      getSource: () => undefined,
+      isSourceLoaded: () => {
+        throw new Error('no such source');
+      },
+    } as unknown as import('maplibre-gl').Map;
+    expect(vectorSourceState(map, 'openmaptiles')).toEqual({
+      present: false,
+      loaded: false,
+      tiles: 0,
+    });
   });
 });
 
@@ -529,32 +609,6 @@ describe('styling cartography for imagery', () => {
   });
 });
 
-describe('the tiles-but-no-features line', () => {
-  it('separates a missing source from an invisible one', () => {
-    // The two explanations for an empty map look identical in a screenshot.
-    const counts = { style: 1, gibs: 4, close: 8, vector: 40, glyphs: 2, sprite: 1 };
-    const invisible = readoutLines({
-      styleLoaded: true,
-      zoom: 15,
-      layers: 95,
-      features: 0,
-      counts,
-      errors: [],
-    }).join('\n');
-    expect(invisible).toContain('TILES BUT NO FEATURES');
-
-    const working = readoutLines({
-      styleLoaded: true,
-      zoom: 15,
-      layers: 95,
-      features: 1200,
-      counts,
-      errors: [],
-    }).join('\n');
-    expect(working).not.toContain('TILES BUT NO FEATURES');
-    expect(working).not.toContain('NO VECTOR TILES');
-  });
-});
 
 describe('resolveVectorSources', () => {
   const tileJson = {

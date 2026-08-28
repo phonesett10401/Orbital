@@ -93,9 +93,9 @@ cd frontend && npm test
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
-| `planet.test.ts` | 47 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics** |
+| `planet.test.ts` | 49 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **682** | 321 backend, 361 frontend |
+| **Total** | **684** | 321 backend, 363 frontend |
 
 ### What the automated suites do not cover
 
@@ -1682,3 +1682,23 @@ invisible.
 **A defect in the instrument, too.** The same screenshot read `sentinel 0`
 while Esri tiles were streaming: the readout still named the provider D58 had
 replaced. It now matches whichever close tier is configured.
+
+### 19.11 The readout was measuring nothing
+
+`vector 0` was believed twice and sent one commit in the wrong direction.
+MapLibre fetches vector tiles **inside a Web Worker**, and
+`performance.getEntriesByType('resource')` only reports the calling thread's
+requests — so that counter could never have read anything but zero. Reasoning
+in D61.
+
+The panel now reports MapLibre's own source-cache state, which is main-thread
+and authoritative: source present, source loaded, tiles cached, features drawn.
+Three distinguishable failures instead of one ambiguous number — no source, no
+tiles, or tiles that draw nothing.
+
+Seven tests, including two that would have caught the original fault: one
+drives `vectorSourceState` against a stub map and asserts it reads the cache
+rather than the network, and one asserts a working map prints none of the three
+warnings — the check that was never run, because the instrument had only ever
+been pointed at a broken map, where zero is what a correct instrument prints
+too.

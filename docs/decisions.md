@@ -2754,3 +2754,52 @@ that names a vendor goes stale the moment the vendor changes, so it now matches
 whichever close tier is configured and prints `close`. **The measurement
 harness is code too** — this project's oldest lesson, now paid for by the tool
 built to stop paying for it.
+
+---
+
+## D61 — The readout was reading a number that could not move
+
+**Decision:** the diagnostics panel reports MapLibre's own source-cache state —
+is the source present, is it loaded, how many tiles are cached, how many
+features are being drawn — instead of counting vector tile requests.
+
+**The instrument was wrong, and it sent two rounds of work in the wrong
+direction.** `vector 0` was read as "MapLibre never requested a vector tile",
+and D60 was built on that reading: the TileJSON indirection was removed so the
+source would arrive pre-resolved. The next screenshot said `vector 0` again, at
+zoom 17, with imagery streaming.
+
+**MapLibre fetches vector tiles inside a Web Worker.** Raster tiles are loaded
+on the main thread as images; vector tiles are requested and parsed off it. And
+`performance.getEntriesByType('resource')` reports the *calling thread's*
+requests — so a main-thread readout cannot see a worker's fetches at all. That
+counter could only ever have read zero. It was not measuring a failure; it was
+measuring nothing, in a way that looked exactly like a failure.
+
+This is the third time the harness has been the problem — the rotation probe's
+aspect ratio, the lighting probe's three confounds, and now this — and the
+first time one of those was the tool built specifically to stop it happening.
+**A diagnostic must be checked against a known-good state before it is
+trusted**, and this one never was: it had only ever been run against a broken
+map, where zero is exactly what a correct instrument would also print.
+
+### What it reports now
+
+`map.getSource`, `map.isSourceLoaded` and the source cache's tile count: all
+main-thread state, and the state MapLibre actually decides what to draw from,
+regardless of which thread fetched the bytes. Three distinguishable failures
+instead of one ambiguous number:
+
+| Line | Meaning |
+|---|---|
+| `NO VECTOR SOURCE` | the style has nothing to draw roads from |
+| `SOURCE HAS NO TILES` | nothing was fetched for this view |
+| `TILES BUT NO FEATURES` | fetched, and drew nothing |
+
+The request counter survives, renamed `vectorMainThread` and documented as
+untrustworthy, because deleting it would invite somebody to add it back.
+
+**D60 stands on its own merits**: resolving the TileJSON ourselves removes a
+request that can fail silently and keeps the weekly-dated tile path current. It
+simply was not the fix for this, and the entry should be read as a change made
+for a reason that turned out not to be the reason.
