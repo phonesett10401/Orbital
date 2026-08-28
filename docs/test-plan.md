@@ -95,10 +95,11 @@ cd frontend && npm test
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
 | `planet.test.ts` | 53 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
 | `route.test.ts` (planet) | 13 | **Great-circle densification, antimeridian unwrapping, the casing** |
+| `status.test.ts` | 13 | **Failure classification, the stall notice, one-answer selection, querying before the layers exist** |
 | `terminator.test.ts` | 29 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **773** | 325 backend, 448 frontend |
+| **Total** | **786** | 325 backend, 461 frontend |
 
 ### What the automated suites do not cover
 
@@ -223,6 +224,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 20 | **The planet view failed silently** — no `catch`, no message: a blocked basemap host, a collapsed container, a browser without WebGL 2 and an unknown throw all produced the same black rectangle, and the container helper's carefully written explanation was rejected into nothing | Medium | Found while diagnosing a black screen from a console (D70, §19.20) | Fixed |
 | 19 | **The night toggle was invisible and unclickable** — placed bottom left, where the legend occupies the corner and the status bar is painted over what is left of it, and styled by inheritance so it computed as near-black on a transparent background over a black ocean. Present in the DOM, `elementFromPoint` returned the status bar | Medium, visual | Driving the app in Phone's own Chrome from this session (§19.19) | Fixed |
 | 18 | **The map turned white on the way in** — imagery faded out at zoom 7.5 and the vector basemap's `#f8f4f0` background became the ground | High, visual | Four screenshots from Phone (D56, §19.6) | Fixed |
 | 17 | **The MapLibre map rendered into a container collapsed to zero height** by MapLibre's own stylesheet winning the cascade — no error, no failed request, a blank screen | High | A screenshot from Phone (D55, §19.5) | Fixed |
@@ -1964,3 +1966,41 @@ style with one background layer and no network at all. That last control is
 what proves it is the frame loop and not the network, the worker, the tiles or
 our code: a style that fetches nothing still hangs. A frozen tab is not a slow
 one.
+
+### 19.20 Saying why the map is not there
+
+The planet view had no failure handling at all before this: no `catch`, no
+message, and one appearance for every way of failing — a black rectangle
+(defect #20). Reasoning in D70; the click-handler change that came with it is
+D69. **13 tests**, in `status.test.ts`.
+
+**What is tested is the classification, not the prose.** Prose is checked by
+reading it. The classification decides whether a reader goes and looks at their
+network, their layout, or their browser version:
+
+| Thrown | Classified | Checked against |
+|---|---|---|
+| `...liberty: HTTP 503` | basemap | The exact string `loadPlanetStyle` throws |
+| `Failed to fetch`, `NetworkError...` | basemap | What a dead network throws, which is not an HTTP status |
+| `unrenderableMessage(...)` | container | Built by calling the helper, so the test breaks if that wording drifts |
+| `Failed to initialize WebGL` | webgl | |
+| `undefined`, `null`, `42`, `{}`, `''` | unknown | The fallback matters most: an unclassified failure must still be a sentence |
+
+**The stall notice is asserted not to read as a failure**, because a slow map
+may still arrive and calling it an error is a lie a reload cannot fix, and its
+text is asserted to mention the background-tab case — the one that cost a
+session (§19.19).
+
+**Selection is now one answer to one question** (D69). The old shape was two
+handlers on the same click: one selected on a hit, the other deselected on a
+miss, each with its own query. `selectionFromHits` is asserted to return either
+an id or null and never to be able to do both, to skip features carrying no
+usable id rather than treating them as a miss, and to count a hit on a callsign
+as a hit on its aircraft. `hitsAt` is asserted to answer with an empty list when
+MapLibre throws for a layer that is not in the style yet — a real window on a
+slow connection, in which a click must do nothing rather than take the view
+down.
+
+**Not verified: how any of it looks.** Standing limitation (§19.19). The
+failure path is reachable on demand — point `VITE_CITY_STYLE_URL` at a dead
+host and the basemap notice appears — which is the cheapest way to look at it.

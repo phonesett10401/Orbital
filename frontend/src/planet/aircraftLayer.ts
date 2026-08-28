@@ -102,6 +102,55 @@ export function aircraftFeatures(
 }
 
 /**
+ * Which aircraft a click selected, if any.
+ *
+ * Split out from the view because it is the whole of the decision, and because
+ * the decision used to be spread across two handlers that could disagree: one
+ * selected when it found a feature, the other deselected when it found none,
+ * and a click that satisfied both left the aircraft selected and then not
+ * (D69). A single function returning "this one, or nothing" cannot do that.
+ *
+ * A hit on the callsign counts as a hit on its aircraft. The label is drawn for
+ * the aircraft and reads as part of it, so treating it as a miss would make a
+ * click land on the map and clear the selection the user was aiming at.
+ */
+export function selectionFromHits(
+  hits: Array<{ properties?: Record<string, unknown> | null }> | null | undefined,
+): string | null {
+  for (const hit of hits ?? []) {
+    const id = hit.properties?.id;
+    if (typeof id === 'string' && id.length > 0) return id;
+  }
+  return null;
+}
+
+/**
+ * The aircraft features under a point, or an empty list.
+ *
+ * `queryRenderedFeatures` throws if a layer it is given does not exist, which
+ * happens in the window between the style loading and our layers being added -
+ * and a click in that window must do nothing, not tear the view down.
+ */
+export interface Queryable<P> {
+  queryRenderedFeatures(point: P, options: { layers: string[] }): Array<{
+    properties?: Record<string, unknown> | null;
+  }>;
+}
+
+export function hitsAt<P>(
+  map: Queryable<P>,
+  point: P,
+): Array<{ properties?: Record<string, unknown> | null }> {
+  try {
+    return map.queryRenderedFeatures(point, {
+      layers: [AIRCRAFT_LAYER, AIRCRAFT_LABEL_LAYER],
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
  * The altitude ramp from D28, as a CSS colour MapLibre can use.
  *
  * `altitudeColor` returns linear 0..1 channels for the shader; MapLibre wants

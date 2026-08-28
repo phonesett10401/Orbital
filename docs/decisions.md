@@ -3246,3 +3246,87 @@ corner and the attribution owns the bottom-right.
 Its label says what pressing it will do, not what is currently on. A button
 labelled with its own state reads as a status line and gets pressed by someone
 trying to confirm what they are looking at.
+
+---
+
+## D69 — One click handler, because two had to agree
+
+**Decision:** the planet view decides selection in a single click handler, from
+a single query, through a pure function that returns "this aircraft, or
+nothing".
+
+It was two handlers. A layer-scoped one selected whatever aircraft the click
+landed on, and a general one ran its own `queryRenderedFeatures` at the same
+point and cleared the selection if it found nothing. Both fire for every click.
+
+**They agreed only by coincidence.** Nothing made the two queries answer
+identically — they were separate calls with separate geometry, and the failure
+mode is a select immediately undone by a deselect within one click, which looks
+exactly like "clicking aircraft does nothing sometimes". It was seen once while
+driving the app from a console on 2026-08-28; that instance was probably an
+artefact of a synthetic mouse event rather than a real user click, and **the
+ordering dependency is a defect whether or not that particular sighting was**.
+
+Now: one query, one answer, no ordering. `selectionFromHits` takes the features
+under the pointer and returns the first usable id or null, and it is the whole
+decision, so it cannot produce both.
+
+Two smaller things came with it, both of which the old shape got wrong:
+
+- **A click on a callsign selects its aircraft.** The label was previously only
+  consulted to decide whether a click counted as a miss. It is drawn for the
+  aircraft and reads as part of it, so treating it as a miss made a deliberate
+  click clear the selection it was aiming at.
+- **A click before the layers exist does nothing.** `queryRenderedFeatures`
+  throws when asked about a layer that is not in the style yet, which is a real
+  window on a slow connection. `hitsAt` answers with an empty list instead of
+  taking the view down.
+
+---
+
+## D70 — The map now says why it is not there
+
+**Decision:** the planet view catches its own failures, classifies them into
+four kinds with a sentence each and a Retry, and separately says when a map is
+merely slow rather than broken.
+
+**It had no failure handling at all** — no `catch`, no message. Every way of
+failing produced one thing: a black rectangle where the world should be
+(defect #20). `whenRenderable` already rejected with a carefully written
+explanation of the CSS collision that caused two earlier defects, and that
+rejection was never caught by anything.
+
+This matters here more than it would elsewhere for a specific reason: **this
+view depends on three third-party hosts it does not control** (D54, D58, D60),
+and it will be demonstrated on a network nobody controls either. "It is broken"
+and "this network is blocking tiles.openfreemap.org" need different sentences,
+because they need different actions from whoever is reading.
+
+Four kinds, chosen by what the reader would *do* next:
+
+| Kind | Reader's next move |
+|---|---|
+| **basemap** — the style or its tiles did not arrive | Check the network. Also told: the aircraft data is unaffected |
+| **container** — the map had nowhere to draw | A layout problem in the page, not the data (D55, D62) |
+| **webgl** — the browser cannot draw it | Use a current browser |
+| **unknown** — anything else | Reload; the thrown text is on screen for the report |
+
+Splitting further would produce messages that differ without changing anyone's
+next move.
+
+**A slow map is not a failed one, and gets its own notice.** After twenty
+seconds without `load`, a panel appears at the bottom — out of the way, because
+the map may still arrive underneath it — saying so, with the sentence that cost
+a whole session to learn: **a browser tab in the background gets no
+`requestAnimationFrame`, and MapLibre then never finishes loading any style at
+all**, not even one with a single background layer and no network (§19.19).
+From the outside that is indistinguishable from a network stall, and it is the
+first thing to check.
+
+**Retry re-runs the effect** by incrementing an attempt counter rather than
+adding a second path for disposing of a map. The existing cleanup tears the old
+one down exactly as it does on unmount, so there is one teardown, not two.
+
+The notices are **siblings of the map container, not children of it**. MapLibre
+expects the element it is handed to be its own, and the one time this view put
+something inside it before construction it cost a session (D62).
