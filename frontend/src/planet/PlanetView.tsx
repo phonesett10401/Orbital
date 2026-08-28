@@ -32,6 +32,7 @@ import {
 import { loadPlanetStyle } from './basemap';
 import { createAircraftIconCanvas, createUnknownIconCanvas } from '../globe/aircraftSprite';
 import { isRenderable, unrenderableMessage } from './container';
+import { createDiagnosticsPanel } from './diagnostics';
 import { boundsToBBox, coversWholeWorld } from './viewport';
 
 /** How often to republish the viewport, matching the globe view's cadence. */
@@ -47,6 +48,7 @@ export function PlanetView() {
     let disposed = false;
     let map: import('maplibre-gl').Map | null = null;
     let unsubscribe: (() => void) | null = null;
+    let diagnostics: ReturnType<typeof createDiagnosticsPanel> | null = null;
     let frame = 0;
 
     void (async () => {
@@ -63,6 +65,14 @@ export function PlanetView() {
       const size = { width: container.clientWidth, height: container.clientHeight };
       if (!isRenderable(size)) console.warn(unrenderableMessage(size));
 
+      // Dev-only, and it earns its place: the map is looked at on one machine
+      // and debugged on another, and a screenshot shows what is drawn while
+      // saying nothing about why. This puts the why on screen (D57).
+      if (import.meta.env.DEV) {
+        diagnostics = createDiagnosticsPanel();
+        container.appendChild(diagnostics.element);
+      }
+
       map = new maplibre.Map({
         container,
         style,
@@ -70,6 +80,8 @@ export function PlanetView() {
         zoom: 2,
         attributionControl: { compact: true },
       });
+
+      diagnostics?.attach(map);
 
       map.on('load', () => {
         if (!map) return;
@@ -163,6 +175,7 @@ export function PlanetView() {
       disposed = true;
       cancelAnimationFrame(frame);
       unsubscribe?.();
+      diagnostics?.dispose();
       map?.remove();
     };
   }, []);

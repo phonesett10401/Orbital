@@ -93,9 +93,9 @@ cd frontend && npm test
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
-| `planet.test.ts` | 34 | **The MapLibre style, aircraft as GeoJSON, bounds to the bbox, the container guard** |
+| `planet.test.ts` | 38 | **The MapLibre style, aircraft as GeoJSON, bounds to the bbox, the container guard, diagnostics** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **669** | 321 backend, 348 frontend |
+| **Total** | **673** | 321 backend, 352 frontend |
 
 ### What the automated suites do not cover
 
@@ -1577,3 +1577,24 @@ tiles; the near tier reaches closer than the far one; both tiers request
 **Verified from the browser:** Sentinel-2 answers `200 image/jpeg` at zooms 2,
 8, 12, 14 and 15, with CORS. **Not verified: how it looks.** No agent-driven
 browser here composites, so tile loading never begins.
+
+### 19.7 The in-app diagnostics readout
+
+Development-only, drawn into the planet view (D57): style state, layer count,
+per-source tile counts, and the last three MapLibre errors.
+
+It exists because the map is looked at on one machine and debugged on another.
+No browser surface available to the agent composites, so MapLibre never loads a
+style there and every probe reports the same "not loaded" whether the code is
+right or wrong; from the other side a screenshot shows what is drawn and
+nothing about why. Both defects in this view so far (#17, #18) cost a full
+round trip to identify from a picture.
+
+Four tests, on the pure parts:
+
+| What is pinned | Why |
+|---|---|
+| Requests are counted by kind | The readout is only useful if the counts are right |
+| **Glyph requests are not counted as vector tiles** | Both are `.pbf`; conflating them hides the exact failure the panel exists to show |
+| "NO VECTOR TILES" appears only once the style has loaded | Before that it is normal and the warning would be noise |
+| The most recent errors are shown, not the first | The first error is usually a consequence of an earlier state; the last is what is true now |

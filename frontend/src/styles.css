@@ -565,3 +565,22 @@ body {
 .planet-view .maplibregl-ctrl-attrib {
   font-size: 11px;
 }
+
+/*
+ * The planet view's dev readout. Deliberately plain and small: it is there to
+ * be photographed, not admired, and it must never be mistaken for chrome.
+ */
+.app .planet-diagnostics {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  max-width: 380px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #cfe3ff;
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  pointer-events: none;
+  white-space: pre-wrap;
+}

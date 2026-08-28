@@ -41,6 +41,7 @@ import {
   withImagery,
 } from './basemap';
 import { isRenderable, unrenderableMessage } from './container';
+import { readoutLines, requestCounts } from './diagnostics';
 import { boundsToBBox, coversWholeWorld, wrapLongitude } from './viewport';
 
 const NOW = Date.parse('2026-08-28T12:00:00Z');
@@ -397,5 +398,46 @@ describe('the container guard', () => {
     expect(message).toContain('1280x0');
     expect(message).toContain('maplibregl-map');
     expect(message).toContain('position: relative');
+  });
+});
+
+describe('the diagnostics readout', () => {
+  const counts = { style: 1, gibs: 12, sentinel: 30, vector: 0, glyphs: 0, sprite: 0 };
+
+  it('counts requests by kind from the browser timings', () => {
+    const names = [
+      'https://tiles.openfreemap.org/styles/liberty',
+      'https://gibs.earthdata.nasa.gov/wmts/.../3/2/4.jpeg',
+      'https://tiles.maps.eox.at/wmts/1.0.0/.../12/1721/3300.jpg',
+      'https://tiles.openfreemap.org/planet/20260823/14/12765/7560.pbf',
+      'https://tiles.openfreemap.org/fonts/Noto%20Sans%20Regular/0-255.pbf',
+    ];
+    const result = requestCounts(names);
+    expect(result.gibs).toBe(1);
+    expect(result.sentinel).toBe(1);
+    // The glyph request is also a .pbf, and counting it as a vector tile would
+    // hide exactly the failure this panel exists to surface.
+    expect(result.glyphs).toBe(1);
+  });
+
+  it('calls out a loaded style with no vector tiles', () => {
+    // Every road, label and building comes from that one source. If it is
+    // silent the imagery underneath looks like the whole map, which is what
+    // was reported and what no screenshot could explain.
+    const lines = readoutLines({ styleLoaded: true, zoom: 14, layers: 95, counts, errors: [] });
+    expect(lines.join('\n')).toContain('NO VECTOR TILES');
+  });
+
+  it('says nothing of the sort while the style is still loading', () => {
+    const lines = readoutLines({ styleLoaded: false, zoom: 2, layers: 0, counts, errors: [] });
+    expect(lines.join('\n')).not.toContain('NO VECTOR TILES');
+    expect(lines[0]).toContain('LOADING');
+  });
+
+  it('shows the most recent errors, not the first ones', () => {
+    const errors = ['one', 'two', 'three', 'four'];
+    const lines = readoutLines({ styleLoaded: true, zoom: 14, layers: 95, counts, errors });
+    expect(lines.join('\n')).toContain('four');
+    expect(lines.join('\n')).not.toContain('one');
   });
 });

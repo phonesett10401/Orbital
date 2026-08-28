@@ -2567,3 +2567,38 @@ rather than how close the imagery held up, and D48, where the glint was
 measured in isolation rather than against the ocean beneath it. **Three times
 now: the quantity that mattered was a relationship, and it was measured as a
 property.**
+
+---
+
+## D57 — The map reports on itself, because it is looked at on another machine
+
+**Decision:** a development-only readout drawn into the planet view, showing
+whether the style loaded, how many tiles of each kind have been requested, and
+the last few errors MapLibre raised.
+
+**The problem it solves is not technical, it is a communication one.** The map
+is looked at on one machine and debugged on another, and neither can see the
+other. The browser surfaces available here do not composite, so MapLibre never
+gets the `requestAnimationFrame` it needs to load a style or fetch a tile —
+every probe reports "not loaded" whether the code is right or wrong, and
+`map._render()` by hand does not advance it either. From the other side, a
+screenshot shows exactly what is drawn and nothing whatever about why. Two
+defects in this view (D55, D56) each cost a full round trip to identify from a
+picture.
+
+So the map says what it is doing, on screen, where a screenshot carries it.
+
+**The line that matters most is the one that names a diagnosis rather than a
+number**: "NO VECTOR TILES — roads and labels cannot draw", shown only when the
+style has loaded and the vector count is still zero. Every road, label and
+building comes from that one source; if it is silent, the imagery underneath
+looks like the whole map, and the symptom — a beautiful satellite view with no
+cartography on it — points nowhere near the cause.
+
+**A detail worth pinning, and a test does:** glyphs are also `.pbf`, so a naive
+pattern counts font requests as vector tiles and hides precisely the failure
+the panel exists to surface.
+
+Stripped from production by the `DEV` guard, like the globe's `__orbital`
+console handle. It is deliberately plain — it is there to be photographed, not
+admired.
