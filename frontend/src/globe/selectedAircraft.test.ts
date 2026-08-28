@@ -22,13 +22,12 @@ import * as THREE from 'three';
 import type { RenderableObject } from '../types';
 import { latLonToVector3 } from './earth';
 import { MARKER_ALTITUDE, MARKER_WORLD_SIZE, SELECTED_SIZE_MULTIPLIER } from './markers';
+import { MODEL_SPAN_UNITS, createAircraftGeometry } from '../airframe';
 import {
   MODEL_MAX_PX,
   MODEL_MIN_PX,
-  MODEL_SPAN_UNITS,
   aircraftOrientation,
   canRenderModel,
-  createAircraftGeometry,
   createSelectedAircraftLayer,
   modelSpanWorld,
 } from './selectedAircraft';
