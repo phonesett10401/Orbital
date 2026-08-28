@@ -96,7 +96,7 @@ cd frontend && npm test
 | `planet.test.ts` | 53 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
 | `route.test.ts` (planet) | 13 | **Great-circle densification, antimeridian unwrapping, the casing** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **701** | 321 backend, 380 frontend |
+| **Total** | **702** | 321 backend, 381 frontend |
 
 ### What the automated suites do not cover
 
@@ -1767,3 +1767,23 @@ The route line, ported (D64). 13 tests in `route.test.ts`:
 Verified in the running app: a three-point track densifies to 25 coordinates
 with endpoints intact, and a track from 170°E to 175°W unwraps to 185° with no
 step larger than 1.3°.
+
+### 19.15 The readout's third false zero
+
+`SOURCE HAS NO TILES` appeared on a map that was drawing borders and city
+labels, with `loaded yes · features 120` on the line above it. The warning was
+keyed on a cached-tile count read from MapLibre's internals; the count was
+wrong. Reasoning in D65.
+
+That is three false zeros from this panel — a request counter that could not
+see a worker's fetches (§19.11), a pattern naming a replaced vendor (§19.10),
+and now an internal cache read. The warnings are now derived only from
+`isSourceLoaded` and `queryRenderedFeatures`, both public API. A test pins that
+a map reporting itself loaded and drawing 120 features prints no warning
+whatever the tile count says.
+
+**Also fixed: a race in the route layer.** The track is written by a
+subscription that fires on change, into a source created when the map loads.
+An aircraft selected while the map was still loading has already had its one
+detail fetch, so the update is dropped and nothing fires again. The source is
+now seeded from the store at creation.

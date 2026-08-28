@@ -457,7 +457,7 @@ describe('the diagnostics readout', () => {
       counts,
       errors: [],
     }).join('\n');
-    expect(noTiles).toContain('SOURCE HAS NO TILES');
+    expect(noTiles).toContain('SOURCE NOT LOADED');
 
     const noFeatures = readoutLines({
       styleLoaded: true,
@@ -468,7 +468,7 @@ describe('the diagnostics readout', () => {
       counts,
       errors: [],
     }).join('\n');
-    expect(noFeatures).toContain('TILES BUT NO FEATURES');
+    expect(noFeatures).toContain('LOADED BUT NO FEATURES');
   });
 
   it('says nothing of the sort when the map is working', () => {
@@ -483,8 +483,8 @@ describe('the diagnostics readout', () => {
       errors: [],
     }).join('\n');
     expect(lines).not.toContain('NO VECTOR SOURCE');
-    expect(lines).not.toContain('SOURCE HAS NO TILES');
-    expect(lines).not.toContain('TILES BUT NO FEATURES');
+    expect(lines).not.toContain('SOURCE NOT LOADED');
+    expect(lines).not.toContain('LOADED BUT NO FEATURES');
   });
 
   it('shows the most recent errors, not the first ones', () => {
@@ -725,5 +725,24 @@ describe('whenRenderable', () => {
     await expect(pending).resolves.toEqual({ width: 800, height: 600 });
 
     globalThis.ResizeObserver = original;
+  });
+});
+
+describe('the readout does not judge on internals', () => {
+  it('stays quiet when the map says loaded and is drawing, whatever the tile count', () => {
+    // Observed: `cached tiles 0` while 120 features drew from a source
+    // reporting itself loaded. The tile count reads MapLibre's internals and
+    // was wrong; `loaded` and `features` are public API and were right (D65).
+    const lines = readoutLines({
+      styleLoaded: false,
+      zoom: 4.8,
+      layers: 97,
+      features: 120,
+      vector: { present: true, loaded: true, tiles: 0, template: 'https://t/{z}/{x}/{y}.pbf', maxzoom: 14 },
+      counts: { style: 1, gibs: 114, close: 24, vectorMainThread: 0, glyphs: 3, sprite: 2 },
+      errors: [],
+    }).join('\n');
+    expect(lines).not.toContain('SOURCE NOT LOADED');
+    expect(lines).not.toContain('LOADED BUT NO FEATURES');
   });
 });

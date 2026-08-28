@@ -30,7 +30,7 @@ import {
   aircraftLayers,
 } from './aircraftLayer';
 import { loadPlanetStyle } from './basemap';
-import { ROUTE_SOURCE, emptyRoute, routeFeatures, routeLayers } from './routeLayer';
+import { ROUTE_SOURCE, routeFeatures, routeLayers } from './routeLayer';
 import { createAircraftIconCanvas, createUnknownIconCanvas } from '../globe/aircraftSprite';
 import { whenRenderable } from './container';
 import { createDiagnosticsPanel } from './diagnostics';
@@ -115,7 +115,15 @@ export function PlanetView() {
 
         // The route goes in first, so the aircraft symbols draw over their own
         // track rather than under it.
-        map.addSource(ROUTE_SOURCE, { type: 'geojson', data: emptyRoute() });
+        //
+        // Seeded from the store rather than empty, because the subscription
+        // below only fires on *change*: an aircraft selected while the map was
+        // still loading has already had its one detail fetch, and its track
+        // would never be drawn at all.
+        map.addSource(ROUTE_SOURCE, {
+          type: 'geojson',
+          data: routeFeatures(useOrbitalStore.getState().selectedDetail?.track),
+        });
         for (const layer of routeLayers()) map.addLayer(layer);
 
         map.addSource(AIRCRAFT_SOURCE, {

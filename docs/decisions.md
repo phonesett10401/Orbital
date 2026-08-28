@@ -2952,3 +2952,39 @@ both.
 **Redrawn on detail change, not per frame.** The track grows once per poll, and
 densifying it is the only expensive thing this layer does — the same reasoning
 the globe layer used, and the same subscription.
+
+---
+
+## D65 — Two faults in the reporting, one race in the route
+
+**Decision:** the readout diagnoses only from what MapLibre will answer for
+publicly, and the route source is seeded from the store rather than starting
+empty.
+
+**The readout cried wolf.** It printed `SOURCE HAS NO TILES` on a map that was
+visibly drawing borders and city labels, while its own line above read
+`loaded yes · features 120`. The warning was keyed on a cached-tile count read
+out of MapLibre's internals, and that count was wrong — the third false zero
+this panel has produced, after the request counter that could not see a
+worker's fetches (D61) and the vendor pattern that named a provider that had
+been replaced (D60).
+
+So the rule for it now: **diagnose from `isSourceLoaded` and
+`queryRenderedFeatures`**, which are public API and which the map answers about
+itself. The tile count is still printed, because it is useful context, and is
+never judged on. A number nobody trusts is worth keeping only if nothing
+depends on it.
+
+**And a race in the route.** The track is redrawn from a store subscription
+that fires on change, and the source it writes to is created when the map
+finishes loading. Select an aircraft while the map is still loading and the
+order inverts: the detail arrives, the subscription fires, there is no source
+to write to, and the update is dropped. Nothing fires again — the detail is
+fetched once per selection, not polled — so that aircraft's track never
+appears, for as long as it stays selected.
+
+The source is therefore created with whatever the store already holds instead
+of empty. The general form is worth stating, because this is the second time
+it has come up in this view after the container measurement: **anything built
+asynchronously must take its initial state from the world, not assume the world
+will announce itself again.**

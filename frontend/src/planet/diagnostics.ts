@@ -83,14 +83,20 @@ export function readoutLines(state: {
       ` · cached tiles ${vector.tiles} · features ${features}`,
   ];
 
+  // Diagnosed from `loaded` and `features`, both public API. The cached-tile
+  // count is printed but never judged on: it reads MapLibre's internals, and
+  // it reported zero while 120 features were being drawn from a source that
+  // said it was loaded — a third false zero from this panel, and the reason
+  // the rule is now to diagnose only from what the map itself will answer
+  // (D65).
   if (!vector.present) {
     lines.push('NO VECTOR SOURCE — the style has no tiles to draw roads from');
   } else if (!vector.template) {
     lines.push('SOURCE HAS NO TILE TEMPLATE — it was never resolved');
-  } else if (vector.tiles === 0) {
-    lines.push('SOURCE HAS NO TILES — nothing was ever fetched for this view');
+  } else if (!vector.loaded && features === 0) {
+    lines.push('SOURCE NOT LOADED — nothing was ever fetched for this view');
   } else if (features === 0) {
-    lines.push('TILES BUT NO FEATURES — fetched and drew nothing');
+    lines.push('LOADED BUT NO FEATURES — fetched and drew nothing');
   }
 
   // The template the map holds, and what happened when this panel fetched a
