@@ -36,6 +36,48 @@ export function isRenderable({ width, height }: ContainerSize): boolean {
 }
 
 /**
+ * Wait until a container has a size worth rendering into.
+ *
+ * Warning about a zero-sized container was not enough, which is the lesson
+ * here: MapLibre reads the container once, at construction, and falls back to
+ * a 400x300 canvas when it measures nothing. It does not necessarily recover
+ * when the layout settles — the container ends up 1280x720 with a 400x300
+ * canvas inside it and a transform that was never sized (D62).
+ *
+ * So construction waits. A `ResizeObserver` fires as soon as layout gives the
+ * element a box, which is usually the very next frame; the timeout is there so
+ * a container that never gets a size fails loudly rather than hanging.
+ */
+export function whenRenderable(
+  element: Element,
+  timeoutMs = 5000,
+): Promise<ContainerSize> {
+  const measure = (): ContainerSize => ({
+    width: element.clientWidth,
+    height: element.clientHeight,
+  });
+
+  const initial = measure();
+  if (isRenderable(initial)) return Promise.resolve(initial);
+
+  return new Promise((resolve, reject) => {
+    const observer = new ResizeObserver(() => {
+      const size = measure();
+      if (!isRenderable(size)) return;
+      observer.disconnect();
+      window.clearTimeout(timer);
+      resolve(size);
+    });
+    observer.observe(element);
+
+    const timer = window.setTimeout(() => {
+      observer.disconnect();
+      reject(new Error(unrenderableMessage(measure())));
+    }, timeoutMs);
+  });
+}
+
+/**
  * The message to print when it is not.
  *
  * Names the likely cause, because "container has no size" sends the reader

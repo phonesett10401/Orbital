@@ -2803,3 +2803,56 @@ untrustworthy, because deleting it would invite somebody to add it back.
 request that can fail silently and keeps the weekly-dated tile path current. It
 simply was not the fix for this, and the entry should be read as a change made
 for a reason that turned out not to be the reason.
+
+---
+
+## D62 — What was excluded, and the one defect it did find
+
+**Decision:** wait for the map container to have a box before constructing
+MapLibre, keep it sized with a `ResizeObserver`, and append the diagnostics
+panel after construction rather than before.
+
+**This entry is mostly a record of exclusions**, because the search cost more
+than the fix and the next person deserves the map of where the fault is *not*.
+Roads and labels were invisible; the readout said the vector source was present
+with a resolved template and had never fetched a tile. Each of the following
+was tested in the live page, in isolation, and **works**:
+
+| Suspected | Test | Result |
+|---|---|---|
+| The tile URL | fetched the template the live style holds | **200, 13 MB** |
+| MapLibre's worker | added a GeoJSON source, which parses in the worker | loads, fires `metadata`/`content`/`idle` |
+| Vector tiles at all | minimal style, one line layer, the same source | **802 features** |
+| The layer filter and recolour | the composed style, built by the app's own module | **1418 features** |
+| The globe projection | same style with and without it | 1418 against 1475 |
+| Worker starvation from the per-frame aircraft rewrite | 491 `setData` calls while tiles loaded | vector still loaded |
+| The whole view configuration | a replica of `PlanetView`'s map and load handler | **1418 features** |
+
+Every ingredient works. A replica of the view works. The application's own map,
+in the same page, does not — which is the shape of a defect in construction
+rather than in configuration, and is where the one thing found so far lives.
+
+**The defect: MapLibre was handed a container with no size.** It measures the
+container exactly once, at construction, and falls back to a 400x300 canvas
+when it measures nothing. Observed on the real map: container 1280x720, canvas
+**400x300**, transform never sized. D55 had already added a warning for this
+and the warning was not enough — it reported the problem and then carried on
+into it. Construction now waits for a box, and a `ResizeObserver` keeps the map
+sized afterwards.
+
+**Honesty about what that fixes.** It is a real defect with a measured before
+and after, and it is almost certainly *not* what Phone is seeing: their map
+fills the screen with imagery, so their canvas is full size. It is fixed
+because it is broken, not because it is the answer.
+
+**And a difference removed rather than diagnosed.** The diagnostics panel was
+appended inside the container *before* MapLibre took it over — the one
+structural difference between the application's map and every replica that
+worked. It is now appended afterwards. That is a guess, labelled as one.
+
+### What is left
+
+The console. Every observation so far has come through the readout or a probe,
+and MapLibre may be logging something that reaches neither — a worker error, a
+content-security refusal, an aborted request. It is the one instrument not yet
+read on the machine where the failure actually happens.

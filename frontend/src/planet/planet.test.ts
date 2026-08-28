@@ -42,7 +42,7 @@ import {
   styleForImagery,
   withImagery,
 } from './basemap';
-import { isRenderable, unrenderableMessage } from './container';
+import { isRenderable, unrenderableMessage, whenRenderable } from './container';
 import { readoutLines, requestCounts, tileUrlFor, vectorSourceState } from './diagnostics';
 import { boundsToBBox, coversWholeWorld, wrapLongitude } from './viewport';
 
@@ -683,5 +683,47 @@ describe('tileUrlFor', () => {
     expect(tileUrlFor(template, 13.75, 100.5, 17.4, 14)).toBe(
       tileUrlFor(template, 13.75, 100.5, 14, 14),
     );
+  });
+});
+
+describe('whenRenderable', () => {
+  it('resolves at once for a container that already has a box', async () => {
+    const element = { clientWidth: 1280, clientHeight: 720 } as unknown as Element;
+    await expect(whenRenderable(element)).resolves.toEqual({ width: 1280, height: 720 });
+  });
+
+  it('waits, rather than handing MapLibre a container with no size', async () => {
+    // Warning was not enough. MapLibre measures the container once, at
+    // construction, and a zero measurement leaves it on a 400x300 canvas that
+    // does not recover when the layout settles -- observed as a 1280x720
+    // container with a 400x300 canvas inside it (D62).
+    const element = { clientWidth: 0, clientHeight: 0 } as unknown as Element;
+    // Typed loosely on purpose: the stub assigns it from inside a class the
+    // compiler cannot see through.
+    let trigger: undefined | (() => void);
+    const original = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(callback: () => void) {
+        trigger = callback;
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    } as unknown as typeof ResizeObserver;
+
+    const pending = whenRenderable(element);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    (element as { clientWidth: number }).clientWidth = 800;
+    (element as { clientHeight: number }).clientHeight = 600;
+    (trigger as undefined | (() => void))?.();
+    await expect(pending).resolves.toEqual({ width: 800, height: 600 });
+
+    globalThis.ResizeObserver = original;
   });
 });

@@ -31,7 +31,7 @@ import {
 } from './aircraftLayer';
 import { loadPlanetStyle } from './basemap';
 import { createAircraftIconCanvas, createUnknownIconCanvas } from '../globe/aircraftSprite';
-import { isRenderable, unrenderableMessage } from './container';
+import { whenRenderable } from './container';
 import { createDiagnosticsPanel } from './diagnostics';
 import { boundsToBBox, coversWholeWorld } from './viewport';
 
@@ -49,6 +49,7 @@ export function PlanetView() {
     let map: import('maplibre-gl').Map | null = null;
     let unsubscribe: (() => void) | null = null;
     let diagnostics: ReturnType<typeof createDiagnosticsPanel> | null = null;
+    let cleanUpResize: (() => void) | null = null;
     let frame = 0;
 
     void (async () => {
@@ -59,19 +60,13 @@ export function PlanetView() {
       const style = await loadPlanetStyle();
       if (disposed) return;
 
-      // Checked after the stylesheet import above, which is when a cascade
-      // collision would already have collapsed the box. A blank map is
-      // otherwise completely silent (D55).
-      const size = { width: container.clientWidth, height: container.clientHeight };
-      if (!isRenderable(size)) console.warn(unrenderableMessage(size));
-
-      // Dev-only, and it earns its place: the map is looked at on one machine
-      // and debugged on another, and a screenshot shows what is drawn while
-      // saying nothing about why. This puts the why on screen (D57).
-      if (import.meta.env.DEV) {
-        diagnostics = createDiagnosticsPanel();
-        container.appendChild(diagnostics.element);
-      }
+      // Wait for the container to have a box before handing it over. MapLibre
+      // measures it once, at construction, and a zero measurement leaves it on
+      // a 400x300 canvas that does not recover when the layout settles: the
+      // container ends up full size with a tiny canvas inside it, and no
+      // vector tile is ever requested for a viewport that small (D62).
+      await whenRenderable(container);
+      if (disposed) return;
 
       map = new maplibre.Map({
         container,
@@ -80,6 +75,24 @@ export function PlanetView() {
         zoom: 2,
         attributionControl: { compact: true },
       });
+
+      // Dev-only, and it earns its place: the map is looked at on one machine
+      // and debugged on another, and a screenshot shows what is drawn while
+      // saying nothing about why. This puts the why on screen (D57).
+      //
+      // Appended *after* construction: MapLibre expects the container it is
+      // given to be its own, and handing it one that already has children is
+      // a difference from every working configuration tested (D62).
+      if (import.meta.env.DEV) {
+        diagnostics = createDiagnosticsPanel();
+        container.appendChild(diagnostics.element);
+      }
+
+      // And keep it sized: the first measurement is not a promise about the
+      // rest of the session.
+      const resizeObserver = new ResizeObserver(() => map?.resize());
+      resizeObserver.observe(container);
+      cleanUpResize = () => resizeObserver.disconnect();
 
       diagnostics?.attach(map);
 
@@ -175,6 +188,7 @@ export function PlanetView() {
       disposed = true;
       cancelAnimationFrame(frame);
       unsubscribe?.();
+      cleanUpResize?.();
       diagnostics?.dispose();
       map?.remove();
     };

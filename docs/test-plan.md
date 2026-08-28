@@ -93,9 +93,9 @@ cd frontend && npm test
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
-| `planet.test.ts` | 49 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics** |
+| `planet.test.ts` | 53 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **684** | 321 backend, 363 frontend |
+| **Total** | **688** | 321 backend, 367 frontend |
 
 ### What the automated suites do not cover
 
@@ -1702,3 +1702,26 @@ rather than the network, and one asserts a working map prints none of the three
 warnings — the check that was never run, because the instrument had only ever
 been pointed at a broken map, where zero is what a correct instrument prints
 too.
+
+### 19.12 The vector search: what was excluded
+
+Roads and labels invisible; source present, template resolved, no tiles ever
+fetched. Every one of these was tested live and works (D62): the tile URL (200,
+13 MB), MapLibre's worker (GeoJSON sources load), vector tiles in a minimal
+style (802 features), the composed style built by the app's own module (1418
+features), the globe projection (1418 against 1475 without), worker starvation
+from the per-frame aircraft rewrite (491 `setData` calls, vector still loaded),
+and a full replica of the view's map and load handler (1418 features).
+
+**One defect was found on the way**: MapLibre measures its container once, at
+construction, and falls back to a 400x300 canvas if it measures nothing.
+Observed on the real map — container 1280x720, canvas 400x300, transform never
+sized. D55's warning had reported exactly this and then carried on into it.
+Construction now waits for a box and a `ResizeObserver` keeps it sized.
+
+Two tests: a container that already has a box resolves immediately, and one
+that starts at zero resolves only once the observer reports a real size.
+
+That fix is real and measured, and it is probably not the reported failure —
+the screenshots show full-screen imagery, so that canvas is full size. It is
+fixed because it was broken.

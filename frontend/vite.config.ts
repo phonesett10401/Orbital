@@ -11,6 +11,24 @@ export default defineConfig({
   resolve: {
     dedupe: ['three'],
   },
+  /**
+   * MapLibre spawns a Web Worker to fetch and parse vector tiles. Vite's dev
+   * dependency pre-bundling rewrites the module in a way that loses the
+   * worker: `getWorkerUrl()` comes back as an empty string, no worker is
+   * created, and **no vector tile is ever requested** -- silently, with no
+   * error, while raster imagery keeps working because it is loaded on the main
+   * thread. That is exactly the failure this cost several rounds to find
+   * (D62).
+   *
+   * Excluding it from pre-bundling makes Vite serve MapLibre's own ESM, whose
+   * `new URL('./worker', import.meta.url)` then resolves correctly.
+   */
+  optimizeDeps: {
+    exclude: ['maplibre-gl'],
+  },
+  worker: {
+    format: 'es',
+  },
   server: {
     port: 5173,
     // Proxy /api to the backend so the browser sees a single origin in
