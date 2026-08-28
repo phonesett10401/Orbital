@@ -80,7 +80,7 @@ cd frontend && npm test
 | `test_thinning.py` | 26 | Grid, ranking, stability, determinism |
 | `test_api.py` | 43 | Endpoints, envelopes, errors, **outage over HTTP** |
 | `test_app_surface.py` | 17 | **Response compression and log output** |
-| `interpolate.test.ts` | 29 | Dead reckoning, easing, extrapolation limit |
+| `interpolate.test.ts` | 34 | Dead reckoning, easing, extrapolation limit |
 | `sun.test.ts` | 11 | Solar declination and subsolar longitude |
 | `viewport.test.ts` | 14 | Camera-to-bbox conversion |
 | `pointer.test.ts` | 17 | **Click-to-select through real DOM events** |
@@ -99,7 +99,7 @@ cd frontend && npm test
 | `terminator.test.ts` | 29 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **786** | 325 backend, 461 frontend |
+| **Total** | **791** | 325 backend, 466 frontend |
 
 ### What the automated suites do not cover
 
@@ -224,6 +224,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 21 | **The marker outran what the app admitted it knew** — dead reckoning ran for ten minutes while the marker faded and the panel said "position shown is the last one we received" from two, so a stale aircraft was drawn kilometres from the end of its own observed track | Medium, visual | Six screenshots from Phone (D71, §19.21) | Fixed |
 | 20 | **The planet view failed silently** — no `catch`, no message: a blocked basemap host, a collapsed container, a browser without WebGL 2 and an unknown throw all produced the same black rectangle, and the container helper's carefully written explanation was rejected into nothing | Medium | Found while diagnosing a black screen from a console (D70, §19.20) | Fixed |
 | 19 | **The night toggle was invisible and unclickable** — placed bottom left, where the legend occupies the corner and the status bar is painted over what is left of it, and styled by inheritance so it computed as near-black on a transparent background over a black ocean. Present in the DOM, `elementFromPoint` returned the status bar | Medium, visual | Driving the app in Phone's own Chrome from this session (§19.19) | Fixed |
 | 18 | **The map turned white on the way in** — imagery faded out at zoom 7.5 and the vector basemap's `#f8f4f0` background became the ground | High, visual | Four screenshots from Phone (D56, §19.6) | Fixed |
@@ -2004,3 +2005,33 @@ down.
 **Not verified: how any of it looks.** Standing limitation (§19.19). The
 failure path is reachable on demand — point `VITE_CITY_STYLE_URL` at a dead
 host and the basemap notice appears — which is the cheapest way to look at it.
+
+### 19.21 The marker and its own track disagreed
+
+Phone reported the aircraft and the end of its track separating as the map
+zoomed in, and being kilometres apart by z12. Not a rendering fault: the two
+were drawn from different beliefs about how long a position stays current
+(defect #21). Reasoning in D71. **5 tests**, added to `interpolate.test.ts`.
+
+| Source | Stopped trusting the position after |
+|---|---|
+| The observed track, drawn from reported positions only (D6) | immediately — it only ever shows what was reported |
+| The marker fade, and the detail panel's sentence | 120 s |
+| `MAX_EXTRAPOLATION_MS` | 600 s |
+
+**Measured on Phone's own aircraft.** ANA5686, ground speed 37 m/s, heading
+180, last reported 2m 18s before the screenshot: dead reckoning had carried the
+marker **5.1 km** south of the last point of its own line. The test asserts
+that distance from the same numbers, so the size of the error is recorded and
+not merely the fact of it. At the old cap the gap could reach **22 km**.
+
+The tests pin the coupling rather than the value: `MAX_EXTRAPOLATION_MS` is
+asserted to equal `STALE_AFTER_MS`, and the planet view's own threshold is
+asserted to be the same object — which fails if anybody reintroduces a second
+definition, which is how this happened. Two more guard the other direction: a
+fresh aircraft still moves between polls (D14), and the hold takes effect at the
+threshold rather than one tick past it.
+
+**Not changed: interpolation itself.** The change only bites once the
+application has already said, in words, that it does not know where the
+aircraft is.

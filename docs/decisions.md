@@ -3330,3 +3330,55 @@ one down exactly as it does on unmount, so there is one teardown, not two.
 The notices are **siblings of the map container, not children of it**. MapLibre
 expects the element it is handed to be its own, and the one time this view put
 something inside it before construction it cost a session (D62).
+
+---
+
+## D71 — Extrapolate for exactly as long as we claim the position is current
+
+**Decision:** `MAX_EXTRAPOLATION_MS` is now *defined as* the staleness
+threshold, and every place that decides what "stale" means derives from one
+constant.
+
+Phone reported that the aircraft and the end of its own track drifted apart as
+the map zoomed in — "like different brothers" — and that at z12 they were
+kilometres apart. That is not a rendering fault. It is three parts of one
+screen disagreeing about the same aircraft:
+
+| | Said what |
+|---|---|
+| The observed track | Ends at the last **reported** position, because it is drawn from reported positions only (D6) |
+| The detail panel | "position shown is the last one we received", from **two minutes** on |
+| The marker | Dead-reckoned onward for **ten minutes** |
+
+So for eight minutes the application confidently flew a marker along a heading
+while simultaneously telling the user it had stopped trusting that position —
+and the track, which never lies, sat behind it as the evidence. ANA5686, at
+37 m/s and 2m 18s old, was drawn **5.1 km** from the end of its own line. At
+the old cap the gap could reach 22 km, and at airliner speed rather than this
+aircraft's 133 km/h it would be far worse.
+
+**The comment above the constant already argued for the right behaviour** —
+"past this point the marker holds its last known position, and the UI shows how
+old it is". It was the number underneath that disagreed with the rest of the
+app. That is the recurring shape of this project's defects: not a wrong idea,
+a second copy of a number.
+
+Now:
+
+- `STALE_AFTER_MS` is declared once, in `interpolate.ts`, next to the
+  extrapolation it governs.
+- `MAX_EXTRAPOLATION_MS` **is** that value, by definition rather than by
+  coincidence, with the reason written where the assignment is.
+- `markers.ts`, `planet/aircraftLayer.ts` and `DetailPanel.tsx` all derive from
+  it instead of each carrying their own `120`.
+
+**The marker snaps rather than glides back** when it crosses the threshold, and
+that is deliberate. Easing it home would draw the aircraft flying *backwards*
+along its own track for several seconds, which is a worse lie than a jump — and
+the jump coincides with the fade and the panel's sentence, so all three say "we
+have lost it" in the same frame.
+
+**What this does not change:** interpolation between polls, which is the reason
+markers glide instead of stepping (D14). Fresh aircraft move exactly as before;
+the change only bites once the app has already said, in words, that it does not
+know where the aircraft is.

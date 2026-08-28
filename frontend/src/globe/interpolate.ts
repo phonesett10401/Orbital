@@ -34,13 +34,36 @@ export const EASE_DURATION_MS = 1000;
 /**
  * Stop extrapolating after this long without an update.
  *
- * An aircraft that has not reported for ten minutes has not necessarily flown
- * 150 km in a straight line — it may have turned, landed, or simply dropped
- * out of coverage. Continuing to fly the marker confidently across the map
- * would be inventing data. Past this point the marker holds its last known
- * position, and the UI shows how old it is.
+ * An aircraft that has not reported for two minutes has not necessarily flown
+ * on in a straight line - it may have turned, landed, or simply dropped out of
+ * coverage. Continuing to fly the marker confidently across the map is
+ * inventing data. Past this point the marker holds its last known position,
+ * and the UI shows how old it is.
+ *
+ * **This is the same threshold at which the rest of the application says so**,
+ * and that is the whole point of the constant. It used to be ten minutes while
+ * the marker faded and the detail panel said "position shown is the last one we
+ * received" at two - so for eight minutes the app dead-reckoned a position it
+ * was simultaneously telling the user it had stopped trusting, up to 22 km of
+ * invented flying at airliner speed. The observed track, which is drawn from
+ * reported positions only, ended where the truth ended, and the marker sat
+ * kilometres away from the end of its own line (defect #21, D71).
+ *
+ * Everything that decides what "stale" means now derives from here.
  */
-export const MAX_EXTRAPOLATION_MS = 10 * 60 * 1000;
+export const STALE_AFTER_MS = 120_000;
+
+/** The same threshold in seconds, for the layers that count in seconds. */
+export const STALE_AFTER_SECONDS = STALE_AFTER_MS / 1000;
+
+/**
+ * How far past a report a marker may be dead-reckoned.
+ *
+ * Equal to the staleness threshold, by definition rather than by coincidence:
+ * we extrapolate exactly as long as we are prepared to claim the position is
+ * current, and not one second longer.
+ */
+export const MAX_EXTRAPOLATION_MS = STALE_AFTER_MS;
 
 export interface LatLon {
   lat: number;

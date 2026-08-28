@@ -24,6 +24,7 @@
 import type { LayerSpecification } from 'maplibre-gl';
 
 import { altitudeColor } from '../globe/markers';
+import { STALE_AFTER_SECONDS } from '../globe/interpolate';
 import type { RenderableObject } from '../types';
 
 /** Layer and source ids, exported so the view can hit-test against them. */
@@ -35,8 +36,14 @@ export const AIRCRAFT_LABEL_LAYER = 'orbital-aircraft-label';
 export const ICON_AIRCRAFT = 'orbital-aircraft-icon';
 export const ICON_UNKNOWN = 'orbital-aircraft-unknown';
 
-/** Older than this and the marker dims, as it does on the globe (D33). */
-export const STALE_AFTER_SECONDS = 120;
+/**
+ * Older than this and the marker dims, as it does on the globe (D33).
+ *
+ * Imported rather than restated: this number also decides how long a marker
+ * may be dead-reckoned, and the two drifting apart is what put an aircraft
+ * kilometres from the end of its own track (D71).
+ */
+export { STALE_AFTER_SECONDS };
 
 export interface AircraftFeatureCollection {
   type: 'FeatureCollection';

@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { STALE_AFTER_SECONDS } from '../globe/interpolate';
 
 import { useAirline } from '../airlines';
 import { useOrbitalStore } from '../state/store';
@@ -78,7 +79,9 @@ export function DetailPanel() {
   }
 
   const ageSec = Math.max(0, (Date.now() - Date.parse(detail.lastSeen)) / MS_PER_SECOND);
-  const isStale = ageSec > 120;
+  // The same threshold the marker fades at and stops being dead-reckoned at
+  // (D71). This sentence is only true because the extrapolation stops here.
+  const isStale = ageSec > STALE_AFTER_SECONDS;
 
   return (
     <aside className="panel" aria-label={`Details for ${detail.label}`}>

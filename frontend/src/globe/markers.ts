@@ -20,11 +20,11 @@ import * as THREE from 'three';
 
 import type { RenderableObject } from '../types';
 import { ATLAS_CELLS, SPRITE_AIRCRAFT, SPRITE_UNKNOWN, createMarkerAtlas } from './aircraftSprite';
-import { ageSeconds, positionAt } from './interpolate';
+import { STALE_AFTER_SECONDS, ageSeconds, positionAt } from './interpolate';
 import { latLonToVector3 } from './earth';
 
 /** Objects older than this are drawn muted, with their age shown on selection. */
-export const STALE_AFTER_SECONDS = 120;
+export { STALE_AFTER_SECONDS };
 
 /**
  * Click tolerance, in screen pixels.

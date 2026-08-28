@@ -10,10 +10,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { RenderableObject, TrackedObject } from '../types';
+import { STALE_AFTER_SECONDS as PLANET_STALE } from '../planet/aircraftLayer';
 import {
   EARTH_RADIUS_M,
   EASE_DURATION_MS,
   MAX_EXTRAPOLATION_MS,
+  STALE_AFTER_MS,
+  STALE_AFTER_SECONDS,
   ageSeconds,
   destinationPoint,
   lerpLongitude,
@@ -247,5 +250,75 @@ describe('ageSeconds', () => {
 
   it('never reports a negative age for a clock skewed into the future', () => {
     expect(ageSeconds(renderable({ lastSeenMs: NOW + 5000 }), NOW)).toBe(0);
+  });
+});
+
+describe('the marker never outruns what the app admits it knows (D71)', () => {
+  // Reported by Phone from a running app: the aircraft and the end of its own
+  // track drifted apart as the map zoomed in, "like different brothers" - and
+  // at z12 they were kilometres apart. The track is drawn from reported
+  // positions; the marker was being dead-reckoned for up to ten minutes while
+  // the detail panel said "position shown is the last one we received" from two
+  // minutes on. Three parts of one screen, disagreeing (defect #21).
+
+  it('extrapolates exactly as long as it claims the position is current', () => {
+    // The coupling that was missing. These are not three numbers that happen to
+    // match; the other two are derived from this one, and this test fails if
+    // anybody re-introduces a second definition.
+    expect(MAX_EXTRAPOLATION_MS).toBe(STALE_AFTER_MS);
+    expect(STALE_AFTER_SECONDS).toBe(STALE_AFTER_MS / 1000);
+    expect(PLANET_STALE).toBe(STALE_AFTER_SECONDS);
+  });
+
+  it('holds the last reported position once the data is called stale', () => {
+    // Phone's aircraft, with its own numbers: ANA5686, 37 m/s, heading 180,
+    // last reported 2m 18s before the screenshot.
+    const object = renderable({
+      lat: 28.408,
+      lon: 115.329,
+      velocity: 37,
+      heading: 180,
+      lastSeenMs: NOW - 138_000,
+      updatedAt: NOW - 138_000,
+    });
+    const drawn = positionAt(object, NOW);
+    expect(drawn.lat).toBe(28.408);
+    expect(drawn.lon).toBe(115.329);
+  });
+
+  it('was drawing it five kilometres away before the fix', () => {
+    // The size of the lie, so the fix is not mistaken for a tidy-up: at 37 m/s,
+    // 2m 18s of dead reckoning is 5.1 km, and it grew for another eight minutes.
+    const flown = destinationPoint(28.408, 115.329, 180, 37 * 138);
+    const metres =
+      Math.hypot(flown.lat - 28.408, (flown.lon - 115.329) * Math.cos((28.408 * Math.PI) / 180)) *
+      (Math.PI / 180) *
+      EARTH_RADIUS_M;
+    expect(metres).toBeGreaterThan(5_000);
+    // And at the old ten-minute cap, the marker could lead the truth by this
+    // much before it stopped.
+    expect((37 * 600) / 1000).toBeGreaterThan(22);
+  });
+
+  it('still moves while the position is fresh', () => {
+    // The failure mode of over-correcting: an aircraft frozen between polls
+    // looks broken, and interpolation exists precisely to avoid that (D14).
+    const object = renderable({
+      velocity: 250,
+      heading: 90,
+      lastSeenMs: NOW - (STALE_AFTER_MS - 1000),
+      updatedAt: NOW - (STALE_AFTER_MS - 1000),
+    });
+    expect(positionAt(object, NOW).lon).toBeGreaterThan(0);
+  });
+
+  it('holds position at the threshold itself, not one tick past it', () => {
+    const atThreshold = renderable({
+      velocity: 250,
+      heading: 90,
+      lastSeenMs: NOW - STALE_AFTER_MS,
+      updatedAt: NOW - STALE_AFTER_MS,
+    });
+    expect(positionAt(atThreshold, NOW).lon).toBe(0);
   });
 });
