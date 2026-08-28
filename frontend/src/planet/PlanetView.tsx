@@ -141,9 +141,12 @@ export function PlanetView() {
           // uniform is not a reason it knows about.
           map?.triggerRepaint();
         }, config.terminator);
-        // Bottom left: the dev readout owns the top right corner and would
-        // sit over the button, and the attribution owns the bottom right.
-        map.addControl(control, 'bottom-left');
+        // Top right. Bottom left was tried first and was wrong: the legend
+        // occupies that corner and the status bar is painted over what is left
+        // of it, so the button was in the DOM, invisible, and not clickable -
+        // `elementFromPoint` returned the status bar. The dev readout moves
+        // down to make room, because it is the thing that can afford to.
+        map.addControl(control, 'top-right');
 
         // The route goes in first, so the aircraft symbols draw over their own
         // track rather than under it.
@@ -252,6 +255,9 @@ export function PlanetView() {
         (window as unknown as Record<string, unknown>).__orbitalPlanet = {
           map,
           maplibre,
+          // The store, so a session driving this view from the console can see
+          // what the frame loop sees rather than inferring it from pixels.
+          store: useOrbitalStore,
           // The glint's tuning loop, applied to the other lighting constant
           // that is taste rather than arithmetic (D49): look, adjust, look.
           terminator: (enabled: boolean) => {

@@ -572,7 +572,8 @@ body {
  */
 .app .planet-diagnostics {
   position: absolute;
-  top: 8px;
+  /* Below the night toggle, which owns this corner in every build. */
+  top: 52px;
   right: 8px;
   z-index: 3;
   max-width: 380px;
@@ -592,14 +593,40 @@ body {
  * button`, rather than equally specific and hoping to load second. Equal
  * specificity is what collapsed this view's container once already (D55), and
  * the fix there was the same: say which rule wins instead of relying on order.
+ *
+ * It carries its own background rather than inheriting the control group's.
+ * MapLibre styles controls for a light basemap - a white group with dark
+ * glyphs - and this map is satellite imagery at night. Left to inherit, the
+ * button computed as near-black on a transparent background over a black
+ * ocean: present in the DOM, clickable, and invisible. Found by looking at it,
+ * which no test here could have done (defect #19).
  */
-.app .maplibregl-ctrl button.orbital-terminator-toggle {
-  font-size: 15px;
-  line-height: 1;
-  color: #1a1c22;
+.app .maplibregl-ctrl-group,
+.app .maplibregl-ctrl-group button.orbital-terminator-toggle {
+  background: rgba(12, 14, 20, 0.78);
+  border-radius: 6px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
 }
 
-.app .maplibregl-ctrl button.orbital-terminator-toggle.is-on {
-  background: #1a1c22;
+.app .maplibregl-ctrl button.orbital-terminator-toggle {
+  width: 30px;
+  height: 30px;
+  font-size: 17px;
+  line-height: 1;
+  color: #cfe3ff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+}
+
+.app .maplibregl-ctrl button.orbital-terminator-toggle:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+/* On: the moon lights up, so the button says which state it is in as well as
+ * what pressing it would do. */
+.app .maplibregl-ctrl-group button.orbital-terminator-toggle.is-on {
+  background: rgba(255, 217, 138, 0.16);
   color: #ffd98a;
+  border-color: rgba(255, 217, 138, 0.55);
 }
