@@ -16,7 +16,14 @@
 
 export interface DiagnosticsPanel {
   element: HTMLDivElement;
-  attach(map: import('maplibre-gl').Map): void;
+  /**
+   * `describeModel` is asked, once a second, what the 3D model layer is doing.
+   * It is passed in rather than read here because this panel deliberately
+   * knows nothing about the aircraft layers - and because "the model is not on
+   * screen" has three quite different causes (nothing selected, no heading to
+   * point it, or over the horizon) that look identical from outside (D67).
+   */
+  attach(map: import('maplibre-gl').Map, describeModel?: () => string): void;
   dispose(): void;
 }
 
@@ -74,8 +81,9 @@ export function readoutLines(state: {
   counts: Record<string, number>;
   errors: string[];
   probe?: string | null;
+  model?: string;
 }): string[] {
-  const { styleLoaded, zoom, layers, features, vector, counts, errors, probe } = state;
+  const { styleLoaded, zoom, layers, features, vector, counts, errors, probe, model } = state;
   const lines = [
     `style ${styleLoaded ? 'loaded' : 'LOADING'} · z${zoom.toFixed(1)} · ${layers} layers`,
     `imagery: gibs ${counts.gibs} · close ${counts.close}`,
@@ -102,6 +110,7 @@ export function readoutLines(state: {
   // The template the map holds, and what happened when this panel fetched a
   // tile from it directly. That separates "the URL is wrong" from "MapLibre
   // cannot fetch it", which is the last ambiguity left.
+  if (model) lines.push(`model ${model}`);
   if (vector.template) lines.push(`tmpl ${vector.template.replace(/^https?:\/\//, '')}`);
   if (probe) lines.push(`probe ${probe}`);
 
@@ -196,7 +205,7 @@ export function createDiagnosticsPanel(): DiagnosticsPanel {
   return {
     element,
 
-    attach(map) {
+    attach(map, describeModel) {
       map.on('error', (event) => {
         const error = event as unknown as { error?: { message?: string } };
         errors.push(String(error.error?.message ?? event).slice(0, 120));
@@ -265,6 +274,7 @@ export function createDiagnosticsPanel(): DiagnosticsPanel {
           features,
           counts: requestCounts(names),
           errors,
+          model: describeModel?.(),
         })) {
           const row = document.createElement('div');
           row.textContent = line;

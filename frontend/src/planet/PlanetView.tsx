@@ -30,6 +30,7 @@ import {
   aircraftLayers,
 } from './aircraftLayer';
 import { loadPlanetStyle } from './basemap';
+import { createModelLayer, modelTarget } from './modelLayer';
 import { ROUTE_SOURCE, routeFeatures, routeLayers } from './routeLayer';
 import { createAircraftIconCanvas, createUnknownIconCanvas } from '../globe/aircraftSprite';
 import { whenRenderable } from './container';
@@ -50,6 +51,7 @@ export function PlanetView() {
     let map: import('maplibre-gl').Map | null = null;
     let unsubscribe: (() => void) | null = null;
     let diagnostics: ReturnType<typeof createDiagnosticsPanel> | null = null;
+    let model: ReturnType<typeof createModelLayer> | null = null;
     let cleanUpResize: (() => void) | null = null;
     let frame = 0;
 
@@ -95,7 +97,7 @@ export function PlanetView() {
       resizeObserver.observe(container);
       cleanUpResize = () => resizeObserver.disconnect();
 
-      diagnostics?.attach(map);
+      diagnostics?.attach(map, () => model?.describe() ?? 'layer not added');
 
       map.on('load', () => {
         if (!map) return;
@@ -132,6 +134,17 @@ export function PlanetView() {
         });
         for (const layer of aircraftLayers()) map.addLayer(layer);
 
+        // The selected aircraft, as a mesh in MapLibre's own context (D67).
+        // It reads the store itself, once per frame, rather than being told:
+        // the aircraft is moving between polls and the symbol it replaces is
+        // redrawn on the same schedule, so anything slower would leave the
+        // model lagging behind the callsign attached to it.
+        model = createModelLayer(() => {
+          const state = useOrbitalStore.getState();
+          return state.selectedId ? modelTarget(state.objects.get(state.selectedId)) : null;
+        });
+        map.addLayer(model);
+
         // Clicking an aircraft selects it, which is all the globe's pointer
         // module did once its pick tolerance stopped being the hard part
         // (D34): MapLibre hit-tests its own symbols, at their drawn size.
@@ -163,7 +176,7 @@ export function PlanetView() {
           if (!source || !('setData' in source)) return;
           const state = useOrbitalStore.getState();
           (source as { setData: (data: unknown) => void }).setData(
-            aircraftFeatures(Array.from(state.objects.values()), Date.now()),
+            aircraftFeatures(Array.from(state.objects.values()), Date.now(), state.selectedId),
           );
         };
         frame = requestAnimationFrame(tick);
@@ -216,6 +229,7 @@ export function PlanetView() {
       unsubscribe?.();
       cleanUpResize?.();
       diagnostics?.dispose();
+      model?.dispose();
       map?.remove();
     };
   }, []);

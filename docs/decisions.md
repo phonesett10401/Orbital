@@ -3043,3 +3043,114 @@ Four tests pin it, including the two cases where recomputing would be wrong: an
 object that is not moving keeps its heading, and one whose heading was never
 reported keeps `null` rather than acquiring a course — `null` means unknown and
 never means zero (D18).
+
+---
+
+## D67 — The 3D model, ported to a projection that changes underneath it
+
+**Decision:** the selected aircraft is drawn on the planet view as a three.js
+**custom layer** inside MapLibre's own GL context, positioned by a local
+tangent frame on the ground, and the airframe geometry moves to `src/airframe.ts`
+so both views share one aeroplane.
+
+Phone asked for the port with the standing permission to change it where the
+new renderer wants something different. Three things wanted something
+different, and one thing deliberately did not change.
+
+### The projection is not one projection
+
+A custom layer under the globe projection is handed two matrices each frame and
+a number saying which is live:
+
+| | space | what a vertex is |
+|---|---|---|
+| `mainMatrix` | globe | a direction from the planet's centre, on a **unit sphere**; altitude is a radial scale of `1 + metres / 6371008.8` |
+| `fallbackMatrix` | mercator | **mercator units**, the whole world 0..1, with Z conformal with X and Y |
+
+They are not variants of one convention, and a matrix used with the wrong one
+puts the model in the Atlantic. Both conventions are transcribed from
+MapLibre's own globe vertex shader and `globe_utils.ts` rather than inferred
+from behaviour, because behaviour that is ninety degrees wrong still looks like
+an aeroplane.
+
+MapLibre blends between the two over roughly a zoom around z12. **We pick the
+dominant one rather than blending**: blending a mesh means projecting it twice
+and interpolating in clip space, and near the centre of the screen — where a
+selected aircraft nearly always is — the two agree. The cost is a possible
+small jump for a selection at the very edge of the viewport during that one
+zoom step, and it is a cost, not a non-issue.
+
+### Precision is a requirement here, not a nicety
+
+three.js uploads matrices to the GPU as float32. In globe space the aircraft
+sits at magnitude 1 from the planet's centre while its wingtip is 3.9e-6 from
+its own centre, and **one float32 step at magnitude 1 is 0.36 m**: a mesh
+transformed by a float32 model matrix lands on a lattice a hundred and forty
+times coarser than the aircraft is long, and crawls between lattice points as
+it moves. MapLibre hands custom layers full-precision float64 matrices for
+exactly this reason and says so in its own source. So the model matrix is
+composed with the projection matrix **in doubles** and the single product is
+uploaded, which moves the small quantity into clip space where it is no longer
+small next to what it is added to. Measured, not assumed, in `model.test.ts`.
+
+### What changed from the globe's version, and why
+
+**Size.** The globe anchored the model to the marker shell and clamped it in
+pixels (D43). Here it has a true size — 50 m of wingspan — with a 30 px floor.
+The floor is what does the work: at true scale a 50 m aircraft is under a pixel
+across at z9, so without it the selected aircraft would be invisible at every
+zoom traffic is actually watched from. Around z16 true scale overtakes the
+floor and from there in the model is the size the aircraft is.
+
+**Height.** The model is drawn **on the ground**, lifted only 0.6 of a wingspan
+so it clears the extruded buildings, and that lift is a legibility offset and
+explicitly not an altitude. Drawing at a literal 10 km would put it 33,000
+pixels above its own ground position at z19 — off the screen — and would part
+it from the symbol it replaces, its callsign and its track, all of which are
+ground-projected. Altitude stays colour-coded (D28), exactly as the globe
+argued for a different reason (D42).
+
+**Light.** A fixed overhead sun rather than the globe's headlight. The
+headlight existed so a selection over the night side stayed visible against
+real lighting; nothing on this view is unlit, and a fixed sun turns shading
+into information because the wings catch it differently as the aircraft turns.
+The sun is expressed in the model's own axes, since the model matrix is folded
+away before the shader sees anything. The mercator frame is mirrored relative
+to the globe frame — mercator's Y axis runs south — so the sun's sideways
+component flips with it; without that the aircraft would appear lit from the
+other side the moment the map crossed the transition zoom.
+
+**Hiding the symbol.** The globe had `setHidden(id)` so the sprite and the mesh
+could not both draw. Here the aircraft's own GeoJSON carries a `modelled` flag
+and the symbol layer takes its opacity from it — one frame of data deciding
+both, which is the same argument. It is **opacity rather than a filter** on
+purpose: a filtered-out symbol is not returned by `queryRenderedFeatures`, and
+since the model is not a feature and cannot be clicked, filtering would make
+the selected aircraft the one thing on the map that cannot be clicked. At zero
+opacity it still hit-tests and its callsign still holds its place in label
+collision.
+
+### What did not change
+
+**An aircraft with no heading gets no model** (D18, D40, D42). A mesh commits
+to a direction on screen and there is none to commit to. Those keep the disc.
+
+### Testing something that cannot be rendered here
+
+There is no WebGL in the test environment and no browser here that composites,
+so two seams carry the weight. The mercator arithmetic is checked **against
+MapLibre's own `MercatorCoordinate`**, imported into the test — the technique
+D32 used for marker positions, so our code and the library cannot agree on a
+shared mistake. The renderer is injectable, so the render path can be driven
+without a context and asked the two questions most likely to be answered
+wrongly: *which matrix* was used, and *when nothing is drawn*. Both frames'
+matrices are also asserted to have a positive determinant, because a reflection
+flips triangle winding and inverts every normal, and that is invisible until it
+is not.
+
+What is deliberately not asserted is what it looks like. **D50 is why**: fifty
+passing tests once described an airframe whose nose flared open at the tip,
+because every one of them asked which way it pointed and none asked what shape
+it was. The dev readout gained a `model` line for the same reason — "no model
+on screen" has four causes that look identical from outside, and this view is
+debugged by reading a screenshot of that panel (D57).

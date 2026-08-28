@@ -51,6 +51,7 @@ export interface AircraftFeatureCollection {
       hasHeading: boolean;
       colour: string;
       stale: boolean;
+      modelled: boolean;
     };
   }>;
 }
@@ -64,10 +65,16 @@ export interface AircraftFeatureCollection {
  *
  * Positions are the *interpolated* ones the globe draws, not the last reported
  * ones, so aircraft move between polls here exactly as they did there.
+ *
+ * `modelledId` is the aircraft being drawn as a 3D model, if any. It is marked
+ * here rather than hidden by an imperative call so that the two layers cannot
+ * disagree about who is drawing it - the same argument `setHidden` settled on
+ * the globe (D42), one frame of data deciding both.
  */
 export function aircraftFeatures(
   objects: RenderableObject[],
   nowMs: number,
+  modelledId: string | null = null,
 ): AircraftFeatureCollection {
   return {
     type: 'FeatureCollection',
@@ -87,6 +94,7 @@ export function aircraftFeatures(
           hasHeading: object.heading !== null,
           colour: colourFor(object.altitude),
           stale: ageSeconds > STALE_AFTER_SECONDS,
+          modelled: object.id === modelledId && object.heading !== null,
         },
       };
     }),
@@ -138,7 +146,14 @@ export function aircraftLayers(): LayerSpecification[] {
         // distance field, so a plain mask gives a harder edge than the atlas's
         // antialiased one.
         'icon-color': ['get', 'colour'],
-        'icon-opacity': ['case', ['get', 'stale'], 0.45, 1],
+        // The selected aircraft's symbol goes to zero opacity rather than
+        // being filtered out, because the 3D model that replaces it is not a
+        // feature and cannot be clicked: `queryRenderedFeatures` still returns
+        // an invisible symbol, so clicking the model still hits the aircraft,
+        // and its callsign still holds its place in label collision. Filtering
+        // would make the selected aircraft the one thing on the map that
+        // cannot be clicked (D67).
+        'icon-opacity': ['case', ['get', 'modelled'], 0, ['case', ['get', 'stale'], 0.45, 1]],
       },
     },
     {

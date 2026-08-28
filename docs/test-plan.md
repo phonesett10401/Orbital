@@ -95,8 +95,9 @@ cd frontend && npm test
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
 | `planet.test.ts` | 53 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
 | `route.test.ts` (planet) | 13 | **Great-circle densification, antimeridian unwrapping, the casing** |
+| `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **706** | 325 backend, 381 frontend |
+| **Total** | **744** | 325 backend, 419 frontend |
 
 ### What the automated suites do not cover
 
@@ -1817,3 +1818,48 @@ heading stays `null` rather than acquiring a course.
 sprite and model orientation against `heading`. Those checks were correct, and
 were made against a figure that only held while the fixture had been running a
 short time.
+
+### 19.17 The 3D model on the planet view
+
+The last port off globe.gl, and the one with no shared ground: the globe owned
+its renderer, MapLibre owns this one. Reasoning in D67. **38 tests**, in
+`model.test.ts`.
+
+The airframe geometry moved to `src/airframe.ts`, unchanged, and is now shared
+by both views — its shape stays asserted where it was, in
+`selectedAircraft.test.ts` (§13.4).
+
+**The mercator arithmetic is checked against MapLibre, not against itself.**
+`MercatorCoordinate` is imported into the test and used as the authority for x,
+y and what a metre is worth, at five places from Bangkok to Sydney. This is the
+technique from §11.2 and D32: where the library already knows the answer, ask
+it, so our code and the library cannot share a mistake.
+
+| Checked | How |
+|---|---|
+| The sphere convention | Prime meridian on +Z, 90°E on +X, poles on ±Y, unit length everywhere |
+| The tangent frame | Orthonormal east/north/up; nose along the heading at 0°, 90°, 180°, 270° |
+| Both frames' handedness | Positive determinant — a reflection flips winding and inverts every normal, which is invisible until it is not |
+| Mercator's Y axis | North is **−Y**; getting it backwards is a hemisphere of wrong that still looks like an aeroplane |
+| The lift | Radial on the globe, +Z under mercator, and equal to the number asked for |
+| Which matrix is used | `mainMatrix` under globe, `fallbackMatrix` under mercator, composed in that order |
+| When nothing is drawn | Nothing selected, no heading, over the horizon — each distinguishable in the readout |
+| Sizing | Floor engages where true scale is sub-pixel; true 50 m span by z18 |
+
+**The precision number, measured rather than argued.** In globe space the
+aircraft is at magnitude 1 from the planet's centre and its wingtip 3.9e-6 from
+its own centre. One float32 step at magnitude 1 is **0.36 m**, so a float32
+model matrix would put the airframe on a lattice about a hundred and forty
+times coarser than the aircraft is long. The test rounds a wingtip to float32
+and asserts the resulting half-span is out by more than 5 cm — which is why the
+model matrix is composed with the projection in doubles and uploaded as one
+product.
+
+**Not asserted: what it looks like.** Same reason as §13.4 — a green suite about
+orientation says nothing about shape (D50). Phone's eye settles that, and the
+dev readout gained a `model` line so a screenshot says which of the four "not
+drawn" cases is in play.
+
+**Still not verified: that it renders at all.** No agent-driven browser here
+composites, so nothing on this machine can put a frame on screen. The layer
+type, the matrices and the guards are pinned; the frame is Phone's to look at.
