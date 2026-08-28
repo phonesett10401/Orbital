@@ -20,7 +20,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from app.geo import destination_point
+from app.geo import destination_point, initial_bearing
 from app.models import BBox, ObjectType, TrackedObjectRecord, utcnow
 from app.providers.base import Provider, ProviderBadResponse, ProviderError
 
@@ -88,5 +88,25 @@ class FixtureProvider(Provider):
     def _advance(self, obj: TrackedObjectRecord, elapsed: float, now: datetime) -> TrackedObjectRecord:
         if obj.velocity is None or obj.heading is None or obj.velocity == 0.0:
             return obj.model_copy(update={"last_seen": now})
+
         lat, lon = destination_point(obj.lat, obj.lon, obj.heading, obj.velocity * elapsed)
-        return obj.model_copy(update={"lat": lat, "lon": lon, "last_seen": now})
+
+        # The heading has to move with the aircraft. Along a great circle the
+        # course rotates as the meridians converge, so an object that set out on
+        # 323 degrees is flying 255 eleven hours later without having turned --
+        # and a heading left at its initial value is simply wrong by then.
+        #
+        # It is wrong in a way that is visible and misleading: the marker points
+        # one way while its own track goes another, and the frontend's dead
+        # reckoning extrapolates along the stale figure, walking the aircraft off
+        # its own path at close zoom. The contract says heading is the direction
+        # of travel over the ground (D18), so the fixture has to report the
+        # direction it is actually travelling (D66).
+        ahead_lat, ahead_lon = destination_point(
+            obj.lat, obj.lon, obj.heading, obj.velocity * (elapsed + 1.0)
+        )
+        heading = initial_bearing(lat, lon, ahead_lat, ahead_lon)
+
+        return obj.model_copy(
+            update={"lat": lat, "lon": lon, "heading": heading, "last_seen": now}
+        )

@@ -72,7 +72,7 @@ cd frontend && npm test
 | Suite | Tests | Covers |
 |---|---|---|
 | `test_models.py` | 33 | The contract: units, nullability, immutability, antimeridian |
-| `test_providers.py` | 29 | Provider interface, fixture provider, registry, geometry |
+| `test_providers.py` | 33 | Provider interface, fixture provider, registry, geometry, **animated heading** |
 | `test_opensky.py` | 34 | Normalization, OAuth2 refresh, quota headers, failure mapping |
 | `test_quota.py` | 40 | Credit bands, daily projection, throttle ladder |
 | `test_store.py` | 29 | Merging, track history, TTL, eviction, search |
@@ -96,7 +96,7 @@ cd frontend && npm test
 | `planet.test.ts` | 53 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
 | `route.test.ts` (planet) | 13 | **Great-circle densification, antimeridian unwrapping, the casing** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **702** | 321 backend, 381 frontend |
+| **Total** | **706** | 325 backend, 381 frontend |
 
 ### What the automated suites do not cover
 
@@ -1787,3 +1787,33 @@ subscription that fires on change, into a source created when the map loads.
 An aircraft selected while the map was still loading has already had its one
 detail fetch, so the update is dropped and nothing fires again. The source is
 now seeded from the store at creation.
+
+### 19.16 The fixture's heading did not match its own motion
+
+Reported as two bugs — the aircraft symbol not pointing along its track, and
+the marker drifting off that track at close zoom. One cause, and not in the
+renderer. Reasoning in D66.
+
+The provider animates along a great circle from each object's fixture origin
+and left `heading` at the file's value. On a great circle the course rotates as
+the meridians converge, so after 11.4 hours of animation EZY6056 reported 323.3°
+while flying 255.3°. Reconstructed exactly: dead reckoning from its origin
+reaches its observed position at 686 minutes, where the instantaneous course is
+255.3° — matching the measured track bearing to a tenth of a degree.
+
+Three things downstream believe that field: the marker's rotation, the model's
+nose, and the client's dead reckoning between polls — which is why the marker
+walked off its own path.
+
+Measured after the fix, across all 157 fixture aircraft at 1 minute, 2 hours
+and 11.4 hours of animation: **worst disagreement between reported heading and
+actual course, 0.000°**.
+
+Four tests: the heading follows the great circle over a long flight; a short
+hop barely changes it; something stationary keeps its heading; and an unknown
+heading stays `null` rather than acquiring a course.
+
+**This also qualifies earlier verification.** §11.1, §13.2 and §13.4 checked
+sprite and model orientation against `heading`. Those checks were correct, and
+were made against a figure that only held while the fixture had been running a
+short time.

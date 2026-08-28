@@ -230,3 +230,87 @@ class TestGeo:
         lat, lon = destination_point(89.9, 0.0, 0.0, 50_000.0)
         assert -90.0 <= lat <= 90.0
         assert -180.0 <= lon <= 180.0
+
+
+class TestAnimatedHeading:
+    """The fixture must report the course it is actually flying (D66)."""
+
+    def _provider(self, tmp_path, entry, *, animate=True):
+        path = tmp_path / "one.json"
+        path.write_text(json.dumps([entry]), encoding="utf-8")
+        return FixtureProvider(path, animate=animate)
+
+    @pytest.mark.anyio
+    async def test_heading_follows_the_great_circle_it_is_flying(self, tmp_path):
+        # An object that set out on 323 degrees is flying a different course
+        # hours later, having turned nowhere: on a great circle the bearing
+        # rotates as the meridians converge. Leaving `heading` at its initial
+        # value points the marker one way while its own track goes another, and
+        # the client's dead reckoning then walks it off its own path.
+        provider = self._provider(
+            tmp_path,
+            {
+                "id": "a1", "lat": 34.8112, "lon": 117.7564, "altitude": 1870.0,
+                "velocity": 155.7, "heading": 323.3, "label": "EZY6056",
+                "lastSeen": "2026-08-25T12:00:00Z", "type": "aircraft", "meta": {},
+            },
+        )
+        provider._started_at = utcnow() - timedelta(hours=11, minutes=26)
+
+        (advanced,) = await provider.fetch()
+
+        # Far from where it started, and reporting the course it is on now.
+        assert advanced.lat == pytest.approx(59.5, abs=0.5)
+        assert advanced.heading == pytest.approx(255.3, abs=1.0)
+        assert advanced.heading != 323.3
+
+    @pytest.mark.anyio
+    async def test_a_short_hop_barely_changes_the_heading(self, tmp_path):
+        # The rotation is a property of distance, not of time passing, so a
+        # minute of flight must not visibly turn the aircraft.
+        provider = self._provider(
+            tmp_path,
+            {
+                "id": "a2", "lat": 34.8112, "lon": 117.7564, "altitude": 1870.0,
+                "velocity": 155.7, "heading": 323.3, "label": "SHORT",
+                "lastSeen": "2026-08-25T12:00:00Z", "type": "aircraft", "meta": {},
+            },
+        )
+        provider._started_at = utcnow() - timedelta(minutes=1)
+
+        (advanced,) = await provider.fetch()
+        assert advanced.heading == pytest.approx(323.3, abs=0.1)
+
+    @pytest.mark.anyio
+    async def test_heading_is_unchanged_for_something_that_is_not_moving(self, tmp_path):
+        provider = self._provider(
+            tmp_path,
+            {
+                "id": "b2", "lat": 13.75, "lon": 100.5, "altitude": 0.0,
+                "velocity": 0.0, "heading": 90.0, "label": "PARKED",
+                "lastSeen": "2026-08-25T12:00:00Z", "type": "aircraft", "meta": {},
+            },
+        )
+        provider._started_at = utcnow() - timedelta(hours=2)
+
+        (advanced,) = await provider.fetch()
+        assert advanced.heading == 90.0
+        assert (advanced.lat, advanced.lon) == (13.75, 100.5)
+
+    @pytest.mark.anyio
+    async def test_an_unknown_heading_stays_unknown(self, tmp_path):
+        # `null` means unknown and never means zero (D18); inventing a course
+        # for something whose direction was never reported is the kind of
+        # confident wrong answer the contract exists to forbid.
+        provider = self._provider(
+            tmp_path,
+            {
+                "id": "c3", "lat": 0.0, "lon": 0.0, "altitude": None,
+                "velocity": 200.0, "heading": None, "label": "NOHDG",
+                "lastSeen": "2026-08-25T12:00:00Z", "type": "aircraft", "meta": {},
+            },
+        )
+        provider._started_at = utcnow() - timedelta(hours=1)
+
+        (advanced,) = await provider.fetch()
+        assert advanced.heading is None

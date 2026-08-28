@@ -2988,3 +2988,58 @@ of empty. The general form is worth stating, because this is the second time
 it has come up in this view after the container measurement: **anything built
 asynchronously must take its initial state from the world, not assume the world
 will announce itself again.**
+
+---
+
+## D66 — The fixture flew one way and reported another
+
+**Decision:** the fixture provider recomputes `heading` as it animates, so an
+object reports the course it is actually flying rather than the one it set out
+on.
+
+**Two symptoms, reported as separate bugs, with one cause.** The aircraft
+symbol pointed somewhere other than along its own track, and at close zoom the
+marker walked away from the track it had just drawn.
+
+**Neither was a rendering fault.** Measured on the running fixture, for
+EZY6056:
+
+| | |
+|---|---|
+| `heading` as reported | 323.3° |
+| Bearing of the last two track points | 255.3° |
+| Bearing across the whole track | 275.2° |
+
+The provider advances each object along a great circle from its fixture origin
+— which is correct — and leaves `heading` at the value in the file, which is
+not. **On a great circle the course rotates as the meridians converge.** That
+aircraft left China on 323° and, eleven hours later near St Petersburg, was
+flying 255° without having turned anywhere. Reconstructed exactly: dead
+reckoning from its origin reaches its observed position at 686 minutes, where
+the instantaneous course is 255.3° — matching the measured track bearing to a
+tenth of a degree.
+
+**Why it mattered more than it looks.** The contract defines heading as the
+direction of travel over the ground (D18), and three things downstream believe
+it: the marker's rotation, the aircraft model's nose, and the *client's dead
+reckoning*, which extrapolates position along the heading between polls. With
+the heading 68° stale, the client walked each aircraft off its own path — which
+is exactly the second symptom, and which no amount of work on the renderer
+could have fixed.
+
+**It also quietly undermined every visual check of orientation this project has
+done.** D40 verified the sprite's rotation against `heading`, and D42 and D50
+verified the model's nose the same way. Those checks were right, and they were
+made against a figure that was only correct while the fixture had been running
+for a short time — which, in a development session, it usually had.
+
+The provider now derives the heading from the motion it is generating: the
+position a second further along the same great circle, and the bearing to it.
+Across all 157 fixture aircraft, at 1 minute, 2 hours and 11.4 hours of
+animation, the worst disagreement between reported heading and actual course is
+**0.000°**.
+
+Four tests pin it, including the two cases where recomputing would be wrong: an
+object that is not moving keeps its heading, and one whose heading was never
+reported keeps `null` rather than acquiring a course — `null` means unknown and
+never means zero (D18).

@@ -51,6 +51,28 @@ def destination_point(
     return math.degrees(lat2), wrap_longitude(math.degrees(lon2))
 
 
+def initial_bearing(
+    lat1: float, lon1: float, lat2: float, lon2: float
+) -> float:
+    """The compass course from one point to another, in degrees from true north.
+
+    "Initial" is the operative word: along a great circle the course changes
+    continuously as the meridians converge, so this is the bearing *at the
+    first point*, not for the whole path. An aircraft leaving China on 323
+    degrees is flying 255 by the time it reaches Russia, having turned nowhere
+    (D66).
+
+    Returns degrees in [0, 360).
+    """
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta = math.radians(lon2 - lon1)
+
+    y = math.sin(delta) * math.cos(phi2)
+    x = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(delta)
+    return (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
+
+
 def wrap_longitude(lon: float) -> float:
     """Wrap any longitude into [-180, 180).
 
