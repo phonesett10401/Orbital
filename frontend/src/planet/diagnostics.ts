@@ -23,7 +23,11 @@ export interface DiagnosticsPanel {
    * screen" has three quite different causes (nothing selected, no heading to
    * point it, or over the horizon) that look identical from outside (D67).
    */
-  attach(map: import('maplibre-gl').Map, describeModel?: () => string): void;
+  attach(
+    map: import('maplibre-gl').Map,
+    describeModel?: () => string,
+    describeTerminator?: () => string,
+  ): void;
   dispose(): void;
 }
 
@@ -82,8 +86,10 @@ export function readoutLines(state: {
   errors: string[];
   probe?: string | null;
   model?: string;
+  terminator?: string;
 }): string[] {
-  const { styleLoaded, zoom, layers, features, vector, counts, errors, probe, model } = state;
+  const { styleLoaded, zoom, layers, features, vector, counts, errors, probe, model, terminator } =
+    state;
   const lines = [
     `style ${styleLoaded ? 'loaded' : 'LOADING'} · z${zoom.toFixed(1)} · ${layers} layers`,
     `imagery: gibs ${counts.gibs} · close ${counts.close}`,
@@ -111,6 +117,7 @@ export function readoutLines(state: {
   // tile from it directly. That separates "the URL is wrong" from "MapLibre
   // cannot fetch it", which is the last ambiguity left.
   if (model) lines.push(`model ${model}`);
+  if (terminator) lines.push(`night ${terminator}`);
   if (vector.template) lines.push(`tmpl ${vector.template.replace(/^https?:\/\//, '')}`);
   if (probe) lines.push(`probe ${probe}`);
 
@@ -205,7 +212,7 @@ export function createDiagnosticsPanel(): DiagnosticsPanel {
   return {
     element,
 
-    attach(map, describeModel) {
+    attach(map, describeModel, describeTerminator) {
       map.on('error', (event) => {
         const error = event as unknown as { error?: { message?: string } };
         errors.push(String(error.error?.message ?? event).slice(0, 120));
@@ -275,6 +282,7 @@ export function createDiagnosticsPanel(): DiagnosticsPanel {
           counts: requestCounts(names),
           errors,
           model: describeModel?.(),
+          terminator: describeTerminator?.(),
         })) {
           const row = document.createElement('div');
           row.textContent = line;

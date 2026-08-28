@@ -134,6 +134,29 @@ export const config = {
   cityEnterAltitude: num(import.meta.env.VITE_CITY_ALTITUDE, 0.35),
 
   /**
+   * Whether the planet view starts with the day/night terminator drawn.
+   *
+   * **Off by default, and that is the point.** On the globe the terminator was
+   * the view: a lit sphere in space is what the sun is doing to it. On a map
+   * it is a wash over the thing the user came to read, and a night side hides
+   * the imagery, the roads and the place names underneath it. So it is offered
+   * rather than imposed - the button in the corner turns it on, and
+   * `VITE_TERMINATOR=on` starts it that way (D68).
+   */
+  terminator: str(import.meta.env.VITE_TERMINATOR, 'off') !== 'off',
+
+  /**
+   * Opacity of the night side at its darkest.
+   *
+   * 0.85 is not a taste: it leaves 15% of the imagery showing through, which
+   * is exactly what the globe's shader leaves (`lit * 0.15`), so the two views
+   * darken night by the same amount. Tunable because the last lighting
+   * constant tuned here needed a second attempt against what it sits on (D49),
+   * and `__orbitalPlanet.terminator` changes it live.
+   */
+  terminatorStrength: num(import.meta.env.VITE_TERMINATOR_STRENGTH, 0.85),
+
+  /**
    * Satellite imagery for the planet view, as XYZ tiles.
    *
    * NASA GIBS, no API key and no registration: `BlueMarble_NextGeneration` is

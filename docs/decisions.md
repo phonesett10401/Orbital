@@ -3154,3 +3154,95 @@ because every one of them asked which way it pointed and none asked what shape
 it was. The dev readout gained a `model` line for the same reason — "no model
 on screen" has four causes that look identical from outside, and this view is
 debugged by reading a screenshot of that panel (D57).
+
+---
+
+## D68 — Night on the planet view, as a shaded mesh behind a toggle
+
+**Decision:** the day/night terminator is drawn as a **custom-layer mesh**
+shaded per fragment by the sun angle and carrying the city lights as its own
+colour, switched by a button in the corner of the map and **off by default**.
+
+Phone asked for "night polygon + city lights, as a toggle" on 2026-08-28. The
+toggle and the lights are as asked. The polygon is not, and the reason is worth
+recording because it was checked rather than assumed.
+
+### Why not a polygon
+
+A GeoJSON night polygon is the obvious implementation and it cannot carry the
+lights. Verified against MapLibre 6.6.0's own type definitions rather than
+remembered:
+
+| Wanted | Available in 6.6.0 |
+|---|---|
+| Recolour a raster so its black background becomes transparent | **No `raster-color`.** The raster paint properties are opacity, hue-rotate, brightness min/max, saturation, contrast, resampling and fade only |
+| Mask a raster to a polygon | **No `clip` layer type** |
+
+So a whole-world lights raster drawn as an ordinary layer paints its own black
+background over the daylight half of the world, and there is no way to cut it
+to the night side. Two layers cannot do this; one mesh can.
+
+The mesh also gets a better terminator out of it. A polygon's edge is an edge —
+a hard boundary, or a stack of nested polygons faking a gradient. Here the
+alpha falls out of `dot(surface normal, sun)` per fragment, so the twilight
+band is a real gradient, and the same fragment samples the lights. No polygon
+to densify, no antimeridian to split, and the night side is one draw.
+
+### The composite is the globe's, exactly
+
+The globe's Earth shader ends with `mix(lit, lit * 0.15 + nightColor * 1.5,
+nightMix)`. Alpha blending computes `src * a + dst * (1 - a)`. So with the
+lights as the source colour at gain **1.5**, and alpha **0.85** at full night,
+this view composites what the globe composites — 15% of the ground surviving
+night in both — against satellite imagery instead of the day texture. The
+terminator's softness, `smoothstep(-0.15, 0.25, ...)`, is the globe's number
+too. **Two views disagreeing about where night falls would be worse than either
+choice of band.**
+
+The texture is `config.textures.night`, the one the globe already loads.
+Nothing new is fetched, and nothing new leaves for a third party (D7). It is
+loaded the first time night is switched on and never before — city mode's
+argument (D52), applied to a texture a user may never ask for.
+
+### Off by default, which is a change of posture
+
+On the globe the terminator was not a feature, it was the view: a lit sphere in
+space is what the sun is doing to it. On a map it is a wash over the thing the
+user came to read — a night side hides the imagery, the roads and the place
+names underneath it, and at 3 a.m. local time that is most of what is on
+screen. So it is offered rather than imposed. `VITE_TERMINATOR=on` starts it
+on, and `__orbitalPlanet.terminator(true)` switches it from the console, which
+is the tuning loop D49 established.
+
+### Two mechanical details that would be silently wrong
+
+**One vertex set, two projections.** The mesh is a 2° lat/lon graticule, and
+both the sphere positions and the mercator positions are generated from the
+same lat/lon pairs, sharing one index buffer and one set of normals. Building a
+mesh per projection would be two meshes that can drift apart, and the drift
+would look like the night side jumping as the map crossed the transition zoom.
+The normals are geographic rather than per-frame, which is why the shading
+needs no separate treatment in the two spaces: `dot(normal, sun)` is the sine
+of the sun's elevation at that point on Earth however the map is being drawn.
+
+**Mercator is drawn three times.** The mesh spans one copy of the world;
+MapLibre repeats the world east and west, and one copy would end at a hard edge
+in the middle of an ocean. The wraps are three matrices, not three meshes.
+
+The layer is `renderingMode: '2d'` and writes no depth: it is a wash over what
+MapLibre has already drawn, and putting a whole-world mesh into the depth
+buffer would hide whatever it decided was behind it. It is added **before** the
+route and aircraft layers, so night dims the map and not the traffic on it.
+
+### The button
+
+A MapLibre `IControl`, not an element of our own, and its stylesheet rule is
+deliberately *more specific* than MapLibre's `.maplibregl-ctrl button` rather
+than equally specific and later in the cascade. Both are the same lesson from
+D55 and D62: in this container, say which rule wins and let MapLibre place what
+MapLibre owns. It sits bottom-left because the dev readout owns the top-right
+corner and the attribution owns the bottom-right.
+
+Its label says what pressing it will do, not what is currently on. A button
+labelled with its own state reads as a status line and gets pressed by someone
+trying to confirm what they are looking at.

@@ -584,3 +584,22 @@ body {
   pointer-events: none;
   white-space: pre-wrap;
 }
+
+/*
+ * The night toggle.
+ *
+ * Selector deliberately more specific than MapLibre's own `.maplibregl-ctrl
+ * button`, rather than equally specific and hoping to load second. Equal
+ * specificity is what collapsed this view's container once already (D55), and
+ * the fix there was the same: say which rule wins instead of relying on order.
+ */
+.app .maplibregl-ctrl button.orbital-terminator-toggle {
+  font-size: 15px;
+  line-height: 1;
+  color: #1a1c22;
+}
+
+.app .maplibregl-ctrl button.orbital-terminator-toggle.is-on {
+  background: #1a1c22;
+  color: #ffd98a;
+}

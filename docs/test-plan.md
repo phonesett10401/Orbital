@@ -95,9 +95,10 @@ cd frontend && npm test
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
 | `planet.test.ts` | 53 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
 | `route.test.ts` (planet) | 13 | **Great-circle densification, antimeridian unwrapping, the casing** |
+| `terminator.test.ts` | 29 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **744** | 325 backend, 419 frontend |
+| **Total** | **773** | 325 backend, 448 frontend |
 
 ### What the automated suites do not cover
 
@@ -1863,3 +1864,53 @@ drawn" cases is in play.
 **Still not verified: that it renders at all.** No agent-driven browser here
 composites, so nothing on this machine can put a frame on screen. The layer
 type, the matrices and the guards are pinned; the frame is Phone's to look at.
+
+### 19.18 The terminator on the planet view
+
+The last piece of the migration, and the only one that is a new feature rather
+than a port — MapLibre has no hook for per-pixel day/night shading, so it is a
+custom-layer mesh. Reasoning in D68. **29 tests**, in `terminator.test.ts`.
+
+**Where night is, checked against the sun rather than against itself.**
+`subsolarPoint` is the same function the globe shades with and is already
+pinned to known equinox and solstice values (§11.3), so these tests ask whether
+the layer puts darkness on the half of the world facing away from it:
+
+| Checked | How |
+|---|---|
+| The sun's direction | Matches `subsolarPoint` exactly; unit length; on the equator at an equinox; swept past 168° twelve hours later |
+| Night is where the sun is not | Alpha is 0 at the subsolar point and full at its antipode, at the same instant |
+| The band | Monotonic across the whole range, half-dark at the midpoint, fully dark by `sin(elevation) = −0.15` and fully clear by `+0.25` — the globe's numbers |
+| The darkest night still shows the ground | `1 − 0.85 = 0.15`, the globe's `lit * 0.15` |
+
+**The mesh is checked for what is silently wrong, not visibly wrong.** Both
+projections' positions come from one lat/lon grid sharing one index buffer, so
+the test asserts the three arrays describe the same vertex count and that the
+mercator positions agree with `mercatorX`/`mercatorY` — the same functions
+§19.17 checked against MapLibre's own `MercatorCoordinate`. Two further cases
+exist because each produces a plausible picture:
+
+- **Texture orientation.** North at `v = 0`, and `flipY` off, because three.js
+  flips images by default. A night side rendered upside down still looks like a
+  night side.
+- **Mercator's poles.** Latitude is clamped to ±85.051129 before projection.
+  Unclamped, the first row's Y is not a number and the entire mesh vanishes —
+  every vertex is asserted finite.
+
+**The layer's own behaviour**: nothing drawn while off, the lights texture not
+fetched until first switched on and fetched only once, one draw under globe and
+**three under mercator** (the world repeats east and west, and one copy would
+end at a hard edge mid-ocean), the wrapped matrix asserted to be the frame
+times a one-world translation, and `renderingMode: '2d'` so a whole-world mesh
+never enters MapLibre's depth buffer.
+
+**The toggle**: starts in the state it is given, reports each change exactly
+once, can be told about a change it did not cause, and hands MapLibre a
+`maplibregl-ctrl-group` to place rather than appending anything to the map
+container by hand — which is what collapsed this view to zero height once
+already (§19.13, D55).
+
+**Not verified: that it renders.** Same standing limitation as §19.17. The
+readout gained a `night` line — off / on, which frame, how many draws, and
+whether the lights texture is present — so a screenshot answers the first
+question without a debugger.

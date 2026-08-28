@@ -19,6 +19,7 @@
 
 import { useEffect, useRef } from 'react';
 
+import { config } from '../config';
 import { useOrbitalStore } from '../state/store';
 import {
   AIRCRAFT_LABEL_LAYER,
@@ -31,6 +32,8 @@ import {
 } from './aircraftLayer';
 import { loadPlanetStyle } from './basemap';
 import { createModelLayer, modelTarget } from './modelLayer';
+import { createTerminatorControl } from './terminatorControl';
+import { createTerminatorLayer } from './terminatorLayer';
 import { ROUTE_SOURCE, routeFeatures, routeLayers } from './routeLayer';
 import { createAircraftIconCanvas, createUnknownIconCanvas } from '../globe/aircraftSprite';
 import { whenRenderable } from './container';
@@ -52,6 +55,7 @@ export function PlanetView() {
     let unsubscribe: (() => void) | null = null;
     let diagnostics: ReturnType<typeof createDiagnosticsPanel> | null = null;
     let model: ReturnType<typeof createModelLayer> | null = null;
+    let terminator: ReturnType<typeof createTerminatorLayer> | null = null;
     let cleanUpResize: (() => void) | null = null;
     let frame = 0;
 
@@ -97,7 +101,11 @@ export function PlanetView() {
       resizeObserver.observe(container);
       cleanUpResize = () => resizeObserver.disconnect();
 
-      diagnostics?.attach(map, () => model?.describe() ?? 'layer not added');
+      diagnostics?.attach(
+        map,
+        () => model?.describe() ?? 'layer not added',
+        () => terminator?.describe() ?? 'layer not added',
+      );
 
       map.on('load', () => {
         if (!map) return;
@@ -114,6 +122,28 @@ export function PlanetView() {
             sdf: true,
           });
         }
+
+        // Night goes in before the route and the aircraft, so it washes over
+        // the map and not over the things drawn on top of it. Everything
+        // underneath it - imagery, roads, place names - is dimmed, which is
+        // what night does; the aircraft, their tracks and their callsigns stay
+        // at full strength, because they are the reason the view is open.
+        terminator = createTerminatorLayer({
+          enabled: config.terminator,
+          lightsUrl: config.textures.night,
+          strength: config.terminatorStrength,
+        });
+        map.addLayer(terminator);
+
+        const control = createTerminatorControl((enabled) => {
+          terminator?.setEnabled(enabled);
+          // A custom layer only draws when MapLibre repaints, and switching a
+          // uniform is not a reason it knows about.
+          map?.triggerRepaint();
+        }, config.terminator);
+        // Bottom left: the dev readout owns the top right corner and would
+        // sit over the button, and the attribution owns the bottom right.
+        map.addControl(control, 'bottom-left');
 
         // The route goes in first, so the aircraft symbols draw over their own
         // track rather than under it.
@@ -219,7 +249,16 @@ export function PlanetView() {
       });
 
       if (import.meta.env.DEV) {
-        (window as unknown as Record<string, unknown>).__orbitalPlanet = { map, maplibre };
+        (window as unknown as Record<string, unknown>).__orbitalPlanet = {
+          map,
+          maplibre,
+          // The glint's tuning loop, applied to the other lighting constant
+          // that is taste rather than arithmetic (D49): look, adjust, look.
+          terminator: (enabled: boolean) => {
+            terminator?.setEnabled(enabled);
+            map?.triggerRepaint();
+          },
+        };
       }
     })();
 
@@ -230,6 +269,7 @@ export function PlanetView() {
       cleanUpResize?.();
       diagnostics?.dispose();
       model?.dispose();
+      terminator?.dispose();
       map?.remove();
     };
   }, []);
