@@ -2365,3 +2365,96 @@ pixel at 0.6 radii is the best it does. A 21600x10800 Blue Marble would be
 1.85 km per texel and hold up five times closer, at the cost of a large local
 asset. That remains available through `VITE_EARTH_DAY_TEXTURE` and is not part
 of this change.
+
+---
+
+## D54 — The planet view: one renderer, orbit to street
+
+**Decision:** migrate the world view from globe.gl to MapLibre's globe
+projection, with NASA GIBS satellite imagery at low zoom fading into
+OpenStreetMap vector tiles at high zoom. Built beside the existing globe behind
+`VITE_VIEW=planet`, not in place of it.
+
+*Alternatives:* keeping the globe and the city-mode hand-off (D52, D53);
+CesiumJS; a higher-resolution Earth texture; doing nothing.
+
+**What forced it.** The globe draws one baked 4096x2048 JPEG over the whole
+planet — 9.8 km per texel. D53 measured what that means on approach: five
+texels per screen pixel at 0.35 radii, thirty-six at 0.05, a hundred and
+twenty-seven at the camera's floor. There is no tuning of a single texture that
+survives that, and the hand-off to a second renderer left a seam, no aircraft
+across it, and two of everything to maintain. D17 excluded tiled imagery on the
+grounds that the pipeline would cost more than the rest of the project; what
+changed is not the cost of the pipeline but the discovery that two services now
+provide it for nothing.
+
+### The two sources, and why neither is asked to do the other's job
+
+| | Source | Resolution | Key | Limits |
+|---|---|---|---|---|
+| Imagery, z0–8 | NASA GIBS `BlueMarble_NextGeneration` | 500 m | none | none published; NASA open data |
+| Vector, z0–14+ | OpenFreeMap (OpenMapTiles schema) | geometry | none | none published |
+
+500 m per pixel is **forty times sharper** than what the globe stretched over
+the planet, and it is real imagery rather than one JPEG magnified. It runs out
+at zoom 8. Vector tiles are sharp at every zoom by construction and carry
+almost nothing above zoom 8 worth seeing. So the raster fades out over zooms
+5.5 to 7.5 — before its own tiles run out, so the last imagery seen still has
+pixels of its own — and the vector map is already beneath it when it goes.
+
+**The fade is a `raster-opacity` interpolation and the layer sits immediately
+above `background`.** Everything else in the style — water, landcover, roads,
+labels — draws on top of imagery and is what remains after it. One layer
+inserted into someone else's 111-layer style, rather than a style written here:
+that cartography is tuned, and rewriting it would be a hobby.
+
+### What the migration deletes, and what it costs
+
+**Deleted outright:** the border layer and the label layer, and their build
+pipeline. D44 and D45 exist because the globe had no basemap; MapLibre has one,
+with better typography, real collision handling and every zoom covered. Around
+sixty tests retire by being made unnecessary rather than by being wrong.
+
+**Handed over:** the marker layer. Two thousand aircraft in one `THREE.Points`
+with a custom shader was the only way to hold one draw call (D15, D40); a
+symbol layer is the same idea written by people who do it for a living, with
+collision and rotation included. Picking goes with it — `queryRenderedFeatures`
+against the drawn symbol, which is what D34's pixel-space tolerance was
+approximating.
+
+**Carried across unchanged, because none of it was ever about rendering:** the
+store, all three polling hooks, the contract, search, the detail panel, the
+legend, the status bar, interpolation and dead reckoning, and the entire
+backend. What survives from the marker layer is everything that was about
+meaning rather than drawing — the altitude ramp (D28), read from the same
+function so two copies cannot drift; a null heading drawn as a disc rather than
+as north (D18, D40); stale aircraft faded rather than removed (D33).
+
+**Still to do, and not pretended otherwise:** the route line, the selected
+aircraft's 3D model as a custom three.js layer, and the terminator. The first
+two are ports. The terminator is the one thing with no equivalent — D41's
+per-pixel day/night shading has no MapLibre counterpart, and the closest
+approach is a computed night polygon with the GIBS `VIIRS_CityLights_2012`
+raster under it, which is the same information by a coarser mechanism.
+
+### Built beside, not in place of
+
+`VITE_VIEW=planet` selects it; the default is still the globe. Two entry points
+in `App.tsx` and nothing else shared but the store. This is deliberate: the
+globe works, is verified, and is what the project has to show if this direction
+stalls. Abandoning it costs deleting `src/planet/`; adopting it costs deleting
+`src/globe/` and one line in the shell.
+
+### Three conventions that disagree, all of them pinned
+
+The recurring shape of every defect in this project is two correct things that
+mean different things, and the migration meets three at once:
+
+- **GeoJSON is lon/lat; the contract is lat/lon.** Swapping them puts every
+  aircraft in the wrong hemisphere and nothing fails.
+- **GIBS is WMTS, so its path is `{z}/{row}/{col}` — that is `{z}/{y}/{x}`**,
+  not the `{z}/{x}/{y}` of an XYZ service. Swapped, it returns tiles of the
+  wrong place rather than an error: a plausible, mirrored Earth.
+- **MapLibre's longitudes run past 180 as the user keeps panning; the contract
+  stops at 180.** Wrapping is what produces `lonMin > lonMax` across the
+  antimeridian, which D25 already defines and the backend already implements.

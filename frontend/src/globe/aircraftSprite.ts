@@ -132,6 +132,27 @@ export function createAircraftIconCanvas(): HTMLCanvasElement {
 }
 
 /**
+ * The directionless disc, on its own.
+ *
+ * The companion to `createAircraftIconCanvas`, for the same reason the atlas
+ * has two cells: an aircraft with no heading has no direction to draw, and
+ * drawing the silhouette anyway would claim one (D18, D40).
+ */
+export function createUnknownIconCanvas(): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = CELL;
+  canvas.height = CELL;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2D canvas context unavailable for the unknown icon');
+
+  ctx.beginPath();
+  ctx.arc(CENTRE, CENTRE, 34, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+  ctx.fill();
+  return canvas;
+}
+
+/**
  * Build the sprite atlas texture.
  *
  * Mipmaps are generated because markers are drawn as small as five pixels;

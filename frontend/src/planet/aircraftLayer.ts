@@ -1,0 +1,165 @@
+/**
+ * The aircraft, as MapLibre layers.
+ *
+ * The old globe drew two thousand aircraft as one `THREE.Points` with a custom
+ * shader, because that was the only way to keep it to a single draw call
+ * (D15, D40). MapLibre's symbol layer is that same idea, written by people who
+ * do it for a living: one buffer, batched, with collision handling and
+ * rotation for free. So this is not a reimplementation of the marker layer —
+ * it is the marker layer's job handed to something that already does it.
+ *
+ * What carries over unchanged is everything the marker layer decided that was
+ * about *meaning* rather than about drawing:
+ *
+ * - **Colour by altitude** (D28), same ramp, because height above ground is
+ *   the one channel a flat map cannot show by position.
+ * - **A null heading is not drawn as north** (D18, D40). MapLibre has no way
+ *   to say "unrotated", so those aircraft get the disc instead of the
+ *   silhouette, exactly as the sprite atlas does.
+ * - **Stale aircraft fade** rather than vanish (D33): the backend keeps last
+ *   known positions, and a marker that disappears would imply the aircraft
+ *   did.
+ */
+
+import type { LayerSpecification } from 'maplibre-gl';
+
+import { altitudeColor } from '../globe/markers';
+import type { RenderableObject } from '../types';
+
+/** Layer and source ids, exported so the view can hit-test against them. */
+export const AIRCRAFT_SOURCE = 'orbital-aircraft';
+export const AIRCRAFT_LAYER = 'orbital-aircraft';
+export const AIRCRAFT_LABEL_LAYER = 'orbital-aircraft-label';
+
+/** Image ids for the two silhouettes. */
+export const ICON_AIRCRAFT = 'orbital-aircraft-icon';
+export const ICON_UNKNOWN = 'orbital-aircraft-unknown';
+
+/** Older than this and the marker dims, as it does on the globe (D33). */
+export const STALE_AFTER_SECONDS = 120;
+
+export interface AircraftFeatureCollection {
+  type: 'FeatureCollection';
+  features: Array<{
+    type: 'Feature';
+    id: string;
+    geometry: { type: 'Point'; coordinates: [number, number] };
+    properties: {
+      id: string;
+      label: string;
+      heading: number;
+      hasHeading: boolean;
+      colour: string;
+      stale: boolean;
+    };
+  }>;
+}
+
+/**
+ * Turn the store's objects into GeoJSON.
+ *
+ * Coordinates are lon/lat, which is GeoJSON's order and the reverse of the
+ * contract's. Getting it backwards puts every aircraft in the wrong hemisphere
+ * without anything failing, so it is asserted in the tests rather than trusted.
+ *
+ * Positions are the *interpolated* ones the globe draws, not the last reported
+ * ones, so aircraft move between polls here exactly as they did there.
+ */
+export function aircraftFeatures(
+  objects: RenderableObject[],
+  nowMs: number,
+): AircraftFeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: objects.map((object) => {
+      const ageSeconds = (nowMs - object.lastSeenMs) / 1000;
+      return {
+        type: 'Feature' as const,
+        id: object.id,
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [object.renderLon, object.renderLat] as [number, number],
+        },
+        properties: {
+          id: object.id,
+          label: object.label,
+          heading: object.heading ?? 0,
+          hasHeading: object.heading !== null,
+          colour: colourFor(object.altitude),
+          stale: ageSeconds > STALE_AFTER_SECONDS,
+        },
+      };
+    }),
+  };
+}
+
+/**
+ * The altitude ramp from D28, as a CSS colour MapLibre can use.
+ *
+ * `altitudeColor` returns linear 0..1 channels for the shader; MapLibre wants
+ * a colour string. Same ramp, same numbers, converted rather than restated —
+ * two copies of a colour scale drift apart and the legend then lies.
+ */
+export function colourFor(altitude: number | null): string {
+  const [r, g, b] = altitudeColor(altitude);
+  const channel = (value: number) => Math.round(Math.max(0, Math.min(1, value)) * 255);
+  return `rgb(${channel(r)}, ${channel(g)}, ${channel(b)})`;
+}
+
+/**
+ * The two layers: silhouettes, and callsigns above them.
+ *
+ * Split because they collide differently. An aircraft icon must always be
+ * drawn — hiding one because another is near it would be losing an aircraft —
+ * while its callsign is text, and forty overlapping callsigns are worse than
+ * none. So icons overlap freely and labels are allowed to drop out.
+ */
+export function aircraftLayers(): LayerSpecification[] {
+  return [
+    {
+      id: AIRCRAFT_LAYER,
+      type: 'symbol',
+      source: AIRCRAFT_SOURCE,
+      layout: {
+        'icon-image': ['case', ['get', 'hasHeading'], ICON_AIRCRAFT, ICON_UNKNOWN],
+        // Grows with zoom, but nothing like linearly: an aircraft is a symbol
+        // on a map, not a scale model of an aeroplane.
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.14, 8, 0.22, 14, 0.34],
+        'icon-rotate': ['get', 'heading'],
+        // Rotation is relative to the map's north, which is what a heading is.
+        'icon-rotation-alignment': 'map',
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+      paint: {
+        // Requires the icon to be registered with `sdf: true`, which is what
+        // lets one silhouette be tinted per aircraft instead of one image per
+        // colour. The trade is that MapLibre reads the alpha channel as a
+        // distance field, so a plain mask gives a harder edge than the atlas's
+        // antialiased one.
+        'icon-color': ['get', 'colour'],
+        'icon-opacity': ['case', ['get', 'stale'], 0.45, 1],
+      },
+    },
+    {
+      id: AIRCRAFT_LABEL_LAYER,
+      type: 'symbol',
+      source: AIRCRAFT_SOURCE,
+      minzoom: 5,
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 11,
+        'text-offset': [0, 1.3],
+        'text-anchor': 'top',
+        'text-allow-overlap': false,
+        'text-optional': true,
+      },
+      paint: {
+        'text-color': '#e8ecf4',
+        'text-halo-color': 'rgba(0, 0, 0, 0.85)',
+        'text-halo-width': 1.4,
+      },
+    },
+  ];
+}

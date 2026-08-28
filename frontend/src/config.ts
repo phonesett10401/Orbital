@@ -113,6 +113,16 @@ export const config = {
   cityMode: str(import.meta.env.VITE_CITY_MODE, 'on') !== 'off',
 
   /**
+   * Which renderer draws the world.
+   *
+   * `globe` is globe.gl and everything built on it; `planet` is the MapLibre
+   * view being migrated to (D54). Two entry points rather than a rewrite in
+   * place: the working globe is untouched while the new one reaches parity,
+   * and abandoning the direction costs deleting a folder.
+   */
+  view: str(import.meta.env.VITE_VIEW, 'globe') === 'planet' ? 'planet' : 'globe',
+
+  /**
    * Globe altitude, in radii, at which city mode takes over.
    *
    * Tunable because it is a judgement about where the globe stops being worth
@@ -122,6 +132,24 @@ export const config = {
    * current altitude, so the boundary can be found by eye and set here.
    */
   cityEnterAltitude: num(import.meta.env.VITE_CITY_ALTITUDE, 0.35),
+
+  /**
+   * Satellite imagery for the planet view, as XYZ tiles.
+   *
+   * NASA GIBS, no API key and no registration: `BlueMarble_NextGeneration` is
+   * static, cloud-free and 500 m per pixel — about forty times sharper than
+   * the single JPEG the globe.gl view stretched over the whole planet, and it
+   * runs out at zoom 8, where the vector map takes over (D54).
+   *
+   * Note the path order. GIBS is WMTS, so it is `{z}/{row}/{col}` — which is
+   * `{z}/{y}/{x}`, not the `{z}/{x}/{y}` of an XYZ service. Swapping them
+   * returns tiles of the wrong place rather than an error.
+   */
+  imageryTileUrl: str(
+    import.meta.env.VITE_IMAGERY_TILE_URL,
+    'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_NextGeneration' +
+      '/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg',
+  ),
 
   /** Freeze the sun at a fixed time, for screenshots and deterministic demos. */
   fixedSunTime: str(import.meta.env.VITE_FIXED_SUN_TIME, ''),

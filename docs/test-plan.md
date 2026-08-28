@@ -93,8 +93,9 @@ cd frontend && npm test
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
+| `planet.test.ts` | 28 | **The MapLibre style, aircraft as GeoJSON, bounds to the contract's bbox** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **635** | 321 backend, 314 frontend |
+| **Total** | **663** | 321 backend, 342 frontend |
 
 ### What the automated suites do not cover
 
@@ -1453,3 +1454,63 @@ Three changes followed, all covered by `cityMode.test.ts` (14 tests to 19):
   dynamic import, so any failure inside left the layer permanently active: a
   transparent div over the globe, no map, and no retry, because the guard
   believed city mode was already up. A test drives a loader that throws.
+
+---
+
+## 19. The planet view — phase 1
+
+The MapLibre replacement for the globe, built beside it behind `VITE_VIEW=planet`
+(D54). This section covers what phase 1 does and, as importantly, what it does
+not yet do.
+
+### 19.1 What is in it
+
+| | |
+|---|---|
+| Renderer | MapLibre GL JS 6, globe projection, one continuous zoom |
+| Imagery | NASA GIBS `BlueMarble_NextGeneration`, 500 m/px, z0–8, no key |
+| Vector | OpenFreeMap, no key, no cap |
+| Fade | raster opacity 1 → 0 across zoom 5.5 → 7.5, before its own tiles run out |
+| Aircraft | one GeoJSON source, two symbol layers, rebuilt each frame from the store |
+| Selection | `queryRenderedFeatures` against the drawn symbol |
+| Viewport | `map.getBounds()` → the contract's bbox, feeding tier 2 as before |
+
+Sharpness, against what the globe.gl view could manage: **500 m per pixel
+against 9,800 m**, and the imagery is real rather than one JPEG magnified.
+
+### 19.2 What is not in it yet
+
+The route line, the selected aircraft's 3D model, and the terminator. The first
+two are ports of working code. The terminator has no MapLibre equivalent —
+D41's per-pixel day/night shading would become a computed night polygon over
+the GIBS night-lights raster, which is the same information by a coarser
+mechanism. None of it is claimed to be done.
+
+### 19.3 What the automated suite covers
+
+`planet.test.ts`, 28 tests. MapLibre needs a WebGL context and vitest has none,
+so what is tested is everything that would be wrong before a pixel is drawn —
+and all three of the load-bearing cases are conventions that disagree:
+
+| What is pinned | The failure it prevents |
+|---|---|
+| Features are written **lon/lat** | GeoJSON's order is the reverse of the contract's. Swapped, every aircraft is in the wrong hemisphere and nothing fails |
+| The imagery URL is **`{z}/{y}/{x}`** | GIBS is WMTS — row then column. An XYZ template returns tiles of the wrong place rather than an error: a plausible, mirrored Earth |
+| Longitudes are wrapped into [-180, 180) | MapLibre keeps counting as the user pans; the backend parses the contract's range. Wrapping is also what produces `lonMin > lonMax` across the antimeridian, which D25 defines |
+| Latitude is clamped at the poles | A globe view can put the pole mid-screen, where bounds come back past 90 |
+| The imagery layer sits directly above `background` | Any higher and it covers the cartography that is supposed to outlive it |
+| The fade ends before the imagery's max zoom | Otherwise the last thing seen is one tile stretched over four zoom levels |
+| Icons overlap freely; labels may drop out | Hiding an icon loses an aircraft; hiding a callsign loses a callsign |
+| Rotation is aligned to the map | Aligned to the viewport, every aircraft turns as the user turns the map — D41's mistake in another frame |
+| Colour comes from `altitudeColor`, not a second ramp | Two copies of a colour scale drift, and then the legend lies |
+| A whole-world view publishes no viewport | Asking for a bbox that is the planet spends a tier 2 credit on the widest box there is (D21, D27) |
+
+### 19.4 Verified against the live services
+
+Both endpoints answer, from the browser, with CORS: the OpenFreeMap style at
+200, and a GIBS tile at 200 `image/jpeg`. A CORS failure on the imagery would
+have been silent in tests and fatal in the app.
+
+**Not verified: that it renders.** The agent-driven browser surfaces still do
+not composite, so MapLibre never gets the `requestAnimationFrame` it needs to
+process a style or draw a tile. Phase 1 is finished when somebody looks at it.
