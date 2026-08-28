@@ -1725,3 +1725,26 @@ that starts at zero resolves only once the observer reports a real size.
 That fix is real and measured, and it is probably not the reported failure —
 the screenshots show full-screen imagery, so that canvas is full size. It is
 fixed because it was broken.
+
+### 19.13 Both fixes were necessary — measured
+
+Roads and city labels render. Confirmed by eye on 2026-08-28, then attributed
+by measurement rather than assumption (D63), at zoom 14 over Bangkok:
+
+| Configuration | Vector features |
+|---|---|
+| Both changes | **1,418** |
+| Container fix only, no Vite exclusion | **0** |
+| Vite exclusion only | 0 — this is what was reported failing |
+| Container pre-filled with a child element | 1,418 — no effect |
+
+Vite's dev pre-bundling breaks MapLibre's Web Worker, where vector tiles are
+fetched and parsed; raster imagery is unaffected because it loads on the main
+thread. Separately, a container measured at zero leaves MapLibre on a 400x300
+canvas it never recovers from. Neither alone was sufficient.
+
+**Two claims in §19.12 were wrong and are corrected here.** The container fix
+was called "probably not the reported failure" — it was necessary. And the
+worker was ruled out by a test run *after* the exclusion had already been
+applied, so it could only exonerate; on that basis the exclusion was nearly
+deleted. Before removing a change as unnecessary, remove it and measure.

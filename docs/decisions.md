@@ -2856,3 +2856,61 @@ The console. Every observation so far has come through the readout or a probe,
 and MapLibre may be logging something that reaches neither — a worker error, a
 content-security refusal, an aborted request. It is the one instrument not yet
 read on the machine where the failure actually happens.
+
+---
+
+## D63 — Both fixes were needed, and one was nearly deleted
+
+**Decision:** keep `optimizeDeps: { exclude: ['maplibre-gl'] }` and the
+wait-for-container change. Roads and labels render. Corrects two claims in
+D62 that were wrong.
+
+**Measured, one variable at a time, on the running app at zoom 14 over
+Bangkok:**
+
+| Configuration | Vector features |
+|---|---|
+| Both changes | **1,418** |
+| Container fix only, no Vite exclusion | **0** |
+| Vite exclusion only (what Phone saw fail) | 0 |
+| Container pre-filled with a child element | 1,418 — makes no difference |
+
+So both were necessary and neither was sufficient. Vite's dev pre-bundling
+breaks MapLibre's Web Worker, which is where vector tiles are fetched and
+parsed — silently, while raster imagery keeps working because it loads on the
+main thread. And a container measured at zero leaves MapLibre on a 400x300
+canvas it never recovers from.
+
+### The two corrections
+
+**D62 said the container fix was "almost certainly not what Phone is
+seeing".** Wrong: it was necessary. The reasoning was that their screenshots
+showed full-screen imagery so their canvas must be full size — which confused
+what the canvas *became* after MapLibre's own resize with what it was at
+construction, when the tile-loading decisions are made.
+
+**The worker hypothesis was right, and a test of my own construction
+"disproved" it.** The sequence: suspect the worker, apply the Vite exclusion,
+*then* test worker health by adding a GeoJSON source, watch it load, conclude
+the worker is fine. It was fine — because the fix was already in place. The
+test could only ever exonerate. On that false exoneration the exclusion was
+very nearly deleted as unjustified, which would have broken a working map.
+
+**That is a control-group error, and it is the same shape as the readout that
+had only ever been run against a broken map (D61).** Both are the same
+discipline failure: a measurement is only evidence if it could have come out
+the other way. Testing a hypothesis *after* applying its remedy destroys the
+evidence for it.
+
+The rule this project now has, paid for twice: **before removing a change on
+the grounds that it is unnecessary, remove it and measure.** That is what
+finally settled this one — reverting the exclusion, restarting, and watching
+1,418 features become 0.
+
+### What the search cost, and what it was worth
+
+Seven exclusions in D62, all correct and all irrelevant to the cause, because
+each tested an ingredient while the two real faults sat in the *assembly*: how
+Vite serves the library, and when the container is measured. The one instrument
+that would have found it sooner is the one never read on the machine where it
+failed — the browser console, where a broken worker announces itself.
