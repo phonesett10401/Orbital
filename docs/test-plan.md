@@ -93,9 +93,9 @@ cd frontend && npm test
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
-| `planet.test.ts` | 43 | **The MapLibre style, cartography over imagery, aircraft as GeoJSON, bounds to the bbox, diagnostics** |
+| `planet.test.ts` | 47 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **678** | 321 backend, 357 frontend |
+| **Total** | **682** | 321 backend, 361 frontend |
 
 ### What the automated suites do not cover
 
@@ -1648,3 +1648,37 @@ Nine tests cover the recolour and the readout:
 | **Geometry, filters, zoom rules and layout are untouched** | Only colour was wrong; the cartography is worth keeping |
 | `TILES BUT NO FEATURES` appears only with tiles and no features | It separates a source that never loaded from one that drew nothing |
 | A working map prints neither warning | A diagnostic that cries wolf gets ignored |
+
+### 19.10 The vector source never loaded
+
+The readout (§19.7) answered this in one screenshot, which is what it was for:
+
+```
+style LOADING · z12.1 · 95 layers
+tiles: gibs 131 · sentinel 0 · vector 0
+glyphs 0 · sprite 2 · features drawn 0
+```
+
+Style applied, imagery streaming, sprite loaded, and **zero vector tiles, zero
+glyphs, style still loading, no errors**. Reasoning in D60.
+
+The basemap declares its vector source as a TileJSON `url` rather than a
+`tiles` list, so MapLibre has to fetch that document itself — and that request
+never completed, silently. The 93 cartographic layers had nothing to draw. The
+imagery sources were unaffected because they are declared with `tiles`.
+
+**What made this hard to see** is worth recording: the TileJSON had been
+fetched successfully from the page several times, and that was read as "the
+tiles are fine". It proved the URL and CORS were fine and said nothing about
+whether *MapLibre* had fetched it. `vector 0` is the check that mattered.
+
+`resolveVectorSources` now fetches those documents at load and inlines the
+templates. Four tests: a `url` source becomes a `tiles` source; the document
+requested is the one the source pointed at; sources that already list tiles are
+untouched; and a TileJSON with no tiles throws rather than resolving to a
+source that draws nothing — which is exactly how the original defect stayed
+invisible.
+
+**A defect in the instrument, too.** The same screenshot read `sentinel 0`
+while Esri tiles were streaming: the readout still named the provider D58 had
+replaced. It now matches whichever close tier is configured.

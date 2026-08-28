@@ -37,7 +37,9 @@ export function requestCounts(names: string[]): Record<string, number> {
   const patterns: Array<[string, RegExp]> = [
     ['style', /styles\//],
     ['gibs', /gibs\.earthdata/],
-    ['sentinel', /maps\.eox\.at/],
+    // Whichever close tier is configured. Naming one provider here is how the
+    // readout came to report "sentinel 0" while Esri tiles were streaming in.
+    ['close', /maps\.eox\.at|arcgisonline\.com/],
     ['vector', /\.pbf(\?|$)/],
     ['glyphs', /\/fonts\//],
     ['sprite', /\/sprites?\//],
@@ -70,7 +72,7 @@ export function readoutLines(state: {
   const { styleLoaded, zoom, layers, features, counts, errors } = state;
   const lines = [
     `style ${styleLoaded ? 'loaded' : 'LOADING'} · z${zoom.toFixed(1)} · ${layers} layers`,
-    `tiles: gibs ${counts.gibs} · sentinel ${counts.sentinel} · vector ${counts.vector}`,
+    `tiles: gibs ${counts.gibs} · close ${counts.close} · vector ${counts.vector}`,
     `glyphs ${counts.glyphs} · sprite ${counts.sprite} · features drawn ${features}`,
   ];
   if (styleLoaded && counts.vector === 0) {

@@ -38,6 +38,7 @@ import {
   IMAGERY_FAR_MAX_ZOOM,
   IMAGERY_NEAR_MAX_ZOOM,
   loadPlanetStyle,
+  resolveVectorSources,
   styleForImagery,
   withImagery,
 } from './basemap';
@@ -199,10 +200,15 @@ describe('withImagery', () => {
 describe('loadPlanetStyle', () => {
   it('fetches the configured vector style and layers imagery into it', async () => {
     let requested = '';
-    const style = await loadPlanetStyle(async (url) => {
-      requested = url;
-      return bareStyle;
-    });
+    const style = await loadPlanetStyle(
+      async (url) => {
+        requested = url;
+        return bareStyle;
+      },
+      // The bare style's source is declared with `url`, so the resolver asks
+      // for its TileJSON too.
+      async () => ({ tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'], maxzoom: 14 }),
+    );
     expect(requested).toBe(config.cityStyleUrl);
     expect(style.sources['orbital-imagery-far']).toBeDefined();
     expect(style.sources['orbital-imagery-near']).toBeDefined();
@@ -407,7 +413,7 @@ describe('the container guard', () => {
 });
 
 describe('the diagnostics readout', () => {
-  const counts = { style: 1, gibs: 12, sentinel: 30, vector: 0, glyphs: 0, sprite: 0 };
+  const counts = { style: 1, gibs: 12, close: 30, vector: 0, glyphs: 0, sprite: 0 };
 
   it('counts requests by kind from the browser timings', () => {
     const names = [
@@ -419,7 +425,7 @@ describe('the diagnostics readout', () => {
     ];
     const result = requestCounts(names);
     expect(result.gibs).toBe(1);
-    expect(result.sentinel).toBe(1);
+    expect(result.close).toBe(1);
     // The glyph request is also a .pbf, and counting it as a vector tile would
     // hide exactly the failure this panel exists to surface.
     expect(result.glyphs).toBe(1);
@@ -526,7 +532,7 @@ describe('styling cartography for imagery', () => {
 describe('the tiles-but-no-features line', () => {
   it('separates a missing source from an invisible one', () => {
     // The two explanations for an empty map look identical in a screenshot.
-    const counts = { style: 1, gibs: 4, sentinel: 8, vector: 40, glyphs: 2, sprite: 1 };
+    const counts = { style: 1, gibs: 4, close: 8, vector: 40, glyphs: 2, sprite: 1 };
     const invisible = readoutLines({
       styleLoaded: true,
       zoom: 15,
@@ -547,5 +553,59 @@ describe('the tiles-but-no-features line', () => {
     }).join('\n');
     expect(working).not.toContain('TILES BUT NO FEATURES');
     expect(working).not.toContain('NO VECTOR TILES');
+  });
+});
+
+describe('resolveVectorSources', () => {
+  const tileJson = {
+    tiles: ['https://tiles.example/planet/20260823/{z}/{x}/{y}.pbf'],
+    minzoom: 0,
+    maxzoom: 14,
+    attribution: 'OpenStreetMap',
+  };
+
+  const styleWithUrlSource: StyleSpecification = {
+    version: 8,
+    sources: { openmaptiles: { type: 'vector', url: 'https://tiles.example/planet' } },
+    layers: [{ id: 'road', type: 'line', source: 'openmaptiles', 'source-layer': 'transportation' }],
+  };
+
+  it('replaces a TileJSON reference with the tiles it points at', async () => {
+    // The defect: MapLibre has to fetch that document itself, and in this
+    // application that request never completed -- 93 layers of cartography and
+    // not one vector tile requested, with no error (D60).
+    const resolved = await resolveVectorSources(styleWithUrlSource, async () => tileJson);
+    const source = resolved.sources.openmaptiles;
+    expect(source).toMatchObject({ type: 'vector', tiles: tileJson.tiles, maxzoom: 14 });
+    expect('url' in source).toBe(false);
+  });
+
+  it('asks for the document the source pointed at', async () => {
+    let requested = '';
+    await resolveVectorSources(styleWithUrlSource, async (url) => {
+      requested = url;
+      return tileJson;
+    });
+    expect(requested).toBe('https://tiles.example/planet');
+  });
+
+  it('leaves sources that already list their tiles alone', async () => {
+    const raster: StyleSpecification = {
+      version: 8,
+      sources: { imagery: { type: 'raster', tiles: ['https://example/{z}/{y}/{x}'] } },
+      layers: [],
+    };
+    const resolved = await resolveVectorSources(raster, async () => {
+      throw new Error('should not fetch');
+    });
+    expect(resolved.sources.imagery).toEqual(raster.sources.imagery);
+  });
+
+  it('fails loudly on a TileJSON with no tiles', async () => {
+    // Quietly accepting it is how the original defect stayed invisible: a
+    // source that resolves to nothing looks exactly like one that works.
+    await expect(
+      resolveVectorSources(styleWithUrlSource, async () => ({ tiles: [] })),
+    ).rejects.toThrow('no tiles');
   });
 });

@@ -198,7 +198,50 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
 }
 
 /**
- * Fetch the vector style and build the planet style from it.
+ * Replace every `url`-style vector source with the tile list it points at.
+ *
+ * A vector source can be declared two ways: with `tiles`, a list of templates,
+ * or with `url`, a TileJSON document that MapLibre must fetch and read the
+ * templates out of. The basemap uses the second form, and in this application
+ * that second request never completed — the map ran with 93 layers of
+ * cartography and requested **not one vector tile**, silently, with no error
+ * event and the style stuck reporting itself as still loading (D60).
+ *
+ * The same document fetches perfectly from the page. So it is fetched here,
+ * where the result can be seen and a failure is an exception rather than a
+ * quiet absence, and the source is handed to MapLibre already resolved.
+ *
+ * The indirection is worth losing anyway: the tile path contains a dated build
+ * (`/planet/20260823_080002_pt/`) that changes weekly, so resolving it at load
+ * time is also what keeps the templates current.
+ */
+export async function resolveVectorSources(
+  style: StyleSpecification,
+  fetchJson: (url: string) => Promise<Record<string, unknown>>,
+): Promise<StyleSpecification> {
+  const sources: StyleSpecification['sources'] = { ...style.sources };
+
+  for (const [name, source] of Object.entries(style.sources)) {
+    if (source.type !== 'vector' || !('url' in source) || !source.url) continue;
+
+    const tileJson = await fetchJson(source.url);
+    const tiles = tileJson.tiles as string[] | undefined;
+    if (!tiles?.length) throw new Error(`${source.url}: TileJSON has no tiles`);
+
+    sources[name] = {
+      type: 'vector',
+      tiles,
+      minzoom: (tileJson.minzoom as number) ?? 0,
+      maxzoom: (tileJson.maxzoom as number) ?? 14,
+      attribution: (tileJson.attribution as string) ?? undefined,
+    };
+  }
+
+  return { ...style, sources };
+}
+
+/**
+ * Fetch the vector style, resolve its sources, and build the planet style.
  *
  * A failure here is fatal in a way the geography layers never were — there is
  * no map without a style — so it rejects rather than degrading, and the caller
@@ -206,8 +249,16 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
  */
 export async function loadPlanetStyle(
   fetchStyle: (url: string) => Promise<StyleSpecification> = defaultFetch,
+  fetchJson: (url: string) => Promise<Record<string, unknown>> = defaultFetchJson,
 ): Promise<StyleSpecification> {
-  return withImagery(await fetchStyle(config.cityStyleUrl));
+  const style = await fetchStyle(config.cityStyleUrl);
+  return withImagery(await resolveVectorSources(style, fetchJson));
+}
+
+async function defaultFetchJson(url: string): Promise<Record<string, unknown>> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  return (await response.json()) as Record<string, unknown>;
 }
 
 async function defaultFetch(url: string): Promise<StyleSpecification> {

@@ -2700,3 +2700,57 @@ two cases at a glance:
 That third row is the one this entry exists for. If the recolour is the fix,
 the map will simply be right; if it is not, the readout now distinguishes the
 remaining two causes without another round trip.
+
+---
+
+## D60 — The one request the map could not make
+
+**Decision:** resolve vector TileJSON documents ourselves at style-build time
+and hand MapLibre a source that already lists its tiles.
+
+**The readout found it in one screenshot**, which is what it was built for
+(D57):
+
+```
+style LOADING · z12.1 · 95 layers
+tiles: gibs 131 · sentinel 0 · vector 0
+glyphs 0 · sprite 2 · features drawn 0
+```
+
+Every number in that is informative. The style is applied — 95 layers, two of
+imagery and 93 of cartography. Imagery is streaming — 131 tiles. The sprite
+loaded, so MapLibre is reading the style. And **not one vector tile, not one
+glyph, and the style still reporting itself as loading**, with no error event
+at all.
+
+**A vector source can be declared two ways**, and the difference turned out to
+matter: `tiles`, a list of URL templates, or `url`, a TileJSON document that
+MapLibre must fetch and read the templates out of. The basemap uses the second.
+That fetch never completed, silently — no error, no retry, and a style
+permanently short of one source, so the 93 layers hanging off it had nothing to
+draw. The imagery sources were unaffected because they are declared the first
+way.
+
+The same TileJSON fetches perfectly from the page, which had been verified more
+than once — and that measurement was misleading in a way worth naming: *we*
+could fetch it, so the URL and CORS were fine, and the conclusion drawn was
+"the tiles are fine". What was never checked is whether **MapLibre** had
+fetched it. `vector 0` is the check that mattered, and it took building a
+readout to see it.
+
+So the document is fetched where the result can be seen, and the source is
+handed over already resolved. A failure is now an exception at load, not a map
+that renders beautifully with no roads on it.
+
+**The indirection was worth losing anyway.** The tile path carries a dated
+build — `/planet/20260823_080002_pt/` — that changes weekly, so resolving it at
+load time is also what keeps the templates current.
+
+### And a bug in the instrument itself
+
+The same screenshot reported `sentinel 0` while Esri tiles were streaming: the
+readout's pattern still named the provider that D58 had replaced. A diagnostic
+that names a vendor goes stale the moment the vendor changes, so it now matches
+whichever close tier is configured and prints `close`. **The measurement
+harness is code too** — this project's oldest lesson, now paid for by the tool
+built to stop paying for it.
