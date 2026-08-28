@@ -31,6 +31,7 @@ import {
 } from './aircraftLayer';
 import { loadPlanetStyle } from './basemap';
 import { createAircraftIconCanvas, createUnknownIconCanvas } from '../globe/aircraftSprite';
+import { isRenderable, unrenderableMessage } from './container';
 import { boundsToBBox, coversWholeWorld } from './viewport';
 
 /** How often to republish the viewport, matching the globe view's cadence. */
@@ -55,6 +56,12 @@ export function PlanetView() {
       const maplibre = await import('maplibre-gl');
       const style = await loadPlanetStyle();
       if (disposed) return;
+
+      // Checked after the stylesheet import above, which is when a cascade
+      // collision would already have collapsed the box. A blank map is
+      // otherwise completely silent (D55).
+      const size = { width: container.clientWidth, height: container.clientHeight };
+      if (!isRenderable(size)) console.warn(unrenderableMessage(size));
 
       map = new maplibre.Map({
         container,

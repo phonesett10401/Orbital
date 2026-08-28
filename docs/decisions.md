@@ -2458,3 +2458,57 @@ mean different things, and the migration meets three at once:
 - **MapLibre's longitudes run past 180 as the user keeps panning; the contract
   stops at 180.** Wrapping is what produces `lonMin > lonMax` across the
   antimeridian, which D25 already defines and the backend already implements.
+
+---
+
+## D55 — A stylesheet loaded later collapsed the map to nothing
+
+**Decision:** scope the map containers' layout rules to `.app` so they outrank
+MapLibre's own, and check the container's size before handing it to MapLibre.
+
+**The symptom was a blank screen with everything else working.** The header,
+the legend and the status bar all rendered, the store held 157 aircraft, no
+console error, no failed request, no MapLibre error event. The map simply drew
+nothing.
+
+**The cause was the cascade.** MapLibre adds `maplibregl-map` to whatever
+container it is given, and its stylesheet sets `position: relative` on that
+class. That stylesheet is a dynamic import — the whole point of which is that
+it arrives only when the map does — so it lands *after* the application's
+styles. `.planet-view` and `.maplibregl-map` are both a single class, so they
+are equally specific, and at equal specificity **the later rule wins**. The
+container turned relative, `inset: 0` stopped applying to anything, the box
+collapsed to zero height, and MapLibre fell back to its default 400x300 canvas
+inside a box with no dimensions.
+
+Measured on the running page: `position: relative`, container 1280x0, canvas
+400x300. Afterwards: `position: absolute`, container 1280x720, canvas 1600x900.
+
+**This is the project's oldest shape in new clothes.** Two correct rules that
+disagree, and nothing to report because neither is wrong on its own — the same
+sentence as D34's pick tolerance, D36's two thresholds, D41's two coordinate
+frames, D47's cached age and D50's rotated cones. What is different is that
+there was no wrong number anywhere to find: the defect lived in the order two
+files were loaded in.
+
+**`.city-map` had it too**, and that matters beyond tidiness: city mode was
+judged and set aside on 2026-08-28, and it would have rendered exactly as
+blank. That verdict was probably formed on a broken layout rather than on the
+idea. It is superseded by the planet view either way, but the record should not
+say the spike was rejected on its merits when it may never have been visible.
+
+### The guard, and why a comment would not have done
+
+`container.ts` measures the container and warns before the map is built,
+naming the cascade as the likely cause. Two reasons it is code rather than a
+note:
+
+- **The failure is silent by construction.** There is nothing to catch and
+  nothing to log; a zero-height box is a legal box. The only way to find out is
+  to ask.
+- **The message is the fix.** "Container has no size" sends the reader to their
+  own layout, which is exactly where the answer is not. Naming
+  `.maplibregl-map` and `position: relative` turns an evening into a minute.
+
+The threshold is 32 pixels rather than zero, because a box of a few pixels is
+the same mistake with the same symptom and would otherwise pass.

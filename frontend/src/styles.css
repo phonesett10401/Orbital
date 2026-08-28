@@ -533,8 +533,15 @@ body {
  * Sits over the globe, under the chrome. The globe keeps running underneath:
  * hiding it would mean rebuilding its state on the way back, and the whole
  * point of the spike is that the transition is cheap to reverse.
+ *
+ * Scoped to `.app` for specificity, and that is not cosmetic. MapLibre adds
+ * `maplibregl-map` to whatever container it is given, and its stylesheet sets
+ * `position: relative` on that class. Its stylesheet is a dynamic import, so
+ * it lands *after* this one, and at equal specificity the later rule wins:
+ * the container turns relative, `inset` stops applying, the box collapses to
+ * zero height, and the map renders into nothing at all (D55).
  */
-.city-map {
+.app .city-map {
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -546,7 +553,10 @@ body {
 
 /* ---- planet view (MapLibre) ---- */
 
-.planet-view {
+/* Scoped to `.app` for the same reason as `.city-map` above: MapLibre's own
+   `.maplibregl-map { position: relative }` loads later and would otherwise
+   win, collapsing the container to nothing (D55). */
+.app .planet-view {
   position: absolute;
   inset: 0;
   z-index: 0;

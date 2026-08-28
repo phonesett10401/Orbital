@@ -93,9 +93,9 @@ cd frontend && npm test
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
-| `planet.test.ts` | 28 | **The MapLibre style, aircraft as GeoJSON, bounds to the contract's bbox** |
+| `planet.test.ts` | 32 | **The MapLibre style, aircraft as GeoJSON, bounds to the bbox, the container guard** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **663** | 321 backend, 342 frontend |
+| **Total** | **667** | 321 backend, 346 frontend |
 
 ### What the automated suites do not cover
 
@@ -111,7 +111,7 @@ one that admits its gaps:
 - **React component rendering.** Components are exercised manually and through
   the store; there are no DOM-rendering tests for them. The pointer path is the
   exception, because that is where a bug hid (§6).
-- **Wiring, in general.** Seven of the sixteen defects in §6 were cases where
+- **Wiring, in general.** Eight of the seventeen defects in §6 were cases where
   correct code was never connected to anything. Tests assert on behaviour that
   runs; they cannot assert on behaviour that was never reached. Running the
   system remains a required step, not a nicety.
@@ -220,6 +220,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 17 | **The MapLibre map rendered into a container collapsed to zero height** by MapLibre's own stylesheet winning the cascade — no error, no failed request, a blank screen | High | A screenshot from Phone (D55, §19.5) | Fixed |
 | 16 | **City mode handed over at 0.05 radii, where the globe texture is 36 texels per screen pixel** — so the whole approach was spent looking at a magnified smear, and a failed hand-off left the layer permanently active with no map and no retry | Medium, visual | Two screenshots from Phone (D53, §18.6) | Fixed |
 | 15 | **The selected aircraft's nose and tail cones were built inside out** — each pinched to a needle where it met the fuselage and flared open at the tip, so the model read as a dart with a fork on the front | Medium, visual | A screenshot from Phone (D50, §13.4) | Fixed |
 
@@ -1514,3 +1515,37 @@ have been silent in tests and fatal in the app.
 **Not verified: that it renders.** The agent-driven browser surfaces still do
 not composite, so MapLibre never gets the `requestAnimationFrame` it needs to
 process a style or draw a tile. Phase 1 is finished when somebody looks at it.
+
+### 19.5 Defect: the map rendered into a collapsed container
+
+Reported 2026-08-28 as "complete blank" with a screenshot: chrome, legend and
+status bar all correct, 157 aircraft in the store, and no map. Defect #17 in
+§6, reasoning in D55.
+
+MapLibre adds `maplibregl-map` to its container and its stylesheet sets
+`position: relative` on that class. The stylesheet is a dynamic import, so it
+loads *after* the application's own; both selectors are one class, so they are
+equally specific; and at equal specificity the later rule wins. The container
+turned relative, `inset: 0` stopped applying, and the box collapsed.
+
+| | Before | After |
+|---|---|---|
+| `position` | `relative` | `absolute` |
+| Container | 1280x**0** | 1280x720 |
+| Canvas | 400x300 (MapLibre's fallback) | 1600x900 |
+
+**Nothing reported it.** No exception, no console error, no MapLibre `error`
+event, no failed request — a zero-height box is a legal box. The only signal
+was the 400x300 canvas, which is what MapLibre falls back to when it is handed
+a container with no dimensions.
+
+Fixed by scoping the rules to `.app`, and guarded by `container.ts`, which
+measures the container before the map is built and names the cascade collision
+in the warning. Four tests cover the guard, including that the message names
+`.maplibregl-map` and `position: relative` rather than only reporting the size
+— the cause is in somebody else's stylesheet, which is the last place the
+reader would look.
+
+**`.city-map` had the same bug**, which means the city-mode spike (§18) was
+very likely blank when it was looked at and set aside. It is superseded either
+way, but the record should not claim it was rejected on its merits.

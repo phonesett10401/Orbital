@@ -39,6 +39,7 @@ import {
   loadPlanetStyle,
   withImagery,
 } from './basemap';
+import { isRenderable, unrenderableMessage } from './container';
 import { boundsToBBox, coversWholeWorld, wrapLongitude } from './viewport';
 
 const NOW = Date.parse('2026-08-28T12:00:00Z');
@@ -321,5 +322,39 @@ describe('wrapLongitude', () => {
 
   it('picks -180 over +180, as the contract does', () => {
     expect(wrapLongitude(180)).toBe(-180);
+  });
+});
+
+describe('the container guard', () => {
+  it('accepts a container with real dimensions', () => {
+    expect(isRenderable({ width: 1280, height: 720 })).toBe(true);
+  });
+
+  it('rejects a collapsed one', () => {
+    // The failure it exists for: MapLibre adds `maplibregl-map` to the
+    // container and its stylesheet sets `position: relative` on that class.
+    // The stylesheet is a dynamic import, so it lands after the application's
+    // own, and at equal specificity the later rule wins -- an absolutely
+    // positioned container turns relative, `inset` stops applying, and the box
+    // collapses to zero height. No error, no failed request, a blank screen
+    // (D55).
+    expect(isRenderable({ width: 1280, height: 0 })).toBe(false);
+    expect(isRenderable({ width: 0, height: 0 })).toBe(false);
+  });
+
+  it('rejects a container too small to be deliberate', () => {
+    // A box of a few pixels is the same mistake with the same symptom, and
+    // calling it usable would let the interesting case through.
+    expect(isRenderable({ width: 8, height: 8 })).toBe(false);
+  });
+
+  it('names the likely cause, not just the symptom', () => {
+    // "Container has no size" sends the reader to their own layout. The cause
+    // was somebody else's stylesheet winning the cascade, and the message says
+    // so, because that is the difference between a minute and an evening.
+    const message = unrenderableMessage({ width: 1280, height: 0 });
+    expect(message).toContain('1280x0');
+    expect(message).toContain('maplibregl-map');
+    expect(message).toContain('position: relative');
   });
 });
