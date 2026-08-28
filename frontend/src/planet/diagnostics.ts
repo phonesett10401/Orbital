@@ -73,8 +73,9 @@ export function readoutLines(state: {
   vector: VectorSourceState;
   counts: Record<string, number>;
   errors: string[];
+  probe?: string | null;
 }): string[] {
-  const { styleLoaded, zoom, layers, features, vector, counts, errors } = state;
+  const { styleLoaded, zoom, layers, features, vector, counts, errors, probe } = state;
   const lines = [
     `style ${styleLoaded ? 'loaded' : 'LOADING'} · z${zoom.toFixed(1)} · ${layers} layers`,
     `imagery: gibs ${counts.gibs} · close ${counts.close}`,
@@ -84,11 +85,19 @@ export function readoutLines(state: {
 
   if (!vector.present) {
     lines.push('NO VECTOR SOURCE — the style has no tiles to draw roads from');
+  } else if (!vector.template) {
+    lines.push('SOURCE HAS NO TILE TEMPLATE — it was never resolved');
   } else if (vector.tiles === 0) {
     lines.push('SOURCE HAS NO TILES — nothing was ever fetched for this view');
   } else if (features === 0) {
     lines.push('TILES BUT NO FEATURES — fetched and drew nothing');
   }
+
+  // The template the map holds, and what happened when this panel fetched a
+  // tile from it directly. That separates "the URL is wrong" from "MapLibre
+  // cannot fetch it", which is the last ambiguity left.
+  if (vector.template) lines.push(`tmpl ${vector.template.replace(/^https?:\/\//, '')}`);
+  if (probe) lines.push(`probe ${probe}`);
 
   for (const error of errors.slice(-ERROR_LIMIT)) lines.push(`! ${error}`);
   return lines;
@@ -105,6 +114,38 @@ export interface VectorSourceState {
   present: boolean;
   loaded: boolean;
   tiles: number;
+  /** The template the live style holds, if it has one. */
+  template: string | null;
+  maxzoom: number;
+}
+
+/**
+ * The tile URL MapLibre would use for a given view, from the live style.
+ *
+ * Built from the source's own template so it cannot drift from what the map is
+ * actually configured with — the point is to test *that* URL, not one written
+ * out again here.
+ */
+export function tileUrlFor(
+  template: string,
+  lat: number,
+  lon: number,
+  zoom: number,
+  maxzoom: number,
+): string {
+  // Vector sources overzoom: past their maximum they keep drawing the deepest
+  // tiles they have, so the tile to test is the one at that depth.
+  const z = Math.min(Math.floor(zoom), maxzoom);
+  const scale = 2 ** z;
+  const x = Math.floor(((lon + 180) / 360) * scale);
+  const rad = (lat * Math.PI) / 180;
+  const y = Math.floor(
+    ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * scale,
+  );
+  return template
+    .replace('{z}', String(z))
+    .replace('{x}', String(x))
+    .replace('{y}', String(y));
 }
 
 /** Read that state, tolerating the internals moving. */
@@ -112,6 +153,8 @@ export function vectorSourceState(map: import('maplibre-gl').Map, id: string): V
   let present = false;
   let loaded = false;
   let tiles = 0;
+  let template: string | null = null;
+  let maxzoom = 14;
 
   try {
     present = Boolean(map.getSource(id));
@@ -120,12 +163,18 @@ export function vectorSourceState(map: import('maplibre-gl').Map, id: string): V
       ?.sourceCaches;
     const cache = caches?.[id] as { _tiles?: Record<string, unknown> } | undefined;
     tiles = Object.keys(cache?._tiles ?? {}).length;
+
+    const spec = map.getStyle()?.sources?.[id] as
+      | { tiles?: string[]; maxzoom?: number }
+      | undefined;
+    template = spec?.tiles?.[0] ?? null;
+    maxzoom = spec?.maxzoom ?? 14;
   } catch {
     // Internals are not API; a readout that throws is worse than one that
     // under-reports.
   }
 
-  return { present, loaded, tiles };
+  return { present, loaded, tiles, template, maxzoom };
 }
 
 export function createDiagnosticsPanel(): DiagnosticsPanel {
@@ -134,6 +183,9 @@ export function createDiagnosticsPanel(): DiagnosticsPanel {
 
   const errors: string[] = [];
   let timer = 0;
+  /** Result of fetching one tile from the live template, ourselves. */
+  let probe: string | null = null;
+  let probed = false;
 
   return {
     element,
@@ -143,6 +195,34 @@ export function createDiagnosticsPanel(): DiagnosticsPanel {
         const error = event as unknown as { error?: { message?: string } };
         errors.push(String(error.error?.message ?? event).slice(0, 120));
       });
+
+      /**
+       * Fetch one tile from the template the map is actually configured with.
+       *
+       * The last ambiguity: a source that never fetches could have a wrong URL
+       * or be unable to fetch a right one. This asks the main thread — which
+       * is known to reach these hosts — to try the exact URL MapLibre holds.
+       * Once only; it is a diagnosis, not a monitor.
+       */
+      const probeTile = (state: VectorSourceState) => {
+        if (probed || !state.template) return;
+        probed = true;
+        const url = tileUrlFor(
+          state.template,
+          map.getCenter().lat,
+          map.getCenter().lng,
+          map.getZoom(),
+          state.maxzoom,
+        );
+        void fetch(url)
+          .then(async (response) => {
+            const bytes = (await response.arrayBuffer()).byteLength;
+            probe = `${response.status} ${bytes}B from main thread`;
+          })
+          .catch((error) => {
+            probe = `FETCH FAILED: ${String(error).slice(0, 80)}`;
+          });
+      };
 
       const refresh = () => {
         const names = performance.getEntriesByType('resource').map((entry) => entry.name);
@@ -164,9 +244,13 @@ export function createDiagnosticsPanel(): DiagnosticsPanel {
           features = 0;
         }
 
+        const vector = vectorSourceState(map, 'openmaptiles');
+        probeTile(vector);
+
         element.textContent = '';
         for (const line of readoutLines({
-          vector: vectorSourceState(map, 'openmaptiles'),
+          vector,
+          probe,
           // `isStyleLoaded` is typed as possibly returning void in this
           // version; the readout wants a definite answer either way.
           styleLoaded: map.isStyleLoaded() === true,

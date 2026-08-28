@@ -43,7 +43,7 @@ import {
   withImagery,
 } from './basemap';
 import { isRenderable, unrenderableMessage } from './container';
-import { readoutLines, requestCounts, vectorSourceState } from './diagnostics';
+import { readoutLines, requestCounts, tileUrlFor, vectorSourceState } from './diagnostics';
 import { boundsToBBox, coversWholeWorld, wrapLongitude } from './viewport';
 
 const NOW = Date.parse('2026-08-28T12:00:00Z');
@@ -414,7 +414,8 @@ describe('the container guard', () => {
 
 describe('the diagnostics readout', () => {
   const counts = { style: 1, gibs: 12, close: 30, vectorMainThread: 0, glyphs: 0, sprite: 0 };
-  const drawing = { present: true, loaded: true, tiles: 24 };
+  const template = 'https://tiles.example/planet/{z}/{x}/{y}.pbf';
+  const drawing = { present: true, loaded: true, tiles: 24, template, maxzoom: 14 };
 
   it('counts imagery requests by kind from the browser timings', () => {
     const names = [
@@ -437,7 +438,7 @@ describe('the diagnostics readout', () => {
       zoom: 14,
       layers: 95,
       features: 0,
-      vector: { present: false, loaded: false, tiles: 0 },
+      vector: { present: false, loaded: false, tiles: 0, template: null, maxzoom: 14 },
       counts,
       errors: [],
     });
@@ -452,7 +453,7 @@ describe('the diagnostics readout', () => {
       zoom: 14,
       layers: 95,
       features: 0,
-      vector: { present: true, loaded: false, tiles: 0 },
+      vector: { present: true, loaded: false, tiles: 0, template, maxzoom: 14 },
       counts,
       errors: [],
     }).join('\n');
@@ -509,9 +510,10 @@ describe('the diagnostics readout', () => {
     const map = {
       getSource: () => ({ type: 'vector' }),
       isSourceLoaded: () => true,
+      getStyle: () => ({ sources: { openmaptiles: { tiles: ['https://t/{z}/{x}/{y}.pbf'] } } }),
       style: { sourceCaches: { openmaptiles: { _tiles: { a: 1, b: 2, c: 3 } } } },
     } as unknown as import('maplibre-gl').Map;
-    expect(vectorSourceState(map, 'openmaptiles')).toEqual({
+    expect(vectorSourceState(map, 'openmaptiles')).toMatchObject({
       present: true,
       loaded: true,
       tiles: 3,
@@ -525,7 +527,7 @@ describe('the diagnostics readout', () => {
         throw new Error('no such source');
       },
     } as unknown as import('maplibre-gl').Map;
-    expect(vectorSourceState(map, 'openmaptiles')).toEqual({
+    expect(vectorSourceState(map, 'openmaptiles')).toMatchObject({
       present: false,
       loaded: false,
       tiles: 0,
@@ -661,5 +663,25 @@ describe('resolveVectorSources', () => {
     await expect(
       resolveVectorSources(styleWithUrlSource, async () => ({ tiles: [] })),
     ).rejects.toThrow('no tiles');
+  });
+});
+
+describe('tileUrlFor', () => {
+  const template = 'https://tiles.example/planet/{z}/{x}/{y}.pbf';
+
+  it('builds the tile that covers a point', () => {
+    // Bangkok at zoom 14 is a known tile; getting x and y the wrong way round
+    // is the mistake this whole project keeps making, so it is pinned.
+    expect(tileUrlFor(template, 13.75, 100.5, 14, 14)).toBe(
+      'https://tiles.example/planet/14/12765/7560.pbf',
+    );
+  });
+
+  it('clamps to the source maximum, because vector sources overzoom', () => {
+    // Past its maximum a source keeps drawing its deepest tiles, so the tile
+    // worth testing is the one at that depth, not one that does not exist.
+    expect(tileUrlFor(template, 13.75, 100.5, 17.4, 14)).toBe(
+      tileUrlFor(template, 13.75, 100.5, 14, 14),
+    );
   });
 });
