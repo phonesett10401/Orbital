@@ -140,6 +140,17 @@ class TestConfiguredPresetsFitTheirBudget:
         with pytest.raises(ValueError, match="unknown quota preset"):
             Settings(quota_preset="generous")
 
+    def test_objects_outlive_a_missed_poll_but_not_a_lost_aircraft(self):
+        # 300 s is five times the union preset's global sweep and two and a
+        # half times its metered refresh, so no aircraft is dropped for a
+        # missed poll - and an aircraft nobody has reported for five minutes
+        # has landed or left coverage. At the old 1800 s, 39% of everything
+        # served was past the client's two-minute fade: a map of ghosts (D86).
+        settings = Settings(quota_preset="union", provider="union")
+        longest = max(job.interval_seconds for job in settings.jobs)
+        assert settings.object_ttl_seconds >= 4 * longest
+        assert settings.object_ttl_seconds <= 600
+
     def test_ttl_must_exceed_the_longest_interval(self):
         # Otherwise every response is stale the moment it is served.
         with pytest.raises(ValueError, match="stale by construction"):

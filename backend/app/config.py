@@ -211,10 +211,18 @@ class Settings(BaseSettings):
         ),
     )
     object_ttl_seconds: float = Field(
-        default=1800.0,
+        default=300.0,
         gt=0,
-        description="Drop an object not re-observed within this window. Longer than "
-        "snapshot TTL so a briefly missing aircraft keeps its track history.",
+        description=(
+            "Drop an object not re-observed within this window. Comfortably longer "
+            "than the longest poll interval, so a missed poll never drops an "
+            "aircraft, and short enough that what is drawn is something a feed has "
+            "actually seen recently. It was 1800 s, chosen when one feed polled "
+            "every 300 s; with two feeds sweeping every 60 s an aircraft absent for "
+            "five minutes has landed or left coverage, and keeping it for half an "
+            "hour meant 39% of everything served was past the two-minute fade - "
+            "a map of ghosts (D86)."
+        ),
     )
     track_history_points: int = Field(
         default=50,

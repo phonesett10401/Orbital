@@ -102,7 +102,7 @@ cd frontend && npm test
 | `test_adsblol.py` | 25 | **Feet and knots into the contract's units, "ground", one-request sweeps, HTTP 420** |
 | `test_union.py` | 18 | **Both feeds present, the metered one polled once an interval and never for a viewport, independent failure** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **917** | 417 backend, 500 frontend |
+| **Total** | **918** | 418 backend, 500 frontend |
 
 ### What the automated suites do not cover
 
@@ -227,6 +227,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 32 | **Two of every five aircraft drawn were ghosts** — the 30-minute eviction window was set for a 300-second poll; with two feeds sweeping every 60 s it kept aircraft nobody had reported for half an hour, drawn frozen and faded | Medium, visual | Phone: two crops of the same aircraft, one bright and one pale (D86, §19.36) | Fixed |
 | 31 | **A single global circle left a quarter of the world unswept** — 6,000 nm is about 100 degrees of arc, so Australia, New Zealand and the south Pacific were refreshed only when OpenSky carried them; their aircraft sat frozen and faded | **High** | Phone: "the planes are stuck for 2-3 minutes" (D85, §19.35) | Fixed |
 | 30 | **The map froze, and worse the further you zoomed in** — the union replayed its whole cached OpenSky snapshot on every viewport poll, so positions stopped advancing (frozen and faded by D71) and every aircraft outside the viewport was overwritten by a copy up to five minutes old | **High** | Phone: "the planes are not moving" (D84, §19.34) | Fixed |
 | 29 | **A flight drew a detour it never flew** — a bad waypoint put a V-shaped spike in the track, and stretches nobody watched were drawn as confident line | Medium, visual | Phone, comparing against Flightradar24 (D82, §19.32) | Fixed |
@@ -2502,3 +2503,28 @@ cannot pass for the wrong reason.
 | aircraft over SE Australia | **0** | **30** |
 | aircraft over New Zealand | 0 | **19** |
 | median age over Laos | ~140 s | **42 s** |
+
+### 19.36 The pale aircraft were old, not zoomed
+
+Phone sent two crops of the same aircraft either side of z12, one bright and
+one washed out, and read it as a zoom effect (defect #32). Reasoning in D86.
+
+**Nothing on that layer varies with zoom except size.** `icon-color` is the
+altitude ramp; `icon-opacity` has three values - 0 while a 3D model draws
+instead (D67), **0.45 past the two-minute fade** (D71), and 1 otherwise. The
+pale aircraft was faded, and the zoom was time passing.
+
+**But the frequency was the real defect:** 39% of every aircraft served was
+past that fade, because the eviction window was still the 1800 s chosen when
+one feed polled every 300 s. Two feeds sweeping every 60 s make an aircraft
+absent for five minutes a landed one, not a briefly missed one.
+
+| | before | after |
+|---|---|---|
+| served aircraft past the 120 s fade | **39%** | **10%** |
+| oldest position served | 30 min | 357 s |
+
+The test asserts the window against the *preset's own intervals* rather than a
+literal - at least four times the longest poll, at most ten minutes - so it
+follows the cadence rather than having to be remembered when the cadence
+changes again, which is exactly how this one went stale.

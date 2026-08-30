@@ -4192,3 +4192,51 @@ good snapshot rather than being wiped by a successful-looking empty poll (D10).
 The residual 9% is the honest part: OpenSky's own feed carries 7% of positions
 older than two minutes, and an aircraft nobody has heard from should sit still
 and fade rather than be flown on a guess.
+
+---
+
+## D86 — Stop drawing aircraft nobody has seen for half an hour
+
+**Decision:** an object is evicted after **300 seconds** without a report,
+rather than 1800.
+
+Phone sent two crops of the same aircraft, one bright and one pale, and read
+the difference as a zoom effect. It is not: nothing on the aircraft layer
+varies with zoom except size. `icon-color` is the altitude ramp and
+`icon-opacity` has exactly three values — 0 when a 3D model is drawing instead
+(D67), **0.45 when the position is over two minutes old** (D71), and 1
+otherwise. The pale aircraft was a faded one, and the zoom was a coincidence of
+time passing.
+
+But the reason it kept happening *was* real: **39% of everything served was
+past that fade.**
+
+### Why so many
+
+The 1800-second eviction window was set when one feed polled every 300 seconds
+and an aircraft could plausibly be missing from a couple of polls. With two
+feeds sweeping every 60 seconds, an aircraft absent for five minutes has landed
+or left coverage — and we were keeping it for half an hour, drawing it faded
+and frozen the whole time. Most of the "aircraft" on a quiet part of the map
+were ghosts.
+
+300 seconds is five times the global sweep and two and a half times the metered
+refresh, so no aircraft is dropped for a missed poll; and it makes the faded
+state mean something bounded — *last seen between two and five minutes ago* —
+rather than *somewhere in the last half hour*.
+
+Nothing was needed on the client: it rebuilds its map from each response, so an
+object the backend stops sending disappears immediately.
+
+| | before | after |
+|---|---|---|
+| served aircraft past the 120 s fade | **39%** | **10%** |
+| oldest position served | 30 min | 357 s |
+| median age | — | 67 s |
+
+### The general point
+
+An eviction window is an assertion about how long a position stays worth
+drawing, and it was left over from a polling design that no longer exists. When
+the cadence changed by a factor of five, every constant derived from the old
+cadence became a guess about a system that had gone.
