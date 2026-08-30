@@ -3908,3 +3908,48 @@ That is the conservative behaviour working rather than a weaker result.
 `meta.velocitySource = "derived"` sits beside `headingSource`, and the panel
 prints "from its track" against either, because every other number there is
 the source's own.
+
+---
+
+## D82 — A line is a claim, and not every part of a track is the same claim
+
+**Decision:** waypoints no aircraft could have reached *and* left are deleted,
+and any remaining stretch we cannot vouch for — a silence over five minutes, or
+a jump that implies over 400 m/s — is drawn as a **thin dashed line** rather
+than as track.
+
+Phone, comparing against Flightradar24: a flight crossing Myanmar drew a
+V-shaped detour down to Nay Pyi Taw and back, where Flightradar drew a straight
+thin line. Two different faults produced that, and they need opposite
+treatments.
+
+### Deleted: waypoints that are impossible on both sides
+
+Measured on ten live tracks: **five contained at least one segment implying
+over 400 m/s.** A lone bad waypoint is recognisable because reaching it is
+impossible *and* leaving it is impossible, and that pair of impossibilities is
+what separates it from an honest coverage gap — which is far apart in distance
+but proportionally far apart in time, so the speed it implies is perfectly
+ordinary. **Testing distance would delete every gap; testing speed keeps them.**
+
+The first and last points are judged by their single neighbour. The first one
+matters more than it looks: the departure airport is read off it (D78), so a
+spike at the start would name an airport the flight never went near. That hole
+existed in the first version of this code and a test found it.
+
+### Drawn thin: everything we cannot vouch for
+
+Cleaning cannot catch a **step change** — where the position jumps once and
+everything after it is self-consistent — because only one side of it is wrong.
+After cleaning, ten live tracks still carried **fourteen** such segments. And
+gaps are ordinary rather than exceptional: **eight of those ten tracks had a
+silence longer than five minutes**, one of them sixteen.
+
+Both mean the same thing to a reader: *we do not know how the aircraft got from
+here to there.* So both are drawn the same way — one thin dashed line, no
+casing, bridging the two ends so the track stays continuous rather than
+stopping and restarting.
+
+This is the same distinction the leader already makes between the track and the
+aircraft's current position (D72), and the same one the panel makes in words.
+A line is a claim; these parts of it are weaker claims, and they now look it.

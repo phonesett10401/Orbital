@@ -13,6 +13,8 @@ import { describe, expect, it } from 'vitest';
 import type { TrackPoint } from '../types';
 import {
   LEADER_SOURCE,
+  ROUTE_GAP_LAYER,
+  ROUTE_GAP_SECONDS,
   ORIGIN_LABEL_LAYER,
   ORIGIN_LAYER,
   ORIGIN_SOURCE,
@@ -220,8 +222,12 @@ describe('leaderLayers', () => {
       expect(paint['line-dasharray']).toBeDefined();
       expect((layer as { source: string }).source).toBe(LEADER_SOURCE);
     }
+    // The *observed* part of the track is solid. The gap line is dashed too,
+    // and for the same reason as the leader: it is inference (D82).
     for (const layer of routeLayers()) {
-      expect((layer as { paint: Record<string, unknown> }).paint['line-dasharray']).toBeUndefined();
+      const dashed = (layer as { paint: Record<string, unknown> }).paint['line-dasharray'];
+      if (layer.id === ROUTE_GAP_LAYER) expect(dashed).toBeDefined();
+      else expect(dashed).toBeUndefined();
     }
   });
 
@@ -282,5 +288,77 @@ describe('the departure airport', () => {
     // of them is noise; the airport's full name is in the panel regardless.
     const [, label] = originLayers();
     expect((label as { minzoom?: number }).minzoom).toBeGreaterThan(2);
+  });
+});
+
+describe('coverage gaps in the track', () => {
+  // Phone, comparing against Flightradar24: a stretch of the flight over
+  // Myanmar drew as a V-shaped detour, where Flightradar drew a straight thin
+  // line. Two causes, and this is the second - the aircraft flew somewhere
+  // nobody was listening (defect #29, D82). Of ten live tracks checked, eight
+  // contained a gap over five minutes.
+  //
+  // The fixtures fly at **0.013 degrees per six seconds**, about 240 m/s. The
+  // first draft used 0.1, which is 1,855 m/s, and the gap rule correctly
+  // called every segment impossible.
+
+  function at(lat: number, lon: number, seconds: number): TrackPoint {
+    return {
+      lat,
+      lon,
+      altitude: 10_000,
+      timestamp: new Date(Date.UTC(2026, 7, 30, 12, 0, seconds)).toISOString(),
+    };
+  }
+
+  it('draws one solid line when nothing was missed', () => {
+    const collection = routeFeatures([at(0, 0, 0), at(0, 0.013, 6), at(0, 0.026, 12)]);
+    expect(collection.features).toHaveLength(1);
+    expect(collection.features[0].properties.gap).toBe(false);
+  });
+
+  it('splits at a silence and bridges it with its own feature', () => {
+    const collection = routeFeatures([
+      at(0, 0, 0),
+      at(0, 0.013, 6),
+      // Twenty minutes of nothing, at a speed that is perfectly ordinary.
+      at(0, 2, 1200),
+      at(0, 2.013, 1206),
+    ]);
+    expect(collection.features.map((f) => f.properties.gap)).toEqual([false, true, false]);
+  });
+
+  it('joins the silence end to end, so the line stays continuous', () => {
+    // The whole point of drawing it at all: Flightradar's line does not stop
+    // and restart, it thins.
+    const collection = routeFeatures([at(0, 0, 0), at(0, 0.013, 6), at(0, 2, 1200)]);
+    const [observed, gap] = collection.features;
+    const lastObserved = observed.geometry.coordinates[observed.geometry.coordinates.length - 1];
+    expect(gap.geometry.coordinates[0]).toEqual(lastObserved);
+    expect(gap.geometry.coordinates[gap.geometry.coordinates.length - 1][0]).toBeCloseTo(2, 6);
+  });
+
+  it('leaves an ordinary sampling interval alone', () => {
+    // Four minutes at a plausible speed is a hiccup, not a silence.
+    const collection = routeFeatures([at(0, 0, 0), at(0, 0.5, ROUTE_GAP_SECONDS - 60)]);
+    expect(collection.features).toHaveLength(1);
+    expect(collection.features[0].properties.gap).toBe(false);
+  });
+
+  it('treats an impossible jump as a gap, however brief it looks', () => {
+    // The backend deletes a lone spike, but not a step change - where the
+    // position jumps once and everything after it is self-consistent. Ten live
+    // tracks still carried fourteen such segments after cleaning. The aircraft
+    // did not fly 20 degrees in six seconds, so we do not know how it got
+    // there, and a confident line would say we do (D82).
+    const collection = routeFeatures([at(0, 0, 0), at(0, 20, 6), at(0, 20.013, 12)]);
+    expect(collection.features.map((f) => f.properties.gap)).toEqual([true, false]);
+  });
+
+  it('can bridge a gap at the very start of a track', () => {
+    // Only two points after the silence, so there is no solid run to draw
+    // before it - just the bridge and what follows.
+    const collection = routeFeatures([at(0, 0, 0), at(0, 2, 1200), at(0, 2.013, 1206)]);
+    expect(collection.features.map((f) => f.properties.gap)).toEqual([true, false]);
   });
 });

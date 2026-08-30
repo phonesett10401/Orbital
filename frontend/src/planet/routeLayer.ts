@@ -28,6 +28,9 @@ export const ROUTE_SOURCE = 'orbital-route';
 export const ROUTE_LAYER = 'orbital-route';
 export const ROUTE_CASING_LAYER = 'orbital-route-casing';
 
+/** The thin line bridging a stretch nobody watched. */
+export const ROUTE_GAP_LAYER = 'orbital-route-gap';
+
 /**
  * The segment joining the last reported position to where the aircraft is
  * being drawn right now.
@@ -77,7 +80,7 @@ const DEG = Math.PI / 180;
 export interface RouteFeature {
   type: 'Feature';
   geometry: { type: 'LineString'; coordinates: Array<[number, number]> };
-  properties: Record<string, never>;
+  properties: { gap: boolean };
 }
 
 export type RouteCollection = {
@@ -173,28 +176,105 @@ export function unwrapLongitudes(coordinates: Array<[number, number]>): Array<[n
  * and the panel already explains that a route builds up as the aircraft is
  * watched.
  */
+/**
+ * How long a silence has to be before the track admits it is guessing.
+ *
+ * Coverage gaps are ordinary rather than exceptional: of ten live tracks
+ * checked, **eight contained a gap of over five minutes**, some of them
+ * sixteen. Drawn as ordinary track those minutes become a confident straight
+ * line through country nobody watched the aircraft cross, which is the same
+ * claim the panel is careful not to make about the route as a whole (D6, D82).
+ *
+ * Five minutes is comfortably longer than the six-second sampling and than any
+ * ordinary hiccup in it.
+ */
+export const ROUTE_GAP_SECONDS = 300;
+
+/**
+ * And the speed above which a segment is a gap however short it looks.
+ *
+ * The backend deletes waypoints that are impossible to reach *and* impossible
+ * to leave, which catches a lone spike. It cannot catch a **step change** -
+ * where the position jumps once and the points after it are self-consistent -
+ * because only one side of that is wrong. Measured on live tracks after
+ * cleaning: ten tracks still carried fourteen segments implying over 400 m/s.
+ *
+ * Whatever produced them, the aircraft did not fly that segment at that speed,
+ * so we do not know how it got there - which is the definition of a gap, and
+ * is drawn as one (D82). Same ceiling as the speed correction (D81).
+ */
+export const ROUTE_MAX_SPEED_MS = 400;
+
+/** Metres between two points on the sphere. */
+function metresBetween(a: TrackPoint, b: TrackPoint): number {
+  const R = 6_371_008.8;
+  const phi1 = (a.lat * Math.PI) / 180;
+  const phi2 = (b.lat * Math.PI) / 180;
+  const dPhi = phi2 - phi1;
+  const dLambda = ((b.lon - a.lon) * Math.PI) / 180;
+  const h =
+    Math.sin(dPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * The observed track, split wherever the aircraft went unwatched.
+ *
+ * Returns one feature per continuous run, plus a `gap: true` feature bridging
+ * each silence, so the two can be drawn differently: solid for what was seen,
+ * thin and dashed for what was inferred. Flightradar does the same thing and
+ * for the same reason - a line is a claim, and these two parts of it are not
+ * claims of equal strength.
+ */
 export function routeFeatures(track: TrackPoint[] | null | undefined): RouteCollection {
   if (!track || track.length < 2) return emptyRoute();
 
-  const coordinates: Array<[number, number]> = [];
+  const features: RouteFeature[] = [];
+  let run: Array<[number, number]> = [];
+
+  const flush = () => {
+    if (run.length >= 2) {
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: unwrapLongitudes(run) },
+        properties: { gap: false },
+      });
+    }
+    run = [];
+  };
+
   for (let i = 0; i < track.length - 1; i += 1) {
-    const arc = greatCircleLatLon(track[i], track[i + 1]);
+    const from = track[i];
+    const to = track[i + 1];
+    const silence = (Date.parse(to.timestamp) - Date.parse(from.timestamp)) / 1000;
+    const arc = greatCircleLatLon(from, to);
+    // Either we were not watching for long enough to know, or what we have
+    // could not have happened. Both mean the same thing to a reader.
+    const impossible = silence > 0 && metresBetween(from, to) / silence > ROUTE_MAX_SPEED_MS;
+
+    if (silence > ROUTE_GAP_SECONDS || impossible) {
+      // End the observed run at this point, bridge the silence with its own
+      // feature, and start the next run on the far side of it.
+      if (run.length === 0) run.push(arc[0]);
+      else run.push(arc[0]);
+      flush();
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: unwrapLongitudes(arc) },
+        properties: { gap: true },
+      });
+      run = [arc[arc.length - 1]];
+      continue;
+    }
+
     // The last point of each arc is the first of the next, so it is dropped
     // except at the very end -- otherwise every sample is duplicated.
     const slice = i === track.length - 2 ? arc : arc.slice(0, -1);
-    coordinates.push(...slice);
+    run.push(...slice);
   }
+  flush();
 
-  return {
-    type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        geometry: { type: 'LineString', coordinates: unwrapLongitudes(coordinates) },
-        properties: {},
-      },
-    ],
-  };
+  return { type: 'FeatureCollection', features };
 }
 
 /**
@@ -211,6 +291,9 @@ export function routeLayers(): import('maplibre-gl').LayerSpecification[] {
       id: ROUTE_CASING_LAYER,
       type: 'line',
       source: ROUTE_SOURCE,
+      // Only the observed runs. A casing under the gap line would make the
+      // guess as heavy as the evidence.
+      filter: ['!', ['get', 'gap']],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: {
         'line-color': 'rgba(0, 0, 0, 0.55)',
@@ -221,10 +304,27 @@ export function routeLayers(): import('maplibre-gl').LayerSpecification[] {
       id: ROUTE_LAYER,
       type: 'line',
       source: ROUTE_SOURCE,
+      filter: ['!', ['get', 'gap']],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: {
         'line-color': '#ffffff',
         'line-width': ['interpolate', ['linear'], ['zoom'], 2, 1.5, 12, 3],
+      },
+    },
+    {
+      // Thin, dashed, and no casing: a stretch of flight nobody watched, drawn
+      // so it cannot be mistaken for one that was. Same shape as the leader
+      // that joins the track to the aircraft, and for the same reason - both
+      // are inference rather than observation (D72, D82).
+      id: ROUTE_GAP_LAYER,
+      type: 'line',
+      source: ROUTE_SOURCE,
+      filter: ['get', 'gap'],
+      layout: { 'line-cap': 'butt', 'line-join': 'round' },
+      paint: {
+        'line-color': 'rgba(255, 255, 255, 0.75)',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 2, 1, 12, 1.6],
+        'line-dasharray': [2.5, 2],
       },
     },
   ];
@@ -256,7 +356,13 @@ export function leaderFeature(
   }
   return {
     type: 'FeatureCollection',
-    features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: arc } }],
+    features: [
+      {
+        type: 'Feature',
+        properties: { gap: false },
+        geometry: { type: 'LineString', coordinates: arc },
+      },
+    ],
   };
 }
 

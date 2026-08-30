@@ -94,13 +94,13 @@ cd frontend && npm test
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
 | `planet.test.ts` | 67 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
-| `route.test.ts` (planet) | 24 | **Great-circle densification, antimeridian unwrapping, the casing** |
+| `route.test.ts` (planet) | 30 | **Great-circle densification, antimeridian unwrapping, the casing** |
 | `status.test.ts` | 13 | **Failure classification, the stall notice, one-answer selection, querying before the layers exist** |
 | `terminator.test.ts` | 33 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
-| `test_flights.py` | 40 | **The origin inference and its refusals, and the cache that stops it spending credits** |
+| `test_flights.py` | 46 | **The origin inference and its refusals, and the cache that stops it spending credits** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **859** | 365 backend, 494 frontend |
+| **Total** | **871** | 371 backend, 500 frontend |
 
 ### What the automated suites do not cover
 
@@ -225,6 +225,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 29 | **A flight drew a detour it never flew** — a bad waypoint put a V-shaped spike in the track, and stretches nobody watched were drawn as confident line | Medium, visual | Phone, comparing against Flightradar24 (D82, §19.32) | Fixed |
 | 28 | **The departure row ran its label into its value** — "DepartedDubai International Airport": the new row used class names that do not exist instead of the `dl` every other field uses | Low, visual | A screenshot from Phone (§19.29) | Fixed |
 | 27 | **Altitude was geometric where aviation is barometric** — Orbital showed 10,317 m for a flight Flightradar24 had at 37,000 ft; both real, one the wrong quantity, differing by a median of 290 m across 859 aircraft | Medium | Phone compared the two sites on UAE394 (D79, §19.29) | Fixed |
 | 26 | **The ocean turned grey under a second basemap** — keeping every layer promoted Liberty's own Natural Earth relief raster to drawing at 60% opacity over our satellite imagery | Medium, visual | A screenshot from Phone (D77, §19.27) | Fixed |
@@ -2333,3 +2334,36 @@ ordinary disagreement and a large difference without a large ratio are both
 left alone; a null velocity stays null; the course and the speed come from the
 same pair of waypoints; and both corrections can apply to one aircraft without
 either dropping the provider's own meta.
+
+### 19.32 Telling the watched part of a track from the rest
+
+Phone: a flight across Myanmar drew a V-shaped detour where Flightradar24 drew
+a straight thin line (defect #29). Two faults, opposite treatments. Reasoning
+in D82. **12 tests** - 6 backend, 6 frontend.
+
+**Measured on ten live tracks**, before any change:
+
+| | |
+|---|---|
+| tracks with a segment implying over 400 m/s | **5 of 10** |
+| tracks with a silence over five minutes | **8 of 10**, one with sixteen |
+| impossible segments still present *after* cleaning | **14** across the ten |
+
+That last row is why there are two mechanisms rather than one: deleting lone
+spikes cannot catch a step change, where only one side is wrong.
+
+**What the backend tests pin**: a lone spike is dropped; a coverage gap is
+*not*, because it is far in distance but proportionally far in time; an
+ordinary track is returned unchanged; a spike at either end is judged by its
+single neighbour; a two-point track is left alone because calling one of them
+an outlier is a coin toss; and the origin is read from the cleaned track, which
+is the hole the first version had.
+
+**What the frontend tests pin**: a continuous track is one solid feature; a
+silence splits it into solid, gap, solid; the gap joins end to end so the line
+stays continuous; an ordinary interval is left alone; and an impossible jump is
+drawn as a gap however brief it looks.
+
+**Both sets of fixtures had to be rewritten**: they flew at 927 m/s and
+1,855 m/s respectively, and the code correctly called them impossible. Writing
+test data that cannot exist is its own small lesson about fixtures (19.27).

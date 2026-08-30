@@ -105,6 +105,65 @@ class Flight:
     fetched_at: float
 
 
+def clean_track(track: tuple[TrackPoint, ...]) -> tuple[TrackPoint, ...]:
+    """Drop waypoints no aircraft could have reached and left.
+
+    Live tracks contain them: of ten checked against the live feed, **five had
+    at least one segment implying over 400 m/s**, and one of those drew a flight
+    across Myanmar as a V-shaped detour to an airport it never went near
+    (defect #29). The waypoint is wrong, not the flight.
+
+    **A lone bad point is recognised by both its sides.** Reaching it is
+    impossible and so is leaving it, and that pair of impossibilities is what
+    separates it from an honest coverage gap - which is far apart in *distance*
+    but proportionally far apart in *time*, so the speed it implies is
+    perfectly ordinary. Testing distance alone would delete every gap; testing
+    speed keeps them.
+
+    The first and last points are judged on their one neighbour, since a spike
+    at either end has only one side to be wrong about.
+    """
+    if len(track) < 3:
+        return track
+
+    def implied_speed(a: TrackPoint, b: TrackPoint) -> float:
+        gap = (b.timestamp - a.timestamp).total_seconds()
+        if gap <= 0:
+            return float("inf")
+        return haversine_metres(a.lat, a.lon, b.lat, b.lon) / gap
+
+    kept: list[TrackPoint] = []
+    for index, point in enumerate(track):
+        before = kept[-1] if kept else None
+        after = track[index + 1] if index + 1 < len(track) else None
+
+        if before is None:
+            # **The first point is judged by what comes after it**, because it
+            # has no segment arriving to be wrong. Left unjudged, a spike at
+            # the start survives - and the origin airport is read off exactly
+            # this point, so it would name somewhere the flight never was.
+            if (
+                after is not None
+                and implied_speed(point, after) > SPEED_MAX_PLAUSIBLE_MS
+                and (
+                    index + 2 >= len(track)
+                    or implied_speed(after, track[index + 2]) <= SPEED_MAX_PLAUSIBLE_MS
+                )
+            ):
+                continue
+            kept.append(point)
+            continue
+
+        into = implied_speed(before, point)
+        out_of = implied_speed(point, after) if after is not None else 0.0
+        if into > SPEED_MAX_PLAUSIBLE_MS and (
+            after is None or out_of > SPEED_MAX_PLAUSIBLE_MS
+        ):
+            continue
+        kept.append(point)
+    return tuple(kept)
+
+
 def _last_usable_pair(
     track: tuple[TrackPoint, ...],
 ) -> tuple[TrackPoint, TrackPoint, float, float] | None:
@@ -251,6 +310,11 @@ class FlightHistory:
                 # and retrying immediately is how a quota is spent on failures.
                 logger.info("flight track unavailable for %s: %s", object_id, exc)
                 track = None
+            if track:
+                # Cleaned before anything reads it: the origin comes off the
+                # first waypoint and the course off the last two, so a spike at
+                # either end would corrupt both (D82).
+                track = clean_track(track)
             if track:
                 flight = Flight(track=track, origin=origin_of(track), fetched_at=time.monotonic())
 

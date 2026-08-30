@@ -28,6 +28,7 @@ from app.ingestion.flights import (
     COURSE_MAX_DISAGREEMENT_DEG,
     SPEED_MAX_PLAUSIBLE_MS,
     FlightHistory,
+    clean_track,
     course_from_track,
     speed_from_track,
 )
@@ -422,3 +423,74 @@ class TestSpeedCorrection:
         assert enriched.meta["headingSource"] == "derived"
         assert enriched.meta["velocitySource"] == "derived"
         assert enriched.meta["originCountry"] == "Testland"
+
+
+class TestCleanTrack:
+    """Waypoints no aircraft could have reached and left (D82).
+
+    Of ten live tracks checked, five contained at least one segment implying
+    over 400 m/s, and one of those drew a flight across Myanmar as a V-shaped
+    detour to an airport it never went near. The waypoint is wrong, not the
+    flight.
+
+    The fixtures below space their points at **0.013 degrees of longitude per
+    six seconds**, which is about 240 m/s at the equator - a cruising airliner.
+    The first draft used 0.05, which is 927 m/s, and the cleaner correctly
+    deleted the lot.
+    """
+
+    def test_drops_a_lone_impossible_waypoint(self) -> None:
+        # A spike: twenty degrees of longitude away and back, in twelve seconds.
+        track = (
+            point(0.0, 0.0, offset=0),
+            point(0.0, 20.0, offset=6),
+            point(0.0, 0.026, offset=12),
+        )
+        cleaned = clean_track(track)
+        assert len(cleaned) == 2
+        assert [p.lon for p in cleaned] == [0.0, 0.026]
+
+    def test_keeps_a_coverage_gap_untouched(self) -> None:
+        # Far apart in distance and proportionally far apart in time, so the
+        # speed it implies is ordinary. Testing distance alone would delete
+        # every gap in every track; testing speed keeps them.
+        track = (
+            point(0.0, 0.0, offset=0),
+            point(0.0, 2.0, offset=1200),
+            point(0.0, 2.013, offset=1206),
+        )
+        assert clean_track(track) == track
+
+    def test_keeps_an_ordinary_track_exactly_as_it_came(self) -> None:
+        track = tuple(point(0.0, i * 0.013, offset=i * 6) for i in range(6))
+        assert clean_track(track) == track
+
+    def test_drops_a_spike_at_the_end(self) -> None:
+        # Only one side to be wrong about, so the incoming segment decides.
+        track = (
+            point(0.0, 0.0, offset=0),
+            point(0.0, 0.013, offset=6),
+            point(0.0, 30.0, offset=12),
+        )
+        cleaned = clean_track(track)
+        assert len(cleaned) == 2
+
+    def test_leaves_a_track_too_short_to_judge(self) -> None:
+        # Two points have no middle, and calling one of them an outlier would
+        # be a coin toss.
+        pair = (point(0.0, 0.0, offset=0), point(0.0, 30.0, offset=6))
+        assert clean_track(pair) == pair
+
+    @pytest.mark.anyio
+    async def test_the_origin_is_read_from_the_cleaned_track(self) -> None:
+        # The origin comes off the first waypoint, so a spike at the start
+        # would name an airport thousands of kilometres from the departure.
+        provider = StubProvider(
+            (
+                point(0.0, 0.0, offset=0),
+                point(*SYDNEY_TRACK_START, offset=6),
+                point(SYDNEY_TRACK_START[0] + 0.01, SYDNEY_TRACK_START[1] + 0.01, 300.0, 12),
+            )
+        )
+        enriched = await FlightHistory(provider).enrich(detail_with(heading=90.0))
+        assert enriched.origin is not None and enriched.origin.icao == "YSSY"
