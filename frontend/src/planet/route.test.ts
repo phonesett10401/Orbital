@@ -12,9 +12,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { TrackPoint } from '../types';
 import {
+  LEADER_SOURCE,
   ROUTE_CASING_LAYER,
   ROUTE_LAYER,
   ROUTE_SOURCE,
+  leaderFeature,
+  leaderLayers,
   greatCircleLatLon,
   routeFeatures,
   routeLayers,
@@ -158,5 +161,72 @@ describe('routeLayers', () => {
     for (let i = 1; i < casingWidths.length; i += 2) {
       expect(casingWidths[i]).toBeGreaterThan(lineWidths[i]);
     }
+  });
+});
+
+describe('leaderFeature', () => {
+  // Phone's observation, and it is a better description of the defect than
+  // mine was: "when the plane moves on, the line end is left behind". The
+  // track ends at the last *reported* position; the marker is drawn at its
+  // *interpolated* one (D14), so the two are permanently `age x speed` apart
+  // even when the data is perfectly fresh (D72).
+
+  it('draws nothing without both ends', () => {
+    expect(leaderFeature(null, { lat: 1, lon: 2 }).features).toHaveLength(0);
+    expect(leaderFeature([], { lat: 1, lon: 2 }).features).toHaveLength(0);
+    expect(leaderFeature([point(13, 100)], null).features).toHaveLength(0);
+  });
+
+  it('joins the last reported position to where the aircraft is drawn', () => {
+    const collection = leaderFeature([point(13, 100), point(13.5, 100.5)], { lat: 13.6, lon: 100.6 });
+    expect(collection.features).toHaveLength(1);
+    const { coordinates } = collection.features[0].geometry;
+    // Starts at the track's last point, not its first.
+    expect(coordinates[0][0]).toBeCloseTo(100.5, 6);
+    expect(coordinates[0][1]).toBeCloseTo(13.5, 6);
+    expect(coordinates[coordinates.length - 1][0]).toBeCloseTo(100.6, 6);
+    expect(coordinates[coordinates.length - 1][1]).toBeCloseTo(13.6, 6);
+  });
+
+  it('draws nothing when the marker is sitting on its last report', () => {
+    // Which is what a stale aircraft does now (D71): the extrapolation stops,
+    // the marker holds the reported position, and there is no gap to bridge.
+    // A zero-length dashed stub at the nose would be noise.
+    const collection = leaderFeature([point(13, 100), point(13.5, 100.5)], { lat: 13.5, lon: 100.5 });
+    expect(collection.features).toHaveLength(0);
+  });
+
+  it('stays continuous across the antimeridian', () => {
+    const collection = leaderFeature([point(10, 179.9)], { lat: 10, lon: -179.9 });
+    const { coordinates } = collection.features[0].geometry;
+    for (let i = 1; i < coordinates.length; i += 1) {
+      expect(Math.abs(coordinates[i][0] - coordinates[i - 1][0])).toBeLessThan(180);
+    }
+  });
+});
+
+describe('leaderLayers', () => {
+  it('is dashed, because it is an estimate and the track is not', () => {
+    // The one thing that must not be lost: the track is what was observed
+    // (D6). Drawing the gap as more solid track would file dead reckoning as
+    // an observation.
+    for (const layer of leaderLayers()) {
+      const paint = (layer as { paint: Record<string, unknown> }).paint;
+      expect(paint['line-dasharray']).toBeDefined();
+      expect((layer as { source: string }).source).toBe(LEADER_SOURCE);
+    }
+    for (const layer of routeLayers()) {
+      expect((layer as { paint: Record<string, unknown> }).paint['line-dasharray']).toBeUndefined();
+    }
+  });
+
+  it('matches the track it continues, casing and all', () => {
+    // Same widths at the same zooms, so it reads as the same line rather than
+    // a second one that happens to start nearby.
+    const [casing, line] = leaderLayers();
+    const [trackCasing, trackLine] = routeLayers();
+    const width = (l: unknown) => (l as { paint: Record<string, unknown> }).paint['line-width'];
+    expect(width(casing)).toEqual(width(trackCasing));
+    expect(width(line)).toEqual(width(trackLine));
   });
 });

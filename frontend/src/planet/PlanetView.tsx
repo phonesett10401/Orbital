@@ -36,7 +36,14 @@ import { loadPlanetStyle } from './basemap';
 import { createModelLayer, modelTarget } from './modelLayer';
 import { createTerminatorControl } from './terminatorControl';
 import { createTerminatorLayer } from './terminatorLayer';
-import { ROUTE_SOURCE, routeFeatures, routeLayers } from './routeLayer';
+import {
+  LEADER_SOURCE,
+  ROUTE_SOURCE,
+  leaderFeature,
+  leaderLayers,
+  routeFeatures,
+  routeLayers,
+} from './routeLayer';
 import { createAircraftIconCanvas, createUnknownIconCanvas } from '../globe/aircraftSprite';
 import { whenRenderable } from './container';
 import { createDiagnosticsPanel } from './diagnostics';
@@ -196,6 +203,12 @@ export function PlanetView() {
           });
           for (const layer of routeLayers()) map.addLayer(layer);
 
+          // And the dashed segment that keeps the track attached to the
+          // aircraft. Its own source because it is rewritten every frame while
+          // the track behind it is rewritten once per poll (D72).
+          map.addSource(LEADER_SOURCE, { type: 'geojson', data: leaderFeature(null, null) });
+          for (const layer of leaderLayers()) map.addLayer(layer);
+
           map.addSource(AIRCRAFT_SOURCE, {
             type: 'geojson',
             data: aircraftFeatures([], Date.now()),
@@ -247,6 +260,21 @@ export function PlanetView() {
             (source as { setData: (data: unknown) => void }).setData(
               aircraftFeatures(Array.from(state.objects.values()), Date.now(), state.selectedId),
             );
+
+            // The leader is redrawn on the same frame as the marker it joins,
+            // from the same interpolated position, so the two cannot disagree
+            // about where the aircraft is - which is the whole defect this
+            // fixes (D72).
+            const leader = map?.getSource(LEADER_SOURCE);
+            if (leader && 'setData' in leader) {
+              const selected = state.selectedId ? state.objects.get(state.selectedId) : null;
+              (leader as { setData: (data: unknown) => void }).setData(
+                leaderFeature(
+                  state.selectedDetail?.track,
+                  selected ? { lat: selected.renderLat, lon: selected.renderLon } : null,
+                ),
+              );
+            }
           };
           frame = requestAnimationFrame(tick);
         });

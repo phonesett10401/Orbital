@@ -3382,3 +3382,46 @@ have lost it" in the same frame.
 markers glide instead of stepping (D14). Fresh aircraft move exactly as before;
 the change only bites once the app has already said, in words, that it does not
 know where the aircraft is.
+
+---
+
+## D72 — The track reaches the aircraft, and says which part of it is a guess
+
+**Decision:** a separate, dashed **leader** segment joins the last reported
+position to the position the marker is drawn at, rewritten every frame beside
+the marker itself.
+
+Phone described the defect better than the first diagnosis did: *"when the
+plane moves on, the line end is left behind."* D71 fixed how far the marker
+could run ahead of the truth; it did not fix the fact that it runs ahead at
+all. Two different beliefs, both correct on their own terms:
+
+| | Drawn at |
+|---|---|
+| The observed track | the last **reported** position — it is what was observed, and nothing else belongs in it (D6) |
+| The marker | the **interpolated** position, because a marker that moved once per poll would visibly step (D14) |
+
+So the gap is `age x speed` and it is permanent, not a glitch: with fresh data
+and an airliner it is a few kilometres, invisible at z5 and obvious by z9,
+which is exactly the zoom Phone first noticed it at. The two are not out of
+sync — they are answering different questions.
+
+**Three ways to close it, and why this one.** Moving the marker back to the
+last report throws away interpolation (D14). Extending the *track* to the
+marker files an estimate as an observation, and the track's own panel text
+promises "this is the path we have watched". Drawing the join as visibly
+different says both true things at once: the line reaches the aircraft, and the
+last stretch of it is dead reckoning rather than data.
+
+**It is its own source for cost as well as honesty.** The track is a densified
+great-circle polyline and rebuilding it every frame is the expensive part of
+this layer (D6, D65). The leader is two points, so it can be rewritten on the
+frame loop — in the same tick, from the same interpolated position as the
+marker, so the two cannot disagree about where the aircraft is — while the
+track behind it is still rebuilt only when a poll adds to it.
+
+It draws nothing when there is nothing honest to draw: no selection, no track,
+or a marker sitting exactly on its last report — which is what a stale aircraft
+now does (D71), so as an aircraft goes stale the dashes shrink to nothing and
+the solid track is all that is left. That is the right picture: the estimate
+disappears when we stop making one.

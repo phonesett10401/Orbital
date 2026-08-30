@@ -28,6 +28,31 @@ export const ROUTE_SOURCE = 'orbital-route';
 export const ROUTE_LAYER = 'orbital-route';
 export const ROUTE_CASING_LAYER = 'orbital-route-casing';
 
+/**
+ * The segment joining the last reported position to where the aircraft is
+ * being drawn right now.
+ *
+ * A separate source, and the reason is both honesty and cost.
+ *
+ * **Honesty:** the track is what was reported (D6). The marker is drawn at its
+ * *interpolated* position, because a marker that only moved once per poll
+ * would visibly step (D14). Those are two different claims - one observed, one
+ * estimated - and the gap between them is real: `age x speed`, up to the
+ * staleness threshold's worth of it (D71). Drawing that gap as more track
+ * would file the estimate as an observation. It is drawn dashed instead, so
+ * the line reaches the aircraft and still says which part of itself is a
+ * guess.
+ *
+ * **Cost:** the observed track is a densified great-circle polyline and
+ * rebuilding it every frame is the expensive part of this layer (D6, D65).
+ * This is two points. It can be rewritten on the frame loop, next to the
+ * aircraft it is chasing, while the track behind it is rebuilt only when a
+ * poll actually adds to it.
+ */
+export const LEADER_SOURCE = 'orbital-route-leader';
+export const LEADER_LAYER = 'orbital-route-leader';
+export const LEADER_CASING_LAYER = 'orbital-route-leader-casing';
+
 /** Great-circle subdivisions per segment. Enough to look curved, cheap to build. */
 export const SEGMENT_STEPS = 12;
 
@@ -187,6 +212,67 @@ export function routeLayers(): import('maplibre-gl').LayerSpecification[] {
       paint: {
         'line-color': '#ffffff',
         'line-width': ['interpolate', ['linear'], ['zoom'], 2, 1.5, 12, 3],
+      },
+    },
+  ];
+}
+
+/**
+ * The dashed segment from the last reported position to the drawn one.
+ *
+ * Empty whenever there is nothing honest to draw: no selection, no track to
+ * hang it off, or an aircraft being held at its last reported position because
+ * the data went stale (D71) - in which case the marker *is* the last reported
+ * position and there is no gap to bridge.
+ *
+ * Great-circle rather than a straight segment, for the same reason the track
+ * is (D44): it is a few kilometres here and the difference is invisible, but
+ * two ways of joining two points on a sphere is one way too many.
+ */
+export function leaderFeature(
+  track: TrackPoint[] | null | undefined,
+  head: { lat: number; lon: number } | null,
+): RouteCollection {
+  const last = track && track.length > 0 ? track[track.length - 1] : null;
+  if (!last || !head) return emptyRoute();
+  const arc = unwrapLongitudes(greatCircleLatLon(last, head, 8));
+  // A zero-length line is not drawn by MapLibre, but it is also not worth
+  // handing over: the two coincide exactly whenever extrapolation is off.
+  if (Math.abs(head.lat - last.lat) < 1e-9 && Math.abs(head.lon - last.lon) < 1e-9) {
+    return emptyRoute();
+  }
+  return {
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: arc } }],
+  };
+}
+
+/**
+ * The leader's two layers, matching the track's casing-and-line pair (D59) so
+ * it reads as the same line, and dashed so it does not claim to be observed.
+ */
+export function leaderLayers(): import('maplibre-gl').LayerSpecification[] {
+  return [
+    {
+      id: LEADER_CASING_LAYER,
+      type: 'line',
+      source: LEADER_SOURCE,
+      layout: { 'line-cap': 'butt', 'line-join': 'round' },
+      paint: {
+        'line-color': 'rgba(0, 0, 0, 0.55)',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 2, 3.5, 12, 6],
+        'line-dasharray': [1.6, 1.1],
+      },
+    },
+    {
+      id: LEADER_LAYER,
+      type: 'line',
+      source: LEADER_SOURCE,
+      layout: { 'line-cap': 'butt', 'line-join': 'round' },
+      paint: {
+        'line-color': '#ffffff',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 2, 1.5, 12, 3],
+        'line-dasharray': [1.6, 1.1],
       },
     },
   ];

@@ -94,12 +94,12 @@ cd frontend && npm test
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
 | `planet.test.ts` | 53 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
-| `route.test.ts` (planet) | 13 | **Great-circle densification, antimeridian unwrapping, the casing** |
+| `route.test.ts` (planet) | 19 | **Great-circle densification, antimeridian unwrapping, the casing** |
 | `status.test.ts` | 13 | **Failure classification, the stall notice, one-answer selection, querying before the layers exist** |
 | `terminator.test.ts` | 29 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **791** | 325 backend, 466 frontend |
+| **Total** | **797** | 325 backend, 472 frontend |
 
 ### What the automated suites do not cover
 
@@ -224,6 +224,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 22 | **The track never reached the aircraft** — the track ends at the last reported position and the marker is drawn at its interpolated one, so the two sat `age x speed` apart at every zoom, obvious from z9 | Low, visual | Phone: "when the plane moves on, the line end is left behind" (D72, §19.22) | Fixed |
 | 21 | **The marker outran what the app admitted it knew** — dead reckoning ran for ten minutes while the marker faded and the panel said "position shown is the last one we received" from two, so a stale aircraft was drawn kilometres from the end of its own observed track | Medium, visual | Six screenshots from Phone (D71, §19.21) | Fixed |
 | 20 | **The planet view failed silently** — no `catch`, no message: a blocked basemap host, a collapsed container, a browser without WebGL 2 and an unknown throw all produced the same black rectangle, and the container helper's carefully written explanation was rejected into nothing | Medium | Found while diagnosing a black screen from a console (D70, §19.20) | Fixed |
 | 19 | **The night toggle was invisible and unclickable** — placed bottom left, where the legend occupies the corner and the status bar is painted over what is left of it, and styled by inheritance so it computed as near-black on a transparent background over a black ocean. Present in the DOM, `elementFromPoint` returned the status bar | Medium, visual | Driving the app in Phone's own Chrome from this session (§19.19) | Fixed |
@@ -2035,3 +2036,28 @@ threshold rather than one tick past it.
 **Not changed: interpolation itself.** The change only bites once the
 application has already said, in words, that it does not know where the
 aircraft is.
+
+### 19.22 Joining the track to the aircraft
+
+Phone: *"when the plane moves on, the line end is left behind."* A better
+description of the defect than the first diagnosis, and a different cause from
+§19.21 - that one was about how far the marker could run ahead, this one is
+that it runs ahead at all (defect #22). Reasoning in D72. **6 tests**, added to
+the planet's `route.test.ts`.
+
+The track is drawn at reported positions (D6) and the marker at interpolated
+ones (D14). Both are correct; the gap between them is `age x speed`, and it is
+permanent rather than a glitch. A dashed leader now joins them.
+
+| Checked | Why it is the thing to check |
+|---|---|
+| Starts at the track's **last** point, ends at the drawn position | Starting from the wrong end draws a line across the whole flight |
+| Draws nothing without both ends | No selection, no track, or a track of one point |
+| Draws nothing when the marker sits on its last report | Which is what a stale aircraft does now (D71) - the dashes shrink to nothing as the estimate stops being made |
+| Continuous across the antimeridian | Same rule as the track it continues |
+| **Dashed, where the track is not** | The one thing that must not be lost: drawing the gap as solid track would file dead reckoning as an observation |
+| Same widths, same zooms, same casing as the track | So it reads as the same line continuing, not a second line starting nearby |
+
+**Not verified: how it looks.** Standing limitation (§19.19). The dash pattern
+in particular is a guess at a few kilometres of screen length and may want
+tuning by eye.
