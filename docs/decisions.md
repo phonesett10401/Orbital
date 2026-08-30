@@ -4123,3 +4123,72 @@ Measured in a live viewport, before and after:
 The remaining 10% is honest: OpenSky's own feed carries 7% of positions older
 than two minutes, and an aircraft nobody has heard from in three minutes
 *should* sit still and fade.
+
+---
+
+## D85 — One circle does not cover a sphere, and the measurement that said it did
+
+**Decision:** the global sweep is four circles, queried sequentially two seconds
+apart, and the test asserts spherical coverage rather than a proxy for it.
+
+Phone: *"the planes are stuck for 2-3 minutes sometimes"*, with a screenshot
+whose every aircraft was between 138 and 168 seconds old.
+
+### What was wrong
+
+A 6,000 nm radius is about **100 degrees of arc** — a little over a hemisphere.
+One circle from 60N 10E reaches Europe, Asia, Africa and North America, and
+stops short of Australia, New Zealand, the south Pacific and southern South
+America. Aircraft there were refreshed only when OpenSky happened to carry
+them, every two minutes at best, so they sat frozen and faded (D71).
+
+Measured directly once the question was asked:
+
+```
+SE Australia    global sweep: 0 aircraft    direct query: 27
+```
+
+### The measurement that led me wrong
+
+D83 compared one circle (10,013 aircraft) against a union of four (10,009),
+and concluded one was enough. **The other three points were inside the first
+circle's own coverage**, clustered in the half of the world it already saw, so
+they added nothing — and I read "they added nothing" as "one circle sees
+everything" rather than "those three were badly placed".
+
+The number was real. The inference from it was not, and nothing about the
+number could have told me: a comparison between one circle and four *redundant*
+circles cannot distinguish a complete sweep from an incomplete one. It is the
+same shape as the control-group error in D63 — a result that could not have
+come out the other way.
+
+### The test now asserts the property
+
+Not longitude gaps, which was the first attempt and is neither necessary nor
+sufficient: it fails a sweep that covers everything and passes one that leaves
+a polar hole. Instead, a grid of points every ten degrees over the whole Earth,
+each of which must fall inside at least one circle — **and a control asserting
+that a single circle does not**, so the test cannot pass for the wrong reason.
+
+### Sequential, spaced, and tolerant
+
+Four circles at once earns an HTTP 420 and a minute of throttling (D83), so
+they are two seconds apart — about eight seconds of a sixty-second poll. One
+circle failing is a partial view rather than none: the sweep overlaps, and
+refusing the whole poll over one throttled request would throw away three
+quarters of the planet. All four failing raises, so the store keeps its last
+good snapshot rather than being wiped by a successful-looking empty poll (D10).
+
+### Result
+
+| | before | after |
+|---|---|---|
+| 90th percentile position age | 843 s | **101 s** |
+| positions older than 120 s | 27% | **9%** |
+| aircraft over SE Australia | **0** | **30** |
+| aircraft over New Zealand | 0 | **19** |
+| median age over Laos | ~140 s | **42 s** |
+
+The residual 9% is the honest part: OpenSky's own feed carries 7% of positions
+older than two minutes, and an aircraft nobody has heard from should sit still
+and fade rather than be flown on a guess.

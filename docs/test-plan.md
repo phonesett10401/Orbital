@@ -99,10 +99,10 @@ cd frontend && npm test
 | `terminator.test.ts` | 33 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_flights.py` | 46 | **The origin inference and its refusals, and the cache that stops it spending credits** |
-| `test_adsblol.py` | 21 | **Feet and knots into the contract's units, "ground", one-request sweeps, HTTP 420** |
+| `test_adsblol.py` | 25 | **Feet and knots into the contract's units, "ground", one-request sweeps, HTTP 420** |
 | `test_union.py` | 18 | **Both feeds present, the metered one polled once an interval and never for a viewport, independent failure** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **913** | 413 backend, 500 frontend |
+| **Total** | **917** | 417 backend, 500 frontend |
 
 ### What the automated suites do not cover
 
@@ -227,6 +227,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 31 | **A single global circle left a quarter of the world unswept** — 6,000 nm is about 100 degrees of arc, so Australia, New Zealand and the south Pacific were refreshed only when OpenSky carried them; their aircraft sat frozen and faded | **High** | Phone: "the planes are stuck for 2-3 minutes" (D85, §19.35) | Fixed |
 | 30 | **The map froze, and worse the further you zoomed in** — the union replayed its whole cached OpenSky snapshot on every viewport poll, so positions stopped advancing (frozen and faded by D71) and every aircraft outside the viewport was overwritten by a copy up to five minutes old | **High** | Phone: "the planes are not moving" (D84, §19.34) | Fixed |
 | 29 | **A flight drew a detour it never flew** — a bad waypoint put a V-shaped spike in the track, and stretches nobody watched were drawn as confident line | Medium, visual | Phone, comparing against Flightradar24 (D82, §19.32) | Fixed |
 | 28 | **The departure row ran its label into its value** — "DepartedDubai International Airport": the new row used class names that do not exist instead of the `dl` every other field uses | Low, visual | A screenshot from Phone (§19.29) | Fixed |
@@ -2464,3 +2465,40 @@ because measuring `seen_pos` against our wall clock produced a median age of
 
 The residual 10% is honest - OpenSky's own feed carries 7% of positions older
 than two minutes, and an aircraft nobody has heard from should sit still.
+
+### 19.35 One circle does not cover a sphere
+
+Reported as aircraft stuck for two to three minutes, with a screenshot whose
+every aircraft was between 138 and 168 seconds old (defect #31). Reasoning in
+D85.
+
+**The measurement that caused it.** 19.33 compared one 6,000 nm circle (10,013
+aircraft) against a union of four (10,009) and concluded one was enough. The
+other three points sat *inside* the first circle's coverage, so they added
+nothing - and "they added nothing" was read as "one circle sees everything"
+rather than "those three were badly placed". A comparison between one circle
+and four redundant ones cannot distinguish a complete sweep from an incomplete
+one; it is the control-group error of 19.7 in another costume.
+
+**The measurement that found it**, once the right question was asked:
+
+```
+SE Australia    global sweep: 0 aircraft    direct query: 27
+```
+
+**The test now asserts the property rather than a proxy.** The first attempt
+compared longitude gaps, which is neither necessary nor sufficient - it fails a
+sweep that covers everything and passes one with a polar hole. It now walks a
+ten-degree grid over the whole Earth and requires every point to fall inside
+some circle, **with a control asserting that a single circle does not**, so it
+cannot pass for the wrong reason.
+
+**Result, measured live:**
+
+| | before | after |
+|---|---|---|
+| 90th percentile position age | 843 s | **101 s** |
+| positions older than 120 s | 27% | **9%** |
+| aircraft over SE Australia | **0** | **30** |
+| aircraft over New Zealand | 0 | **19** |
+| median age over Laos | ~140 s | **42 s** |

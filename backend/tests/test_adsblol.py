@@ -23,6 +23,8 @@ import pytest
 from app.models import BBox
 from app.providers.adsblol import (
     GLOBAL_RADIUS_NM,
+    GLOBAL_SWEEP,
+    _haversine_km,
     VIEWPORT_MAX_RADIUS_NM,
     AdsbLolProvider,
     _circle_for,
@@ -30,6 +32,8 @@ from app.providers.adsblol import (
 from app.providers.base import ProviderBadResponse, ProviderRateLimited, ProviderUnavailable
 
 # One real record, trimmed: a 737 at FL360 out of the live feed.
+VIEWPORT = BBox(lat_min=48, lon_min=3, lat_max=49, lon_max=5)
+
 LIVE_RECORD = {
     "hex": "407183",
     "type": "adsb_icao",
@@ -50,7 +54,11 @@ LIVE_RECORD = {
 
 def provider(handler) -> AdsbLolProvider:
     transport = httpx.MockTransport(handler)
-    return AdsbLolProvider(client=httpx.AsyncClient(transport=transport))
+    # No pause between sweep circles: the real one exists to avoid a rate
+    # limiter that a mock transport does not have.
+    return AdsbLolProvider(
+        client=httpx.AsyncClient(transport=transport), sweep_pause_seconds=0.0
+    )
 
 
 def responds(payload, status: int = 200):
@@ -155,9 +163,10 @@ class TestMissingData:
 
 class TestRequestShape:
     @pytest.mark.anyio
-    async def test_the_whole_world_is_one_request(self) -> None:
-        # Four concurrent circles earned an HTTP 420 and a minute of
-        # throttling; one large circle returns the same aircraft (D83).
+    async def test_the_whole_world_is_swept_from_several_points(self) -> None:
+        # One circle covers a little over a hemisphere and leaves Australia,
+        # New Zealand and the south Pacific out - measured as 0 aircraft over
+        # south-east Australia where a direct query found 27 (defect #31).
         urls = []
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -165,8 +174,65 @@ class TestRequestShape:
             return httpx.Response(200, json={"ac": [LIVE_RECORD]})
 
         await provider(handler).fetch(None)
-        assert len(urls) == 1
-        assert f"/{GLOBAL_RADIUS_NM}" in urls[0]
+        assert len(urls) == len(GLOBAL_SWEEP)
+        for (lat, lon), url in zip(GLOBAL_SWEEP, urls):
+            assert f"/point/{lat}/{lon}/{GLOBAL_RADIUS_NM}" in url
+
+    def test_the_sweep_actually_covers_the_sphere(self) -> None:
+        # **The property, not a proxy for it.** The first attempt at this test
+        # compared longitude gaps, which is neither necessary nor sufficient -
+        # it fails a sweep that covers everything and passes one that leaves a
+        # polar hole. So: take a grid of points over the whole Earth and check
+        # each falls inside at least one circle.
+        #
+        # This is the test that would have caught defect #31 before Phone did:
+        # the single-circle sweep leaves everything south-east of about 20S
+        # 150E outside, which is Australia, New Zealand and the south Pacific.
+        radius_km = GLOBAL_RADIUS_NM * 1.852
+        uncovered = []
+        for lat in range(-80, 81, 10):
+            for lon in range(-180, 180, 10):
+                if not any(
+                    _haversine_km(lat, lon, sweep_lat, sweep_lon) <= radius_km
+                    for sweep_lat, sweep_lon in GLOBAL_SWEEP
+                ):
+                    uncovered.append((lat, lon))
+        assert uncovered == []
+
+    def test_one_circle_would_not_have_covered_it(self) -> None:
+        # The control: without this, the test above passes for a sweep of one
+        # point and proves nothing about why there are four.
+        radius_km = GLOBAL_RADIUS_NM * 1.852
+        first = GLOBAL_SWEEP[0]
+        missed = [
+            (lat, lon)
+            for lat in range(-80, 81, 10)
+            for lon in range(-180, 180, 10)
+            if _haversine_km(lat, lon, *first) > radius_km
+        ]
+        assert missed, "a single circle should not cover the planet"
+
+    @pytest.mark.anyio
+    async def test_one_failed_circle_does_not_lose_the_other_three(self) -> None:
+        # Refusing the whole poll over one throttled request would throw away
+        # three quarters of the planet.
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                return httpx.Response(420, text="calm")
+            return httpx.Response(200, json={"ac": [LIVE_RECORD]})
+
+        records = await provider(handler).fetch(None)
+        assert len(records) == 1
+
+    @pytest.mark.anyio
+    async def test_every_circle_failing_is_an_outage(self) -> None:
+        # And must raise: an empty list would be applied to the store as a
+        # successful poll (D10).
+        with pytest.raises(ProviderUnavailable):
+            await provider(responds(None, status=503)).fetch(None)
 
     @pytest.mark.anyio
     async def test_a_viewport_becomes_the_circle_that_contains_it(self) -> None:
@@ -206,17 +272,17 @@ class TestFailures:
         # status any generic client handles. Mistaken for an ordinary error it
         # would be retried immediately, which is how a throttle becomes a ban.
         with pytest.raises(ProviderRateLimited):
-            await provider(responds(None, status=420)).fetch()
+            await provider(responds(None, status=420)).fetch(VIEWPORT)
 
     @pytest.mark.anyio
     async def test_a_conventional_rate_limit_too(self) -> None:
         with pytest.raises(ProviderRateLimited):
-            await provider(responds(None, status=429)).fetch()
+            await provider(responds(None, status=429)).fetch(VIEWPORT)
 
     @pytest.mark.anyio
     async def test_a_server_error_is_unavailability(self) -> None:
         with pytest.raises(ProviderUnavailable):
-            await provider(responds(None, status=503)).fetch()
+            await provider(responds(None, status=503)).fetch(VIEWPORT)
 
     @pytest.mark.anyio
     async def test_a_body_that_is_not_json_is_a_bad_response(self) -> None:
@@ -225,9 +291,9 @@ class TestFailures:
             return httpx.Response(200, text="")
 
         with pytest.raises(ProviderBadResponse):
-            await provider(handler).fetch()
+            await provider(handler).fetch(VIEWPORT)
 
     @pytest.mark.anyio
     async def test_an_empty_sky_is_not_an_error(self) -> None:
-        assert await provider(responds({"ac": []})).fetch() == []
-        assert await provider(responds({})).fetch() == []
+        assert await provider(responds({"ac": []})).fetch(VIEWPORT) == []
+        assert await provider(responds({})).fetch(VIEWPORT) == []

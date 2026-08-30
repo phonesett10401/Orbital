@@ -33,6 +33,7 @@ service's way of saying enhance your calm.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 from datetime import datetime, timedelta, timezone
@@ -44,6 +45,7 @@ from app.models import BBox, ObjectType, TrackedObjectRecord
 from app.providers.base import (
     Provider,
     ProviderBadResponse,
+    ProviderError,
     ProviderRateLimited,
     ProviderUnavailable,
 )
@@ -55,21 +57,36 @@ KNOTS_TO_MS = 0.514444
 NAUTICAL_MILE_KM = 1.852
 EARTH_RADIUS_KM = 6371.0088
 
-#: Where to stand to see the whole world, and how far to look.
+#: Points that between them cover the planet, and how far each looks.
 #:
-#: **One request, not a sweep.** The first version fired four 6,000 nm circles
-#: concurrently and adsb.lol answered one of them with **HTTP 420** - its rate
-#: limiter - and then throttled the rest for a minute afterwards. Measured
-#: instead: a single circle of this radius from 60N 10E returns **10,013**
-#: aircraft in 1.9 seconds, against 10,009 for the union of all four. One
-#: request gets everything the four did.
+#: **One circle is not enough, and measuring it badly said it was.** A 6,000 nm
+#: radius is about 100 degrees of arc - a little over a hemisphere - so a single
+#: circle from 60N 10E reaches Europe, Asia, Africa and North America and stops
+#: short of Australia, New Zealand, the Pacific and southern South America. The
+#: first version used one, on the strength of a comparison against four other
+#: points that were themselves clustered in the covered half: one circle
+#: returned 10,013 aircraft and the four returned 10,009, which read as "one is
+#: enough" and was really "the other three were badly placed". Caught by asking
+#: the obvious question afterwards: the sweep found **0** aircraft over
+#: south-east Australia where a direct query found **27** (defect #31).
 #:
-#: 6,000 nm is 11,112 km, which is an angular radius of about 100 degrees -
-#: slightly more than a hemisphere. Centred here it reaches every part of the
-#: world that carries traffic; the sliver it misses is empty ocean south-east
-#: of New Zealand, and it is named rather than pretended away.
-GLOBAL_POINT = (60.0, 10.0)
+#: Four points, each roughly 90 degrees of longitude apart and straddling the
+#: equator, with overlap everywhere. Queried **sequentially with a pause**:
+#: firing them at once earns an HTTP 420 and a minute of throttling.
+GLOBAL_SWEEP: tuple[tuple[float, float], ...] = (
+    (50.0, 10.0),    # Europe, Africa, western Asia
+    (35.0, 115.0),   # eastern Asia
+    (-25.0, 140.0),  # Australia, New Zealand, the south-west Pacific
+    (0.0, -80.0),    # the Americas and the eastern Pacific
+)
 GLOBAL_RADIUS_NM = 6000
+
+#: Seconds between the sweep's requests.
+#:
+#: The service throttles a burst with HTTP 420 and stays cross for about a
+#: minute afterwards, which costs far more than the pause does. Four circles
+#: two seconds apart is about eight seconds of a sixty-second poll.
+SWEEP_PAUSE_SECONDS = 2.0
 
 #: The largest radius asked for a viewport, in nautical miles.
 #:
@@ -91,9 +108,11 @@ class AdsbLolProvider(Provider):
         base_url: str = "https://api.adsb.lol/v2",
         timeout_seconds: float = 30.0,
         user_agent: str = "Orbital/0.1 (CSC480 student project)",
+        sweep_pause_seconds: float = SWEEP_PAUSE_SECONDS,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        self._sweep_pause = sweep_pause_seconds
         # Sent on every request because the service asks for one, and because a
         # free service run on donations deserves to know who is calling it.
         self._client = client or httpx.AsyncClient(
@@ -103,16 +122,35 @@ class AdsbLolProvider(Provider):
     async def fetch(self, bbox: BBox | None = None) -> list[TrackedObjectRecord]:
         """Every aircraft in ``bbox``, or the whole world when it is None.
 
-        One HTTP request either way. That is not an optimisation but a
-        requirement: this service rate-limits concurrent callers with HTTP 420
-        and stays cross for a while afterwards, and one large circle returns
-        what four smaller ones do.
+        A viewport is one request. The whole world is four, **sequential and
+        spaced**: no single circle covers the planet, and firing them at once
+        earns an HTTP 420 (D85).
         """
-        if bbox is None:
-            lat, lon, radius = GLOBAL_POINT[0], GLOBAL_POINT[1], GLOBAL_RADIUS_NM
-        else:
+        if bbox is not None:
             lat, lon, radius = _circle_for(bbox)
-        return await self._fetch_circle(lat, lon, radius)
+            return await self._fetch_circle(lat, lon, radius)
+
+        merged: dict[str, TrackedObjectRecord] = {}
+        failures: list[BaseException] = []
+        for index, (lat, lon) in enumerate(GLOBAL_SWEEP):
+            if index:
+                await asyncio.sleep(self._sweep_pause)
+            try:
+                for record in await self._fetch_circle(lat, lon, GLOBAL_RADIUS_NM):
+                    merged[record.id] = record
+            except ProviderError as exc:
+                # One circle failing is a partial view, not no view: the sweep
+                # overlaps, and refusing the whole poll would throw away three
+                # quarters of the planet over one throttled request.
+                failures.append(exc)
+
+        if failures and not merged:
+            raise ProviderUnavailable(f"adsb.lol unreachable: {failures[0]}")
+        if failures:
+            logger.warning(
+                "adsb.lol: %d of %d circles failed", len(failures), len(GLOBAL_SWEEP)
+            )
+        return list(merged.values())
 
     async def _fetch_circle(
         self, lat: float, lon: float, radius_nm: int
