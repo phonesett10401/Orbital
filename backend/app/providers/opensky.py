@@ -376,9 +376,24 @@ class OpenSkyProvider(Provider):
         label = str(callsign).strip() if callsign else ""
 
         on_ground = bool(state[_ON_GROUND])
+        # **Barometric first, geometric as the fallback.**
+        #
+        # It was the other way round, and that is why this application said
+        # 10,317 m for a flight every other tracker showed at 37,000 ft
+        # (11,278 m) - defect #27. Three reasons, in order of weight:
+        #
+        # 1. Aviation runs on barometric altitude. A flight level *is* a
+        #    barometric altitude, ATC separates aircraft on it, and every
+        #    flight tracker displays it. Geometric altitude is a GNSS height
+        #    that no one in the cockpit is flying to.
+        # 2. It is reported more often: 749 of 859 aircraft over western
+        #    Europe carried baro, 727 carried geo.
+        # 3. The two differ by a median of 290 m and up to 846 m in that same
+        #    sample, so this is not a rounding difference - it is the gap
+        #    between our number and everyone else's.
         altitude = self._first_number(
-            state[_GEO_ALTITUDE] if len(state) > _GEO_ALTITUDE else None,
             state[_BARO_ALTITUDE],
+            state[_GEO_ALTITUDE] if len(state) > _GEO_ALTITUDE else None,
         )
         if altitude is None and on_ground:
             # On the ground with no reported altitude is genuinely zero, not

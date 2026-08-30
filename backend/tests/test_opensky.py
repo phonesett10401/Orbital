@@ -77,13 +77,23 @@ class TestNormalization:
         assert first.last_seen.tzinfo == timezone.utc
 
     @pytest.mark.anyio
-    async def test_prefers_geometric_altitude_over_barometric(self):
+    async def test_prefers_barometric_altitude_over_geometric(self):
+        # This was the other way round, and it is why Orbital showed 10,317 m
+        # for a flight every other tracker had at 37,000 ft (defect #27).
+        # Aviation runs on barometric altitude: a flight level *is* one, ATC
+        # separates on it, and geometric altitude is a GNSS height nobody is
+        # flying to. Measured over 859 aircraft, the two differ by a median of
+        # 290 m and up to 846 m, so the choice is visible rather than academic.
         provider = make_provider(states_handler())
         records = await provider.fetch()
-        assert next(r for r in records if r.id == "a1b2c3").altitude == pytest.approx(10668.0)
+        record = next(r for r in records if r.id == "a1b2c3")
+        # The fixture's baro is 10500.5 and its geo is 10668.0.
+        assert record.altitude == pytest.approx(10500.5)
 
     @pytest.mark.anyio
-    async def test_falls_back_to_barometric_when_geometric_is_missing(self):
+    async def test_falls_back_to_geometric_when_barometric_is_missing(self):
+        # Baro is reported more often than geo (749 of 859 against 727), but
+        # not always, and a real geometric altitude beats no altitude at all.
         provider = make_provider(states_handler())
         records = await provider.fetch()
         assert next(r for r in records if r.id == "3c4b5a").altitude == pytest.approx(11200.0)

@@ -3714,3 +3714,48 @@ without one, and our own observed track. A caption covering all three would be
 true of none. The fixture provider offers no flight history at all and falls
 back to `observed`, which is also what the base `Provider` returns — the
 capability is optional, and `None` is the honest default.
+
+---
+
+## D79 — Barometric altitude, because that is the altitude aviation means
+
+**Decision:** the OpenSky provider prefers `baro_altitude` and falls back to
+`geo_altitude`. It was the other way round.
+
+Phone put Orbital beside Flightradar24 on the same flight, UAE394. Flightradar
+said **37,000 ft**; we said **10,317 m**, which is 33,850 ft. Both numbers were
+real and one of them was the wrong quantity.
+
+| | |
+|---|---|
+| `baro_altitude` | 11,277.6 m = **37,000 ft** — what Flightradar showed |
+| `geo_altitude` | 10,317.5 m — what we showed |
+
+Three reasons, in order of weight:
+
+1. **Aviation runs on barometric altitude.** A flight level *is* a barometric
+   altitude, ATC separates aircraft on it, and every flight tracker displays
+   it. Geometric altitude is a GNSS height that nobody in the cockpit is
+   flying to.
+2. **It is reported more often.** Of 859 aircraft over western Europe, 749
+   carried baro and 727 carried geo.
+3. **The difference is visible, not academic.** In that same sample the two
+   differ by a median of **290 m** and by up to **846 m**.
+
+Geometric stays as the fallback: a real GNSS height beats no altitude at all,
+and 110 aircraft in that sample had one when they had no barometric.
+
+### What was not ours
+
+The same comparison showed UAE394 at **12.44 m/s** on a heading of **7°** —
+45 km/h, northbound, for a 777 crossing Myanmar eastbound at cruise. That is
+OpenSky's own state vector, copied faithfully. Checked against the whole live
+store rather than assumed: of **1,711 aircraft above 6 km, 24 (1.4%)** report
+an impossible ground speed, and the median cruise speed is a perfectly sane
+**238 m/s**. So it is feed noise on individual aircraft, not a systematic
+error, and not something a client can correct without inventing data.
+
+Flightradar does not have this problem because it fuses many receivers with
+MLAT and smooths the result. We have one feed and show what it says, which is
+the same posture the contract takes everywhere else (D18): report what the
+source reported, and say where it came from.

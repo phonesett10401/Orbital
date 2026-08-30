@@ -225,6 +225,8 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 28 | **The departure row ran its label into its value** — "DepartedDubai International Airport": the new row used class names that do not exist instead of the `dl` every other field uses | Low, visual | A screenshot from Phone (§19.29) | Fixed |
+| 27 | **Altitude was geometric where aviation is barometric** — Orbital showed 10,317 m for a flight Flightradar24 had at 37,000 ft; both real, one the wrong quantity, differing by a median of 290 m across 859 aircraft | Medium | Phone compared the two sites on UAE394 (D79, §19.29) | Fixed |
 | 26 | **The ocean turned grey under a second basemap** — keeping every layer promoted Liberty's own Natural Earth relief raster to drawing at 60% opacity over our satellite imagery | Medium, visual | A screenshot from Phone (D77, §19.27) | Fixed |
 | 25 | **The whole style failed to load** — the imagery crossfade was wrapped in a multiplication, which the spec forbids for `zoom` expressions; MapLibre rejects an invalid paint property by discarding the entire style, so the map went to 0 layers and black while seven new tests stayed green | **High** | The dev readout named it verbatim; Phone: "I cant see my earth anymore" (D76, §19.26) | Fixed |
 | 24 | **Night dimmed the place names with the ground** — the terminator went in above the whole basemap, so labels on the night side were washed out while the day side's stayed crisp | Low, visual | A screenshot from Phone (D74, §19.24) | Fixed |
@@ -2227,3 +2229,36 @@ Zurich. The tenth began in mid-air and correctly reported no origin.
 
 **Not verified: how it looks** (19.19). The origin ring and its ICAO label are
 new, and the panel now has three route captions where it had one.
+
+### 19.29 Checked against Flightradar24
+
+Phone put Orbital beside Flightradar24 on the same flight, UAE394 (Emirates,
+Dubai to Hanoi, over Myanmar). Three discrepancies, and they had three
+different causes.
+
+**Altitude: ours (defect #27).** Flightradar 37,000 ft; Orbital 10,317 m =
+33,850 ft. We preferred `geo_altitude`; aviation means `baro_altitude`.
+Measured over 859 aircraft in one box over western Europe:
+
+| | |
+|---|---|
+| carried barometric | 749 |
+| carried geometric | 727 |
+| median difference | **290 m** |
+| largest difference | 846 m |
+
+Fixed, and confirmed live afterwards: the same aircraft now reads **11,277.6 m
+= 37,000 ft**, matching Flightradar exactly. Reasoning in D79.
+
+**Speed and heading: not ours.** OpenSky's own state vector reported 12.44 m/s
+on a heading of 7 degrees for a 777 at cruise heading east. Checked across the
+live store rather than assumed: of **1,711 aircraft above 6 km, 24 (1.4%)**
+carry an impossible ground speed, and the median cruise speed is **238 m/s**.
+Feed noise on individual aircraft, not a systematic fault, and not correctable
+without inventing data.
+
+**The departure row: ours (defect #28).** "DepartedDubai International
+Airport" - the row was written with class names that do not exist rather than
+the `dl` structure every other field uses, so nothing separated the label from
+the value. A day-one mistake in code written an hour earlier, and exactly the
+kind that only shows up on screen.

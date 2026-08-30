@@ -169,13 +169,18 @@ export function DetailPanel() {
         ) : (
           <>
             {detail.origin && (
-              <div className="panel__row">
-                <span className="panel__label">Departed</span>
-                <span className="panel__value">
-                  {detail.origin.name}{' '}
-                  <span className="panel__unit">{detail.origin.icao}</span>
-                </span>
-              </div>
+              // The same `dl` every other field uses. Written as a bare pair of
+              // spans first, which rendered as "DepartedDubai International
+              // Airport" - the classes did not exist, so nothing separated them
+              // (defect #28).
+              <dl className="panel__fields">
+                <div>
+                  <dt>Departed</dt>
+                  <dd>
+                    {detail.origin.name} <span className="mono">{detail.origin.icao}</span>
+                  </dd>
+                </div>
+              </dl>
             )}
             <p className="panel__note">
               {detail.track.length}{' '}
