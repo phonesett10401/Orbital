@@ -98,9 +98,9 @@ cd frontend && npm test
 | `status.test.ts` | 13 | **Failure classification, the stall notice, one-answer selection, querying before the layers exist** |
 | `terminator.test.ts` | 33 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
-| `test_flights.py` | 30 | **The origin inference and its refusals, and the cache that stops it spending credits** |
+| `test_flights.py` | 40 | **The origin inference and its refusals, and the cache that stops it spending credits** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **849** | 355 backend, 494 frontend |
+| **Total** | **859** | 365 backend, 494 frontend |
 
 ### What the automated suites do not cover
 
@@ -2302,3 +2302,34 @@ long final one; a pair too close together to measure yields nothing; an
 agreeing heading and a disagreement inside the threshold are both left exactly
 as reported; a null heading stays null; and a track of one point changes
 nothing.
+
+### 19.31 And the speed
+
+Reasoning in D81. **10 tests.** The evidence pointed the opposite way from the
+heading (19.30), and the design followed it.
+
+**Measured across 2,971 live aircraft** moving faster than 100 m/s, reported
+velocity against the speed their own positions imply:
+
+| | |
+|---|---|
+| median difference | **1.7 m/s** |
+| reporting under half their observed speed | **0.30%** |
+
+So velocity is nearly always right, and the apparent worst offenders implied
+**1035, 928 and 635 m/s** - jumped positions, not velocity errors. A naive
+correction would have replaced a correct 244 m/s with 928.
+
+Hence three conditions, all required: the track's speed must be **possible**
+(under 400 m/s), differ by **more than 50 m/s** (the track figure's own noise
+is a median 7.6 and up to 35.5), and by **a factor of two**.
+
+**Verified live.** CBJ669, both corrections at once: speed 1.0 to 211.9 m/s,
+heading 180.0 to 281.4 degrees. Two more had only their heading corrected, and
+three had neither touched.
+
+**What the tests pin**: an impossible track speed never overrules anything; an
+ordinary disagreement and a large difference without a large ratio are both
+left alone; a null velocity stays null; the course and the speed come from the
+same pair of waypoints; and both corrections can apply to one aircraft without
+either dropping the provider's own meta.

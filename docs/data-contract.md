@@ -141,6 +141,19 @@ list response for a value the UI shows one at a time, on click.
 | `altitude` | number | metres | yes |
 | `timestamp` | string | RFC 3339 UTC | no |
 
+### When a field is not the source's own
+
+Two keys may appear in `meta` on the by-id response:
+
+| Key | Meaning |
+|---|---|
+| `headingSource: "derived"` | `heading` was measured from the aircraft's own track, because the reported value contradicted it by more than 30 degrees (D80). |
+| `velocitySource: "derived"` | `velocity` was measured the same way, on stricter terms: over 50 m/s and a factor of two out, and only when the track's figure is physically possible (D81). |
+
+Everything else in the response is the provider's own. A client that shows
+these values should say which ones are not - Orbital's panel prints "from its
+track".
+
 ### What "route" means in Orbital — read this
 
 > **`track` is a path actually flown, and never a filed flight plan.**

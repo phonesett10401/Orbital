@@ -127,6 +127,9 @@ export function DetailPanel() {
             {detail.velocity === null
               ? 'Unknown'
               : `${Math.round(detail.velocity)} m/s (${Math.round(detail.velocity * 3.6)} km/h)`}
+            {detail.meta.velocitySource === 'derived' && (
+              <span className="panel__unit"> from its track</span>
+            )}
           </dd>
         </div>
         <div>

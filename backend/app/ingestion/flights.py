@@ -69,6 +69,32 @@ COURSE_MIN_MOVEMENT_M = 200.0
 #: ambiguity a six-second gap removes (D80).
 COURSE_MAX_DISAGREEMENT_DEG = 30.0
 
+#: The fastest an aircraft's own positions may claim it is going.
+#:
+#: **This limit is the whole reason the speed correction is safe.** Measured
+#: over 2,971 live aircraft moving faster than 100 m/s: the median difference
+#: between reported velocity and the speed implied by their positions is
+#: **1.7 m/s**, so the reported figure is excellent. Only 0.30% report under
+#: half their observed speed - and the extremes of that group implied 1035,
+#: 928 and 635 m/s, which nothing in this dataset flies. Those are position
+#: glitches, not velocity errors, and trusting them would replace a correct
+#: 244 m/s with a nonsense 928 (D81).
+#:
+#: 400 m/s is above any airliner's ground speed including a strong jet-stream
+#: tailwind, and far below what a jumped position produces.
+SPEED_MAX_PLAUSIBLE_MS = 400.0
+
+#: How far out the reported speed must be, in m/s, before its track overrules it.
+#:
+#: The track-derived speed carries its own noise: across eight aircraft with
+#: sound data it differed from the reported value by a median of 7.6 m/s and by
+#: as much as 35.5. 50 m/s is clear of that, and the case this exists for -
+#: 12 m/s reported at cruise - is out by more than 200.
+SPEED_MIN_DIFFERENCE_MS = 50.0
+
+#: And by this factor, so a fast aircraft is not corrected for a small fraction.
+SPEED_MIN_RATIO = 2.0
+
 
 @dataclass(frozen=True)
 class Flight:
@@ -79,24 +105,57 @@ class Flight:
     fetched_at: float
 
 
-def course_from_track(track: tuple[TrackPoint, ...]) -> float | None:
-    """The direction of travel at the end of a track, or None.
+def _last_usable_pair(
+    track: tuple[TrackPoint, ...],
+) -> tuple[TrackPoint, TrackPoint, float, float] | None:
+    """The most recent pair of waypoints worth measuring anything from.
 
-    Walks backwards for the most recent pair of waypoints close enough in time
-    to be an instantaneous course and far enough apart in space to be a
-    measurement rather than noise. Backwards because the *last* gap is often
-    the long one: the track ends at the provider's most recent sample, which
-    may be minutes old even when the samples before it are seconds apart.
+    Walks backwards for a pair close enough in time to describe the aircraft
+    *now* and far enough apart in space to be a measurement rather than noise.
+    Backwards because the last gap is often the long one: a track ends at the
+    provider's most recent sample, which can be minutes after the one before it
+    even when the rest are six seconds apart.
+
+    Returns the pair, the gap in seconds and the distance in metres, because
+    both the course and the speed are read off the same two points -- two
+    functions choosing their own pairs could describe two different moments.
     """
     for index in range(len(track) - 1, 0, -1):
         later, earlier = track[index], track[index - 1]
         gap = (later.timestamp - earlier.timestamp).total_seconds()
         if gap <= 0 or gap > COURSE_MAX_GAP_SECONDS:
             continue
-        if haversine_metres(earlier.lat, earlier.lon, later.lat, later.lon) < COURSE_MIN_MOVEMENT_M:
+        distance = haversine_metres(earlier.lat, earlier.lon, later.lat, later.lon)
+        if distance < COURSE_MIN_MOVEMENT_M:
             continue
-        return initial_bearing(earlier.lat, earlier.lon, later.lat, later.lon)
+        return earlier, later, gap, distance
     return None
+
+
+def course_from_track(track: tuple[TrackPoint, ...]) -> float | None:
+    """The direction of travel at the end of a track, or None."""
+    pair = _last_usable_pair(track)
+    if pair is None:
+        return None
+    earlier, later, _gap, _distance = pair
+    return initial_bearing(earlier.lat, earlier.lon, later.lat, later.lon)
+
+
+def speed_from_track(track: tuple[TrackPoint, ...]) -> float | None:
+    """Ground speed in m/s at the end of a track, or None.
+
+    Only returned when it is physically possible. A track whose last two
+    waypoints imply 900 m/s is describing a jumped position rather than an
+    aircraft, and that is the failure mode this must not import: reported
+    velocity is right to a median of 1.7 m/s, so a correction based on a bad
+    position would be strictly worse than doing nothing (D81).
+    """
+    pair = _last_usable_pair(track)
+    if pair is None:
+        return None
+    _earlier, _later, gap, distance = pair
+    speed = distance / gap
+    return speed if speed <= SPEED_MAX_PLAUSIBLE_MS else None
 
 
 class FlightHistory:
@@ -146,6 +205,25 @@ class FlightHistory:
             meta = dict(detail.meta)
             meta["headingSource"] = "derived"
             update["heading"] = course
+            update["meta"] = meta
+
+        # And the same for ground speed, on much stricter terms. The aircraft
+        # that prompted this reported 12 m/s at cruise, which is not merely
+        # wrong on the panel: the client dead-reckons along it, so the marker
+        # crawls while the aircraft it represents does 240 m/s (D81).
+        speed = speed_from_track(flight.track)
+        if (
+            speed is not None
+            and detail.velocity is not None
+            and abs(speed - detail.velocity) > SPEED_MIN_DIFFERENCE_MS
+            and (
+                speed > SPEED_MIN_RATIO * detail.velocity
+                or detail.velocity > SPEED_MIN_RATIO * speed
+            )
+        ):
+            meta = dict(update.get("meta", detail.meta))  # type: ignore[arg-type]
+            meta["velocitySource"] = "derived"
+            update["velocity"] = speed
             update["meta"] = meta
 
         return detail.model_copy(update=update)

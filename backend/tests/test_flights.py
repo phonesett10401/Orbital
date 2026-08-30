@@ -26,8 +26,10 @@ import pytest
 from app.airports import ORIGIN_MAX_KM, haversine_km, nearest_airport, origin_of
 from app.ingestion.flights import (
     COURSE_MAX_DISAGREEMENT_DEG,
+    SPEED_MAX_PLAUSIBLE_MS,
     FlightHistory,
     course_from_track,
+    speed_from_track,
 )
 from app.models import ObjectType, TrackedObjectDetail, TrackPoint, TrackSource
 from app.providers.base import Provider, ProviderRateLimited
@@ -67,8 +69,9 @@ class StubProvider(Provider):
         return self.track
 
 
-def detail_with(*, heading: float | None) -> TrackedObjectDetail:
-    return detail().model_copy(update={"heading": heading})
+def detail_with(**fields: object) -> TrackedObjectDetail:
+    """A detail with specific reported values, everything else as the fixture."""
+    return detail().model_copy(update=fields)
 
 
 def detail(object_id: str = "abc123") -> TrackedObjectDetail:
@@ -82,6 +85,9 @@ def detail(object_id: str = "abc123") -> TrackedObjectDetail:
         label="TEST123",
         last_seen=NOW,
         type=ObjectType.AIRCRAFT,
+        # Carries source meta, so the corrections below are shown not to
+        # clobber what the provider itself reported.
+        meta={"originCountry": "Testland"},
         track=(point(1.0, 2.0), point(1.1, 2.1)),
     )
 
@@ -317,3 +323,102 @@ class TestHeadingFromTheTrack:
         provider = StubProvider((point(20.0, 95.0, offset=0),))
         enriched = await FlightHistory(provider).enrich(detail_with(heading=7.0))
         assert enriched.heading == 7.0
+
+
+class TestSpeedFromTrack:
+    """Ground speed measured off the same two waypoints as the course (D81).
+
+    The rules here are far stricter than the heading's, because the evidence
+    is the other way round. Across 2,971 live aircraft moving faster than
+    100 m/s, reported velocity differs from the speed their positions imply by
+    a median of **1.7 m/s** - it is nearly always right. Only 0.30% report
+    under half their observed speed, and the extremes of that group implied
+    1035, 928 and 635 m/s, which nothing flies. Those are jumped positions, and
+    importing them would replace a correct 244 m/s with nonsense.
+    """
+
+    def test_measures_the_speed_over_the_last_short_gap(self) -> None:
+        # 0.05 degrees of longitude at the equator is about 5.6 km; over 20
+        # seconds that is roughly 280 m/s.
+        track = (point(0.0, 0.0, offset=0), point(0.0, 0.05, offset=20))
+        speed = speed_from_track(track)
+        assert speed is not None and speed == pytest.approx(278, abs=5)
+
+    def test_refuses_a_speed_nothing_can_fly(self) -> None:
+        # The failure mode that matters: a jumped position implying 900 m/s.
+        # Answering None here is what keeps a correct reported velocity.
+        track = (point(0.0, 0.0, offset=0), point(0.0, 0.2, offset=20))
+        assert speed_from_track(track) is None
+
+    def test_shares_its_waypoints_with_the_course(self) -> None:
+        # Two functions choosing their own pairs could describe two different
+        # moments, and the panel would then show a heading and a speed that
+        # were never true together.
+        track = (
+            point(0.0, 0.0, offset=0),
+            point(0.0, 0.05, offset=20),
+            point(1.0, 1.0, offset=400),
+        )
+        assert course_from_track(track) == pytest.approx(90.0, abs=0.5)
+        assert speed_from_track(track) == pytest.approx(278, abs=5)
+
+    def test_has_no_answer_without_a_usable_pair(self) -> None:
+        assert speed_from_track((point(0.0, 0.0),)) is None
+        assert speed_from_track(()) is None
+
+
+class TestSpeedCorrection:
+    @pytest.mark.anyio
+    async def test_a_contradicted_speed_loses_to_the_track(self) -> None:
+        # The aircraft that prompted it: 12 m/s reported at cruise, while its
+        # own track shows 278.
+        provider = StubProvider((point(0.0, 0.0, offset=0), point(0.0, 0.05, offset=20)))
+        enriched = await FlightHistory(provider).enrich(detail_with(velocity=12.44))
+        assert enriched.velocity == pytest.approx(278, abs=5)
+        assert enriched.meta["velocitySource"] == "derived"
+
+    @pytest.mark.anyio
+    async def test_an_ordinary_disagreement_is_left_alone(self) -> None:
+        # The track-derived figure carries noise of its own - a median of 7.6
+        # m/s and up to 35 across aircraft with sound data - so a correction
+        # firing here would be noise replacing signal.
+        provider = StubProvider((point(0.0, 0.0, offset=0), point(0.0, 0.05, offset=20)))
+        enriched = await FlightHistory(provider).enrich(detail_with(velocity=250.0))
+        assert enriched.velocity == 250.0
+        assert "velocitySource" not in enriched.meta
+
+    @pytest.mark.anyio
+    async def test_a_large_difference_still_needs_a_large_ratio(self) -> None:
+        # 180 against 278 is 98 m/s apart, which is over the absolute floor -
+        # and well inside the factor of two, so the reported figure stands.
+        provider = StubProvider((point(0.0, 0.0, offset=0), point(0.0, 0.05, offset=20)))
+        enriched = await FlightHistory(provider).enrich(detail_with(velocity=180.0))
+        assert enriched.velocity == 180.0
+
+    @pytest.mark.anyio
+    async def test_an_impossible_track_speed_never_overrules_anything(self) -> None:
+        # 0.2 degrees in 20 seconds is 1100 m/s: a jumped position. The
+        # reported 244 is correct and must survive.
+        provider = StubProvider((point(0.0, 0.0, offset=0), point(0.0, 0.2, offset=20)))
+        enriched = await FlightHistory(provider).enrich(detail_with(velocity=244.0))
+        assert enriched.velocity == 244.0
+        assert "velocitySource" not in enriched.meta
+        assert SPEED_MAX_PLAUSIBLE_MS < 1100
+
+    @pytest.mark.anyio
+    async def test_a_null_velocity_stays_null(self) -> None:
+        provider = StubProvider((point(0.0, 0.0, offset=0), point(0.0, 0.05, offset=20)))
+        enriched = await FlightHistory(provider).enrich(detail_with(velocity=None))
+        assert enriched.velocity is None
+
+    @pytest.mark.anyio
+    async def test_both_corrections_can_apply_to_one_aircraft(self) -> None:
+        # They share a pair of waypoints and both write to meta; the second
+        # must not drop what the first wrote.
+        provider = StubProvider((point(0.0, 0.0, offset=0), point(0.0, 0.05, offset=20)))
+        enriched = await FlightHistory(provider).enrich(
+            detail_with(heading=7.0, velocity=12.44)
+        )
+        assert enriched.meta["headingSource"] == "derived"
+        assert enriched.meta["velocitySource"] == "derived"
+        assert enriched.meta["originCountry"] == "Testland"

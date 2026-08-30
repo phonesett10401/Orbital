@@ -3838,3 +3838,73 @@ dressed as due north, which is exactly the confusion D18 exists to prevent.
   complaint.
 - **It says so.** `meta.headingSource = "derived"` and the panel prints "from
   its track", because every other number there is the source's own.
+
+---
+
+## D81 — Ground speed too, on much stricter terms than the heading
+
+**Decision:** the selected aircraft's ground speed is taken from its track when
+the reported value contradicts it by more than 50 m/s *and* a factor of two,
+and only when the track's own figure is physically possible.
+
+This matters beyond the panel. **The client dead-reckons along the reported
+velocity**, so an aircraft reported at 12 m/s crawls between polls while the
+thing it represents covers 240 m every second. It is the same field D71 built
+the extrapolation cap around.
+
+### The evidence points the other way from the heading, and the design follows it
+
+Measured across **2,971 live aircraft** moving faster than 100 m/s, comparing
+reported velocity against the speed implied by their own positions:
+
+| | |
+|---|---|
+| median difference | **1.7 m/s** |
+| reporting under half their observed speed | **0.30%** (9 of 2,971) |
+
+Where the heading is wrong often enough to be worth a broad correction, the
+**velocity is nearly always right**. And the worst apparent under-reports were
+the trap:
+
+```
+48b70c   reported 130.8 m/s   positions imply 1035.1 m/s
+a0a54a   reported 244.8 m/s   positions imply  928.0 m/s
+4bc8d5   reported 232.0 m/s   positions imply  635.6 m/s
+```
+
+Nothing in this dataset flies at Mach 3. Those are **jumped positions**, not
+velocity errors, and a naive "the positions win" rule would replace a correct
+244 m/s with 928. So the correction carries a plausibility ceiling of 400 m/s —
+above any airliner's ground speed with a jet-stream tailwind, far below what a
+bad position produces — and refuses to answer at all above it.
+
+Three conditions, all required:
+
+1. the track's speed is **possible** (≤ 400 m/s);
+2. it differs from the reported figure by **more than 50 m/s** — the
+   track-derived value carries noise of its own, measured at a median of 7.6
+   m/s and up to 35.5 across aircraft with sound data;
+3. and by **a factor of two**, so a fast aircraft is never corrected for a
+   fraction.
+
+### One pair of waypoints, two measurements
+
+The course and the speed are read off the *same* two waypoints, chosen once.
+Two functions picking their own pairs could describe two different moments, and
+the panel would then show a heading and a speed that were never true together.
+
+**Verified live** on cruising aircraft reporting impossible speeds. CBJ669 was
+the case this exists for, and shows both corrections at once:
+
+| | reported | shown |
+|---|---|---|
+| CBJ669 speed | 1.0 m/s | 211.9 m/s |
+| CBJ669 heading | 180.0° | 281.4° |
+
+Two others had their heading corrected and their speed left alone — they really
+are slow — and three had neither touched, their data being self-consistent.
+That is the conservative behaviour working rather than a weaker result.
+
+`meta.velocitySource = "derived"` sits beside `headingSource`, and the panel
+prints "from its track" against either, because every other number there is
+the source's own.
