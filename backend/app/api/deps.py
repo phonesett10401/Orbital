@@ -11,6 +11,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from app.config import Settings
+from app.ingestion.flights import FlightHistory
 from app.ingestion.poller import Poller
 from app.ingestion.store import ObjectStore
 
@@ -21,6 +22,10 @@ def get_store(request: Request) -> ObjectStore:
 
 def get_poller(request: Request) -> Poller:
     return request.app.state.poller
+
+
+def get_flights(request: Request) -> FlightHistory:
+    return request.app.state.flights
 
 
 def get_settings_dep(request: Request) -> Settings:

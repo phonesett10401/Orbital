@@ -56,8 +56,37 @@ export interface TrackPoint {
  * is lost when the backend restarts, and is truncated by a ring buffer. This
  * is a documented product limitation (D6), and the UI says so.
  */
+/**
+ * An airport the flight appears to have left from.
+ *
+ * Inferred, not reported: it is the nearest airport to the first point of the
+ * aircraft's track, and `distanceKm` is how near. 0.3 km is an aircraft on a
+ * runway; 6 km is one that was already climbing when the track began, and the
+ * panel words itself accordingly (D78).
+ */
+export interface Airport {
+  icao: string;
+  name: string;
+  lat: number;
+  lon: number;
+  country: string | null;
+  distanceKm: number;
+}
+
+/**
+ * Where a track came from.
+ *
+ * `observed` begins when *we* started watching, which for an aircraft selected
+ * mid-flight is an arbitrary point in the sky. `provider` begins where the
+ * flight did. The panel says something different for each, so it has to be
+ * able to tell them apart.
+ */
+export type TrackSource = 'provider' | 'observed';
+
 export interface TrackedObjectDetail extends TrackedObject {
   track: TrackPoint[];
+  trackSource: TrackSource;
+  origin: Airport | null;
   /** Source-specific fields the universal shape omits, e.g. `originCountry`. */
   meta: Record<string, string>;
 }

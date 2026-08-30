@@ -142,6 +142,40 @@ class TrackedObjectRecord(TrackedObject):
     )
 
 
+class Airport(OrbitalModel):
+    """An airport, as an origin we have inferred rather than been told.
+
+    ``distance_km`` is carried deliberately: the origin is a nearest-match
+    against the first point of a track, and how close that match was is the
+    reader's only way to judge it. 0.8 km is an aircraft on a runway; 6 km is
+    an aircraft that was already climbing when we first saw it, and the client
+    can word itself accordingly (D78).
+    """
+
+    icao: str = Field(description="ICAO code, e.g. YSSY.")
+    name: str = Field(description="Airport name as published.")
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    country: str | None = Field(default=None, description="ISO 3166-1 alpha-2, when known.")
+    distance_km: float = Field(
+        ge=0, description="How far the track's first point was from this airport."
+    )
+
+
+class TrackSource(str, Enum):
+    """Where a detail's track came from.
+
+    The distinction is the whole point of asking the provider for one: an
+    ``observed`` track begins when *we* started watching, which for an aircraft
+    selected mid-flight is an arbitrary point in the sky, while a ``provider``
+    track begins where the flight did. The client says something different for
+    each, so it has to be able to tell them apart (D78).
+    """
+
+    PROVIDER = "provider"
+    OBSERVED = "observed"
+
+
 class TrackedObjectDetail(TrackedObjectRecord):
     """A single object plus everything the detail panel needs.
 
@@ -150,7 +184,15 @@ class TrackedObjectDetail(TrackedObjectRecord):
     """
 
     track: tuple[TrackPoint, ...] = Field(
-        default=(), description="Observed positions, oldest first."
+        default=(), description="Positions oldest first, from `track_source`."
+    )
+    track_source: TrackSource = Field(
+        default=TrackSource.OBSERVED,
+        description="Whether the track came from the provider or from our own polling.",
+    )
+    origin: Airport | None = Field(
+        default=None,
+        description="Where the flight appears to have departed from, if its track begins there.",
     )
 
 

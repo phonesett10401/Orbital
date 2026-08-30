@@ -53,6 +53,19 @@ export const LEADER_SOURCE = 'orbital-route-leader';
 export const LEADER_LAYER = 'orbital-route-leader';
 export const LEADER_CASING_LAYER = 'orbital-route-leader-casing';
 
+/**
+ * The departure airport, drawn where the track begins.
+ *
+ * A line that starts at a runway says so much more clearly with a mark on the
+ * runway, and the airport's name is in the panel where there is room for it.
+ * Empty whenever the origin is unknown - a flight the network picked up in
+ * mid-air has no departure point to draw, and inventing one at the start of
+ * the track would be claiming exactly what the panel is careful not to (D78).
+ */
+export const ORIGIN_SOURCE = 'orbital-origin';
+export const ORIGIN_LAYER = 'orbital-origin';
+export const ORIGIN_LABEL_LAYER = 'orbital-origin-label';
+
 /** Great-circle subdivisions per segment. Enough to look curved, cheap to build. */
 export const SEGMENT_STEPS = 12;
 
@@ -273,6 +286,79 @@ export function leaderLayers(): import('maplibre-gl').LayerSpecification[] {
         'line-color': '#ffffff',
         'line-width': ['interpolate', ['linear'], ['zoom'], 2, 1.5, 12, 3],
         'line-dasharray': [1.6, 1.1],
+      },
+    },
+  ];
+}
+
+export interface OriginPoint {
+  lat: number;
+  lon: number;
+  icao: string;
+}
+
+/** The origin airport as a one-point collection, or an empty one. */
+export function originFeature(origin: OriginPoint | null | undefined): {
+  type: 'FeatureCollection';
+  features: Array<{
+    type: 'Feature';
+    properties: { icao: string };
+    geometry: { type: 'Point'; coordinates: [number, number] };
+  }>;
+} {
+  if (!origin) return { type: 'FeatureCollection', features: [] };
+  return {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { icao: origin.icao },
+        geometry: { type: 'Point', coordinates: [origin.lon, origin.lat] },
+      },
+    ],
+  };
+}
+
+/**
+ * A ring at the airport and its code beside it.
+ *
+ * A ring rather than a filled dot: the aircraft are filled shapes, and a
+ * departure point is not another aircraft. It carries the same dark casing
+ * every other line on this map does, for the same reason - it has to read over
+ * a photograph and over a pale basemap (D59).
+ */
+export function originLayers(): import('maplibre-gl').LayerSpecification[] {
+  return [
+    {
+      id: ORIGIN_LAYER,
+      type: 'circle',
+      source: ORIGIN_SOURCE,
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 2, 3.5, 10, 6],
+        'circle-color': 'rgba(0, 0, 0, 0)',
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 2,
+        'circle-opacity': 1,
+      },
+    },
+    {
+      id: ORIGIN_LABEL_LAYER,
+      type: 'symbol',
+      source: ORIGIN_SOURCE,
+      minzoom: 4,
+      layout: {
+        'text-field': ['get', 'icao'],
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 11,
+        'text-offset': [0, 1.1],
+        'text-anchor': 'top',
+        'text-allow-overlap': false,
+        'text-optional': true,
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': 'rgba(0, 0, 0, 0.85)',
+        'text-halo-width': 1.4,
       },
     },
   ];

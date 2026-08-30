@@ -3637,3 +3637,80 @@ Liberty's shape — relief raster, zoom-curve opacity, its own source — and th
 assertion was checked by reverting the filter and watching it fail. Three
 defects in three commits have now come from the fixture being simpler than the
 real style; that is worth more attention than any of the individual fixes.
+
+---
+
+## D78 — Where the flight started, read off the track rather than asked for
+
+**Decision:** the detail endpoint buys OpenSky's own flight track for the
+selected aircraft, uses it in place of our observed one, and infers the
+departure airport from where that track begins.
+
+Phone, watching live traffic: *"the plane routes start showing up from when the
+web starts running, not from their origin airport they left from."* Exactly
+right, and the panel had been saying so in small print since D6 — the route
+began when *we* started watching, which for an aircraft selected mid-flight is
+an arbitrary point in the sky.
+
+### Two endpoints, and the cheap one is also the reliable one
+
+Measured against the live account rather than reasoned about:
+
+| | Cost | Result |
+|---|---|---|
+| `/flights/aircraft` | **30 credits** | 404 for two of three aircraft tried |
+| `/tracks/all` | **4 credits** | a full path from the runway, for all three |
+
+Both spend the same 4000/day allowance. So the endpoint that returns an
+authoritative ICAO departure code is seven times dearer *and* usually silent,
+because OpenSky's flight assignment lags well behind its position data.
+
+**So the origin is read off the track instead.** Its first waypoint is on the
+departure runway — RXA6681's began 800 m from Sydney Kingsford Smith — and a
+nearest-airport lookup over a 28,291-row public-domain dataset turns that into
+a name for nothing. Checked against live traffic: **ten aircraft, ten tracks,
+nine origins**, at 0.3 to 3.5 km — Brisbane, Boeing Field, Houston, Buenos
+Aires, Santa Barbara, Cape Town, Al Maktoum, Athens, Zurich.
+
+### The inference is built to refuse
+
+A nearest-match always returns something if you let it. This one will not:
+
+- **8 km limit.** Tighter loses departures where the first sample arrives after
+  rotation; looser starts claiming a flight passing over a town began at its
+  airfield.
+- **Below 1500 m.** Without it, an overflight at cruise directly above an
+  airport reads as a departure from it.
+- **`distanceKm` is part of the answer**, so the panel can say "the nearest
+  airport to where the track begins, 0.8 km away" rather than asserting a
+  departure.
+- **`null` when nothing qualifies**, and the panel then says the track begins
+  in flight and the origin is unknown. That is the tenth aircraft, and it is
+  the same rule the contract applies to a null heading (D18): unknown is a
+  value, and inventing one is worse than admitting it.
+
+### The cache is the feature
+
+4 credits is nothing beside the 128 an hour the poller already spends, and
+ruinous if it happens per request: the client re-polls the selected aircraft
+while it is selected, so an uncached fetch turns one user watching one flight
+into a request every few seconds and empties a day in under an hour.
+
+So: two-minute TTL, one in-flight fetch per aircraft behind a lock so a burst
+of detail requests buys one answer between them, and **negative results cached
+too** — the easy one to leave out, and the expensive one, because a 404 is the
+common answer for an aircraft that has just appeared. Four tests count calls;
+they are the point of that file.
+
+**A provider failure never fails the request.** The other fields of the panel
+are already in hand, and losing them because a secondary enrichment was
+rate-limited would be a worse answer than a shorter line.
+
+### What it changes elsewhere
+
+`track_source` is in the contract because the client says something different
+for each: three captions, for a provider track with an origin, a provider track
+without one, and our own observed track. A caption covering all three would be
+true of none. The fixture provider offers no flight history at all and falls
+back to `observed`, which is also what the base `Provider` returns — the
+capability is optional, and `None` is the honest default.

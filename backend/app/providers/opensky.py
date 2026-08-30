@@ -24,7 +24,7 @@ from typing import Any, Sequence
 
 import httpx
 
-from app.models import BBox, ObjectType, TrackedObjectRecord
+from app.models import BBox, ObjectType, TrackedObjectRecord, TrackPoint
 from app.providers.base import (
     Provider,
     ProviderBadResponse,
@@ -191,6 +191,74 @@ class OpenSkyProvider(Provider):
             if record is not None:
                 records.append(record)
         return records
+
+    async def fetch_track(self, object_id: str) -> tuple[TrackPoint, ...] | None:
+        """The current flight's path from OpenSky's ``/tracks/all``.
+
+        Each waypoint arrives as ``[time, lat, lon, baro_altitude, true_track,
+        on_ground]``. Only the first four are used: heading comes from the live
+        state vector, and on-ground is implied by an altitude at field level.
+
+        **Costs 4 credits**, measured against the same 4000/day allowance the
+        poller spends (D78). That is cheap enough to spend when a user selects
+        an aircraft and far too expensive to spend on a schedule, so the caller
+        caches; this method does not.
+
+        Returns None rather than raising when the flight is unknown: a 404 here
+        means OpenSky has no track for this aircraft, which is an ordinary
+        answer for something that has just appeared, and the caller falls back
+        to what it watched itself.
+        """
+        token = await self._get_token()
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        try:
+            response = await self._client.get(
+                f"{self.base_url}/tracks/all",
+                params={"icao24": object_id.lower(), "time": 0},
+                headers=headers,
+            )
+        except httpx.HTTPError as exc:  # pragma: no cover - network failure
+            raise ProviderUnavailable(f"OpenSky track request failed: {exc}") from exc
+
+        self._record_credit_headers(response)
+        if response.status_code == 404:
+            return None
+        if response.status_code == 429:
+            raise ProviderRateLimited(
+                "OpenSky refused the track request",
+                self._parse_retry_after(response),
+            )
+        if response.status_code >= 400:
+            raise ProviderUnavailable(f"OpenSky track request returned {response.status_code}")
+
+        payload = response.json()
+        path = payload.get("path") if isinstance(payload, dict) else None
+        if not isinstance(path, list) or not path:
+            return None
+        return tuple(point for point in map(self._to_track_point, path) if point is not None)
+
+    @staticmethod
+    def _to_track_point(waypoint: Any) -> TrackPoint | None:
+        """One ``[time, lat, lon, baro_altitude, true_track, on_ground]`` row.
+
+        A waypoint with no position is dropped rather than defaulted, for the
+        same reason a state vector with none is (D18): a point at (0, 0) draws
+        a line through the Gulf of Guinea.
+        """
+        if not isinstance(waypoint, (list, tuple)) or len(waypoint) < 3:
+            return None
+        seconds = OpenSkyProvider._first_number(waypoint[0])
+        lat = OpenSkyProvider._first_number(waypoint[1])
+        lon = OpenSkyProvider._first_number(waypoint[2])
+        if seconds is None or lat is None or lon is None:
+            return None
+        altitude = OpenSkyProvider._first_number(waypoint[3]) if len(waypoint) > 3 else None
+        return TrackPoint(
+            lat=lat,
+            lon=lon,
+            altitude=altitude,
+            timestamp=datetime.fromtimestamp(seconds, tz=timezone.utc),
+        )
 
     async def _request_states(
         self, bbox: BBox | None, *, retry_on_401: bool

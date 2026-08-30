@@ -13,11 +13,16 @@ import { describe, expect, it } from 'vitest';
 import type { TrackPoint } from '../types';
 import {
   LEADER_SOURCE,
+  ORIGIN_LABEL_LAYER,
+  ORIGIN_LAYER,
+  ORIGIN_SOURCE,
   ROUTE_CASING_LAYER,
   ROUTE_LAYER,
   ROUTE_SOURCE,
   leaderFeature,
   leaderLayers,
+  originFeature,
+  originLayers,
   greatCircleLatLon,
   routeFeatures,
   routeLayers,
@@ -228,5 +233,54 @@ describe('leaderLayers', () => {
     const width = (l: unknown) => (l as { paint: Record<string, unknown> }).paint['line-width'];
     expect(width(casing)).toEqual(width(trackCasing));
     expect(width(line)).toEqual(width(trackLine));
+  });
+});
+
+describe('the departure airport', () => {
+  // The track now begins at the runway rather than wherever we happened to
+  // start watching (D78), and a line that starts at an airport says so much
+  // more clearly with a mark on it.
+
+  it('draws nothing when the origin is unknown', () => {
+    // A flight the network picked up in mid-air has no departure point, and
+    // putting a ring at the start of the track anyway would claim exactly what
+    // the panel is careful not to.
+    expect(originFeature(null).features).toHaveLength(0);
+    expect(originFeature(undefined).features).toHaveLength(0);
+  });
+
+  it('puts one point at the airport, in lon/lat order', () => {
+    // Getting the order backwards is a whole hemisphere of wrong that still
+    // draws a ring somewhere plausible.
+    const collection = originFeature({ lat: -33.9461, lon: 151.1772, icao: 'YSSY' });
+    expect(collection.features).toHaveLength(1);
+    expect(collection.features[0].geometry.coordinates).toEqual([151.1772, -33.9461]);
+    expect(collection.features[0].properties.icao).toBe('YSSY');
+  });
+
+  it('is a ring, not another filled shape', () => {
+    // The aircraft are filled shapes. A departure point is not an aircraft,
+    // and at a glance a second filled dot on the line reads as one.
+    const [ring, label] = originLayers();
+    expect(ring.id).toBe(ORIGIN_LAYER);
+    expect(ring.type).toBe('circle');
+    const paint = (ring as { paint: Record<string, unknown> }).paint;
+    expect(paint['circle-color']).toBe('rgba(0, 0, 0, 0)');
+    expect(paint['circle-stroke-width']).toBeGreaterThan(0);
+    expect(label.id).toBe(ORIGIN_LABEL_LAYER);
+    expect(label.type).toBe('symbol');
+  });
+
+  it('reads both layers from the one source', () => {
+    for (const layer of originLayers()) {
+      expect((layer as { source: string }).source).toBe(ORIGIN_SOURCE);
+    }
+  });
+
+  it('holds the code back until there is room for it', () => {
+    // At z2 the ring is a few pixels and a four-letter code beside every one
+    // of them is noise; the airport's full name is in the panel regardless.
+    const [, label] = originLayers();
+    expect((label as { minzoom?: number }).minzoom).toBeGreaterThan(2);
   });
 });

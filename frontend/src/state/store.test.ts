@@ -46,7 +46,13 @@ function response(
 }
 
 function detail(id: string): TrackedObjectDetail {
-  return { ...object(id), track: [], meta: { originCountry: 'Testland' } };
+  return {
+    ...object(id),
+    track: [],
+    trackSource: 'observed' as const,
+    origin: null,
+    meta: { originCountry: 'Testland' },
+  };
 }
 
 beforeEach(() => {

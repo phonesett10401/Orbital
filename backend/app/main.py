@@ -17,6 +17,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from app.api import aircraft, health
 from app.config import Settings, get_settings
 from app.ingestion.poller import Poller
+from app.ingestion.flights import FlightHistory
 from app.ingestion.store import ObjectStore
 from app.logging_config import configure_logging
 from app.providers import registry
@@ -51,9 +52,13 @@ def create_app(
             object_type=settings.object_type,
         )
         poller = Poller(active_provider, store, settings)
+        # Bought per selection rather than polled, so it hangs off the app
+        # beside the poller rather than inside it (D78).
+        flights = FlightHistory(active_provider)
 
         app.state.settings = settings
         app.state.store = store
+        app.state.flights = flights
         app.state.poller = poller
 
         await poller.start()

@@ -168,8 +168,18 @@ export function DetailPanel() {
           </p>
         ) : (
           <>
+            {detail.origin && (
+              <div className="panel__row">
+                <span className="panel__label">Departed</span>
+                <span className="panel__value">
+                  {detail.origin.name}{' '}
+                  <span className="panel__unit">{detail.origin.icao}</span>
+                </span>
+              </div>
+            )}
             <p className="panel__note">
-              {detail.track.length} observed positions, spanning{' '}
+              {detail.track.length}{' '}
+              {detail.trackSource === 'provider' ? 'positions' : 'observed positions'}, spanning{' '}
               {formatAge(
                 (Date.parse(detail.track[detail.track.length - 1].timestamp) -
                   Date.parse(detail.track[0].timestamp)) /
@@ -177,10 +187,30 @@ export function DetailPanel() {
               ).replace(' ago', '')}
               .
             </p>
-            <p className="panel__caveat">
-              This is the path we have watched, not a filed flight plan. It begins
-              when the aircraft entered our polling window, not at takeoff.
-            </p>
+            {/*
+              Three different sentences for three different truths, because the
+              line means something different in each case and a caption that
+              covers all three would be true of none (D78).
+            */}
+            {detail.trackSource === 'observed' ? (
+              <p className="panel__caveat">
+                This is the path we have watched, not a filed flight plan. It begins
+                when the aircraft entered our polling window, not at takeoff.
+              </p>
+            ) : detail.origin ? (
+              <p className="panel__caveat">
+                The path flown since departure, from the network's own flight
+                history. The airport is the nearest one to where the track begins,{' '}
+                {detail.origin.distanceKm.toFixed(1)} km away — not a filed flight
+                plan.
+              </p>
+            ) : (
+              <p className="panel__caveat">
+                The path flown so far, from the network's own flight history. It
+                begins in flight rather than at an airport, so where this aircraft
+                departed from is unknown.
+              </p>
+            )}
           </>
         )}
       </section>

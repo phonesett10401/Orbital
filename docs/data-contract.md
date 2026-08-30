@@ -118,7 +118,19 @@ list response for a value the UI shows one at a time, on click.
 
 | Field | JSON type | Meaning |
 |---|---|---|
-| `track` | array of `TrackPoint` | Observed positions, **oldest first**. |
+| `track` | array of `TrackPoint` | Positions, **oldest first**, from `trackSource`. |
+| `trackSource` | `"provider"` \| `"observed"` | Where the track came from. See below. |
+| `origin` | `Airport` \| `null` | Where the flight appears to have departed from. `null` is common and meaningful. |
+
+### `Airport`
+
+| Field | JSON type | Meaning |
+|---|---|---|
+| `icao` | string | ICAO code, e.g. `YSSY`. |
+| `name` | string | Airport name as published. |
+| `lat` / `lon` | number | Degrees. |
+| `country` | string \| null | ISO 3166-1 alpha-2. |
+| `distanceKm` | number | How far the track's first point was from this airport. |
 
 ### `TrackPoint`
 
@@ -131,17 +143,34 @@ list response for a value the UI shows one at a time, on click.
 
 ### What "route" means in Orbital — read this
 
-> **`track` is the path we have observed, not the aircraft's filed flight plan.**
+> **`track` is a path actually flown, and never a filed flight plan.**
+> `trackSource` says whose observation it is.
 
-OpenSky state vectors contain no route, origin airport, or destination airport.
-Obtaining those would require separate `/flights/aircraft` calls, which cost
-additional quota we do not have and which frequently return nothing for an
-aircraft that is currently airborne.
+**`provider`** — the source's own flight history, which begins at take-off.
+For OpenSky this is `/tracks/all`, bought once per selection at 4 credits and
+cached (D78). `origin` is then usually present.
+
+**`observed`** — what our own polling saw, which **begins when the object
+entered our polling window**, not at takeoff. An aircraft first seen thirty
+seconds ago has a thirty-second route. This is the fallback whenever the
+provider has no track for the aircraft, cannot be reached, or does not offer
+flight history at all — the fixture provider does not.
+
+**`origin` is inferred, not reported.** It is the nearest airport to the first
+point of the track, within 8 km, and only when that point is below 1500 m.
+`distanceKm` is how near, so a client can distinguish "on the runway" from
+"already climbing". It is `null` whenever the track begins in mid-air, which is
+an ordinary answer for a flight the network picked up over an ocean — and a
+`null` here means *unknown*, never "no airport", exactly as it does for
+`heading` (D18).
+
+An earlier version of this document said obtaining a route "would require
+separate `/flights/aircraft` calls, which cost additional quota we do not
+have". That is still true of `/flights/aircraft` — **30 credits a call, and
+404 for two of the three aircraft it was tried on** — and it is why the origin
+is read off the track instead (D78).
 
 Consequences a reader must understand:
-
-- The route **begins when the object entered our polling window**, not at
-  takeoff. An aircraft first seen thirty seconds ago has a thirty-second route.
 - The route is **lost when the backend restarts.** History lives in memory.
 - Track history is a **bounded ring buffer**, so a long-lived object's route is
   truncated to the most recent N points.

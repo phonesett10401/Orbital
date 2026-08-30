@@ -45,9 +45,12 @@ import { createTerminatorControl } from './terminatorControl';
 import { createTerminatorLayer } from './terminatorLayer';
 import {
   LEADER_SOURCE,
+  ORIGIN_SOURCE,
   ROUTE_SOURCE,
   leaderFeature,
   leaderLayers,
+  originFeature,
+  originLayers,
   routeFeatures,
   routeLayers,
 } from './routeLayer';
@@ -233,6 +236,14 @@ export function PlanetView() {
           // the track behind it is rewritten once per poll (D72).
           map.addSource(LEADER_SOURCE, { type: 'geojson', data: leaderFeature(null, null) });
           for (const layer of leaderLayers()) map.addLayer(layer);
+
+          // The departure airport, seeded from the store for the same reason
+          // the route is: the subscription below only fires on change (D65).
+          map.addSource(ORIGIN_SOURCE, {
+            type: 'geojson',
+            data: originFeature(useOrbitalStore.getState().selectedDetail?.origin),
+          });
+          for (const layer of originLayers()) map.addLayer(layer);
 
           map.addSource(AIRCRAFT_SOURCE, {
             type: 'geojson',

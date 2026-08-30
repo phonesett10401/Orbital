@@ -16,11 +16,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from app.api.schemas import ObjectListResponse
-from app.api.deps import get_poller, get_settings_dep, get_store
+from app.api.deps import get_flights, get_poller, get_settings_dep, get_store
 from app.api.etag import compute_etag, if_none_match_matches
 from app.config import Settings
 from app.ingestion.poller import Poller
 from app.ingestion.store import ObjectStore
+from app.ingestion.flights import FlightHistory
 from app.models import BBox, ObjectType, TrackedObject, TrackedObjectDetail
 from app.thinning import thin
 
@@ -166,9 +167,10 @@ def search_aircraft(
     summary="One aircraft with its observed track",
     responses={404: {"description": "Not currently tracked"}},
 )
-def get_aircraft(
+async def get_aircraft(
     object_id: str,
     store: ObjectStore = Depends(get_store),
+    flights: FlightHistory = Depends(get_flights),
 ) -> TrackedObjectDetail:
     """Return one aircraft in full, including `meta` and its observed route.
 
@@ -182,4 +184,8 @@ def get_aircraft(
         raise HTTPException(status_code=404, detail=f"aircraft {object_id!r} is not tracked")
     if detail.type is not ObjectType.AIRCRAFT:  # pragma: no cover - type guard
         raise HTTPException(status_code=404, detail="not an aircraft")
-    return detail
+    # The provider's own flight track, when it has one and when it is worth
+    # buying: this is the only endpoint that spends a credit on a user's click
+    # rather than on a schedule, and it falls back to what we observed
+    # ourselves rather than failing (D78).
+    return await flights.enrich(detail)

@@ -1,0 +1,232 @@
+"""Tests for the departure airport and the provider's flight track.
+
+Two things are worth testing here and they are not the parsing.
+
+**The inference must refuse to guess.** The origin is the nearest airport to
+the first point of a track, and a nearest-match will always return something if
+you let it. The tests below check that it returns *nothing* for a flight
+picked up over the ocean, for one cruising above an airfield, and for a track
+that starts anywhere no airport is -- because naming an airport there is
+exactly the confident wrong answer the contract forbids for a null heading
+(D18, D78).
+
+**The cache must not spend credits.** `/tracks/all` costs 4 credits a call, the
+client polls the selected aircraft while it is selected, and an uncached fetch
+would empty a day's allowance in under an hour. The counting tests are the
+point of this file, not decoration.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from app.airports import ORIGIN_MAX_KM, haversine_km, nearest_airport, origin_of
+from app.ingestion.flights import FlightHistory
+from app.models import ObjectType, TrackedObjectDetail, TrackPoint, TrackSource
+from app.providers.base import Provider, ProviderRateLimited
+
+NOW = datetime(2026, 8, 30, 12, 0, tzinfo=timezone.utc)
+
+# Sydney Kingsford Smith, and the point RXA6681's real track began at: 800 m
+# from the airport, which is what a track that starts on a runway looks like.
+SYDNEY = (-33.9461, 151.1772)
+SYDNEY_TRACK_START = (-33.9533, 151.1776)
+
+
+def point(lat: float, lon: float, altitude: float | None = 0.0, offset: int = 0) -> TrackPoint:
+    return TrackPoint(
+        lat=lat, lon=lon, altitude=altitude, timestamp=NOW + timedelta(seconds=offset)
+    )
+
+
+class StubProvider(Provider):
+    """A provider that counts how often its track is bought."""
+
+    name = "stub"
+    object_type = ObjectType.AIRCRAFT
+
+    def __init__(self, track: tuple[TrackPoint, ...] | None, *, error: Exception | None = None):
+        self.track = track
+        self.error = error
+        self.calls = 0
+
+    async def fetch(self, bbox=None):  # pragma: no cover - not exercised here
+        return []
+
+    async def fetch_track(self, object_id: str):
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.track
+
+
+def detail(object_id: str = "abc123") -> TrackedObjectDetail:
+    return TrackedObjectDetail(
+        id=object_id,
+        lat=1.0,
+        lon=2.0,
+        altitude=10000.0,
+        velocity=200.0,
+        heading=90.0,
+        label="TEST123",
+        last_seen=NOW,
+        type=ObjectType.AIRCRAFT,
+        track=(point(1.0, 2.0), point(1.1, 2.1)),
+    )
+
+
+class TestHaversine:
+    def test_measures_a_known_distance(self) -> None:
+        # Sydney to Melbourne is about 705 km, which is the kind of number that
+        # catches a radians/degrees mistake instantly.
+        assert haversine_km(-33.9461, 151.1772, -37.6690, 144.8410) == pytest.approx(705, abs=15)
+
+    def test_is_zero_for_a_point_against_itself(self) -> None:
+        assert haversine_km(13.75, 100.5, 13.75, 100.5) == 0.0
+
+
+class TestNearestAirport:
+    def test_finds_the_airport_a_real_track_began_on(self) -> None:
+        found = nearest_airport(*SYDNEY_TRACK_START)
+        assert found is not None
+        assert found.icao == "YSSY"
+        assert found.name.startswith("Sydney")
+        assert found.distance_km < 1.5
+
+    def test_finds_nothing_in_the_middle_of_an_ocean(self) -> None:
+        # The South Pacific, thousands of kilometres from anywhere. A
+        # nearest-match with no limit would still answer.
+        assert nearest_airport(-40.0, -140.0) is None
+
+    def test_respects_the_distance_limit(self) -> None:
+        # Two degrees north of Sydney is 222 km: an airport exists, and it is
+        # not this flight's origin.
+        assert nearest_airport(SYDNEY[0] + 2, SYDNEY[1]) is None
+        assert nearest_airport(SYDNEY[0] + 2, SYDNEY[1], max_km=400) is not None
+
+    def test_searches_across_a_cell_boundary(self) -> None:
+        # The index buckets by whole degrees, so an airport just over a
+        # boundary from the query is the case a single-bucket lookup misses -
+        # silently, and only for some airports.
+        just_south = nearest_airport(-34.0001, 151.1772)
+        assert just_south is not None and just_south.icao == "YSSY"
+
+    def test_carries_how_far_away_it_was(self) -> None:
+        # The client says "0.8 km away" rather than asserting a departure, so
+        # the distance is part of the answer rather than an implementation
+        # detail.
+        found = nearest_airport(*SYDNEY_TRACK_START)
+        assert found is not None
+        assert 0 < found.distance_km <= ORIGIN_MAX_KM
+
+
+class TestOriginOf:
+    def test_reads_the_origin_off_the_first_waypoint(self) -> None:
+        track = (point(*SYDNEY_TRACK_START, altitude=-92.0), point(-33.8, 151.0, 1200.0, 60))
+        origin = origin_of(track)
+        assert origin is not None and origin.icao == "YSSY"
+
+    def test_uses_the_first_point_and_not_the_last(self) -> None:
+        # A flight that lands somewhere is not a flight that departed there.
+        track = (point(-40.0, -140.0, 10000.0), point(*SYDNEY_TRACK_START, altitude=0.0, offset=60))
+        assert origin_of(track) is None
+
+    def test_refuses_a_flight_merely_passing_over_an_airport(self) -> None:
+        # Cruising above Sydney at 11 km is not departing from it, and without
+        # the altitude test every overflight of a city claims its airport.
+        assert origin_of((point(*SYDNEY_TRACK_START, altitude=11000.0),)) is None
+
+    def test_accepts_an_unknown_altitude(self) -> None:
+        # Altitude is nullable in the contract (D18). A track that begins on a
+        # runway with no altitude reported is still a departure.
+        assert origin_of((point(*SYDNEY_TRACK_START, altitude=None),)) is not None
+
+    def test_says_nothing_about_an_empty_track(self) -> None:
+        assert origin_of(()) is None
+
+
+class TestFlightHistory:
+    @pytest.mark.anyio
+    async def test_replaces_the_observed_track_and_names_the_origin(self) -> None:
+        provider = StubProvider((point(*SYDNEY_TRACK_START), point(-33.8, 151.0, 1200.0, 60)))
+        enriched = await FlightHistory(provider).enrich(detail())
+        assert enriched.track_source is TrackSource.PROVIDER
+        assert enriched.origin is not None and enriched.origin.icao == "YSSY"
+        assert len(enriched.track) == 2
+
+    @pytest.mark.anyio
+    async def test_keeps_what_we_observed_when_the_provider_has_nothing(self) -> None:
+        # The common case for an aircraft that has just appeared, and it must
+        # not cost the panel its line.
+        original = detail()
+        enriched = await FlightHistory(StubProvider(None)).enrich(original)
+        assert enriched.track == original.track
+        assert enriched.track_source is TrackSource.OBSERVED
+        assert enriched.origin is None
+
+    @pytest.mark.anyio
+    async def test_a_provider_failure_does_not_fail_the_request(self) -> None:
+        # Everything else in the panel is already in hand; losing it because a
+        # secondary enrichment was rate-limited would be the worse answer.
+        history = FlightHistory(StubProvider(None, error=ProviderRateLimited("no", 30.0)))
+        enriched = await history.enrich(detail())
+        assert enriched.track_source is TrackSource.OBSERVED
+
+    @pytest.mark.anyio
+    async def test_buys_the_track_once_and_serves_it_from_cache(self) -> None:
+        # 4 credits a call, and the client re-polls the selected aircraft every
+        # few seconds while it is selected.
+        provider = StubProvider((point(*SYDNEY_TRACK_START),))
+        history = FlightHistory(provider)
+        for _ in range(10):
+            await history.enrich(detail())
+        assert provider.calls == 1
+
+    @pytest.mark.anyio
+    async def test_caches_the_absence_of_a_track_too(self) -> None:
+        # The easy one to leave out: a 404 is the common answer, and an
+        # uncached negative pays repeatedly to be told nothing.
+        provider = StubProvider(None)
+        history = FlightHistory(provider)
+        for _ in range(10):
+            await history.enrich(detail())
+        assert provider.calls == 1
+
+    @pytest.mark.anyio
+    async def test_caches_a_failure_rather_than_retrying_into_it(self) -> None:
+        provider = StubProvider(None, error=ProviderRateLimited("no", 30.0))
+        history = FlightHistory(provider)
+        for _ in range(5):
+            await history.enrich(detail())
+        assert provider.calls == 1
+
+    @pytest.mark.anyio
+    async def test_buys_once_for_a_burst_of_simultaneous_requests(self) -> None:
+        # Several detail requests can arrive while the first is still in
+        # flight; without the lock each buys its own copy of the same answer.
+        provider = StubProvider((point(*SYDNEY_TRACK_START),))
+        history = FlightHistory(provider)
+        await asyncio.gather(*(history.enrich(detail()) for _ in range(8)))
+        assert provider.calls == 1
+
+    @pytest.mark.anyio
+    async def test_refetches_once_the_entry_is_stale(self) -> None:
+        # A track grows, so the cache is a rate limit rather than a permanent
+        # answer.
+        provider = StubProvider((point(*SYDNEY_TRACK_START),))
+        history = FlightHistory(provider, ttl_seconds=0.0)
+        await history.enrich(detail())
+        await history.enrich(detail())
+        assert provider.calls == 2
+
+    @pytest.mark.anyio
+    async def test_caches_per_aircraft(self) -> None:
+        provider = StubProvider((point(*SYDNEY_TRACK_START),))
+        history = FlightHistory(provider)
+        await history.enrich(detail("aaa111"))
+        await history.enrich(detail("bbb222"))
+        await history.enrich(detail("aaa111"))
+        assert provider.calls == 2

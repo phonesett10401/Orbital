@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from app.models import BBox, ObjectType, TrackedObjectRecord
+from app.models import BBox, ObjectType, TrackedObjectRecord, TrackPoint
 
 
 class ProviderError(Exception):
@@ -54,6 +54,22 @@ class Provider(ABC):
     name: str
     #: Which layer this provider populates.
     object_type: ObjectType
+
+    async def fetch_track(self, object_id: str) -> tuple[TrackPoint, ...] | None:
+        """The path of the object's current flight, oldest first, or None.
+
+        **Optional, and None is the honest default.** Our own observed track
+        begins when we started watching, which for an aircraft selected
+        mid-flight is an arbitrary point in the sky; a provider that keeps
+        flight history can do better and begin at the runway. A provider that
+        cannot simply says so, and the caller keeps what it observed itself
+        (D78).
+
+        This is a per-object call made on selection rather than on a poll, so
+        implementations must treat it as something a user triggers: cache it,
+        and never let it run on a schedule.
+        """
+        return None
 
     @abstractmethod
     async def fetch(self, bbox: BBox | None = None) -> list[TrackedObjectRecord]:

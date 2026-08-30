@@ -94,12 +94,13 @@ cd frontend && npm test
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
 | `planet.test.ts` | 67 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
-| `route.test.ts` (planet) | 19 | **Great-circle densification, antimeridian unwrapping, the casing** |
+| `route.test.ts` (planet) | 24 | **Great-circle densification, antimeridian unwrapping, the casing** |
 | `status.test.ts` | 13 | **Failure classification, the stall notice, one-answer selection, querying before the layers exist** |
 | `terminator.test.ts` | 33 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
+| `test_flights.py` | 21 | **The origin inference and its refusals, and the cache that stops it spending credits** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **814** | 325 backend, 489 frontend |
+| **Total** | **840** | 346 backend, 494 frontend |
 
 ### What the automated suites do not cover
 
@@ -2192,3 +2193,37 @@ watching it fail (D63).
 #26 were all things the fixture could not express, in a style that has 111
 layers where the fixture has six. The fixture is now closer to the shape of the
 thing, and the validator test (§19.26) covers what a fixture cannot.
+
+### 19.28 The route now starts at the runway
+
+Phone, on live traffic: the routes began where our polling began, not at the
+origin airport. Reasoning in D78. **26 tests** - 21 backend, 5 frontend.
+
+**The measurement that chose the design**, against the live account:
+
+| | Cost | Result |
+|---|---|---|
+| `/flights/aircraft` | 30 credits | 404 for two of three aircraft |
+| `/tracks/all` | 4 credits | full path from the runway, three of three |
+
+**Verified end to end against live OpenSky:** ten aircraft selected, **ten
+provider tracks, nine origins identified** at 0.3-3.5 km - Brisbane, Boeing
+Field, Houston, Buenos Aires, Santa Barbara, Cape Town, Al Maktoum, Athens,
+Zurich. The tenth began in mid-air and correctly reported no origin.
+
+**What the tests guard**, which is not the parsing:
+
+| Checked | Why |
+|---|---|
+| No origin over an ocean, or 222 km away | A nearest-match answers *something* unless stopped |
+| No origin for a flight cruising over an airfield | Otherwise every overflight claims the airport below it |
+| The **first** waypoint, not the last | A flight that lands somewhere did not depart there |
+| An unknown altitude still counts | Nullable in the contract (D18) |
+| Airports across a one-degree cell boundary | The bucketed index's silent failure mode |
+| One purchase per aircraft, per two minutes | 4 credits a call, re-polled while selected |
+| **Negatives cached as well** | A 404 is the common answer; paying repeatedly to be told nothing is the expensive mistake |
+| Eight simultaneous requests buy one track | The lock, without which a burst pays eight times |
+| A rate-limited provider does not fail the panel | The rest of the detail is already in hand |
+
+**Not verified: how it looks** (19.19). The origin ring and its ICAO label are
+new, and the panel now has three route captions where it had one.
