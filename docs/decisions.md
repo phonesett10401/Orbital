@@ -3953,3 +3953,99 @@ stopping and restarting.
 This is the same distinction the leader already makes between the track and the
 aircraft's current position (D72), and the same one the panel makes in words.
 A line is a claim; these parts of it are weaker claims, and they now look it.
+
+---
+
+## D83 — Two feeds, and the free one sets the pace
+
+**Decision:** a `union` provider polls **adsb.lol** on every poll and **OpenSky**
+once every five minutes, merging both on ICAO24. It runs at a new `union` quota
+preset that polls five times faster than the old one while spending a third of
+the credits.
+
+Phone asked why aircraft over Myanmar, Mongolia and China were missing, and
+then asked whether the free alternatives were better than OpenSky. Measured
+before deciding anything.
+
+### Are they better? No. Are they useful? Yes
+
+| | OpenSky | adsb.lol | adsb.fi | airplanes.live |
+|---|---|---|---|---|
+| access | OAuth2 + registration | none | none | **403, must email** |
+| worldwide | 11,651 | 10,009 | — | — |
+| W Europe, 250 nm | 1,001 | 996 | 1,041 | — |
+| E United States | 592 | 606 | 639 | — |
+| **Myanmar** | **22** | 4 | 2 | — |
+| **inland China** | 0 | **33** | **36** | — |
+| Mongolia | 0 | 0 | 0 | — |
+
+**airplanes.live is closed** — it answers 403 and asks you to email for access.
+**adsb.fi cannot answer a global query**: it rejects radii over ~250 nm and
+rate-limits after a handful of requests, so covering the world would take
+hundreds of calls.
+
+**adsb.lol is not better than OpenSky. It is comparable, with different holes.**
+And none of them has KBZ839, the flight that started this — that is an
+MLAT-only track, and Flightradar has the receiver density for it while no free
+network does. Switching would not have fixed the reported problem.
+
+### So why do it anyway
+
+**Because the holes do not overlap.** Measured on one global fetch of each:
+
+```
+adsb.lol            10,260        only adsb.lol      1,585
+OpenSky             10,525        only OpenSky       1,850
+UNION               12,141        seen by both       8,675
+```
+
+**+15% over either feed alone**, and each source contributes about 1,700
+aircraft the other cannot see. Myanmar goes from 4 to 20; inland China from 0
+to 45; Mongolia from 0 to 5.
+
+**Because the meter is what shaped the design.** The whole polling ladder
+(D21, D27) exists because OpenSky costs 4,000 credits a day. adsb.lol costs
+nothing, so the union polls it on *every* poll and OpenSky **only on the global
+poll, once per supplement interval**. A viewport poll never spends a credit —
+it is asked far more often and exists for freshness, which the free feed
+supplies.
+
+The result is a cadence the old design could not afford:
+
+| | old (`authenticated`) | new (`union`) |
+|---|---|---|
+| global refresh | 300 s | **60 s** |
+| viewport refresh | 90 s | **30 s** |
+| projected credits/day | 3,072 | **1,152** |
+
+Five times faster for a third of the cost, because the fast half is free. The
+startup budget guard understands this — `projected_daily_credits` returns the
+supplement's cost rather than the poll rate's when the provider is `union`, so
+D21's executable budget check stays honest instead of being bypassed.
+
+**Because the free feed carries more.** Registration, aircraft type, IAS, TAS,
+Mach, wind and outside air temperature ride along on every request. 9,979 of
+the 12,141 union records carry a registration and type, so the panel can say
+"Gulfstream G650, N889LV" where it used to say a hex address. OpenSky never had
+either field.
+
+### Details that took a measurement to get right
+
+**One request, not four.** The first version swept four 6,000 nm circles
+concurrently and earned an **HTTP 420** — adsb.lol's rate limiter — which then
+throttled everything for a minute. A single circle from 60N 10E returns
+**10,013 aircraft in 1.9 seconds** against 10,009 for the union of four. One
+request gets everything, and does not annoy a service that costs nothing.
+
+**Feet and knots.** It is a `readsb` feed: altitude in feet, ground speed in
+knots, against a contract in metres and m/s. A missed conversion would put
+every aircraft at 3.3 times its altitude and look entirely plausible doing it.
+
+**"ground" is a string where a number belongs**, and the first version let it
+fall through to the geometric altitude — putting a parked aircraft at 11,361 m.
+A test caught it.
+
+**They fail independently, which is the point.** OpenSky rate-limited leaves
+adsb.lol drawing the map; adsb.lol throttled leaves OpenSky. Only both failing
+raises, so the store keeps its last good snapshot (D10) rather than being wiped
+by a successful-looking empty poll.

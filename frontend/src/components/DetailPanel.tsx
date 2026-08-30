@@ -113,6 +113,29 @@ export function DetailPanel() {
             </dd>
           </div>
         )}
+        {/*
+          Registration and type come from adsb.lol, which carries them on
+          nearly every aircraft; OpenSky never had either (D83). Rendered only
+          when present, so an aircraft seen by one feed and not the other
+          simply has fewer rows rather than rows saying "Unknown".
+        */}
+        {detail.meta.aircraftType && (
+          <div>
+            <dt>Aircraft</dt>
+            <dd>
+              {detail.meta.aircraftDescription || detail.meta.aircraftType}{' '}
+              {detail.meta.aircraftDescription && (
+                <span className="panel__unit">{detail.meta.aircraftType}</span>
+              )}
+            </dd>
+          </div>
+        )}
+        {detail.meta.registration && (
+          <div>
+            <dt>Registration</dt>
+            <dd className="mono">{detail.meta.registration}</dd>
+          </div>
+        )}
         <div>
           <dt>Altitude</dt>
           <dd>

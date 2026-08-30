@@ -4,19 +4,24 @@ This is the whole of Orbital's pluggability story. Switching data sources is an
 environment variable, not a code change:
 
     ORBITAL_PROVIDER=fixture   # offline development, default
-    ORBITAL_PROVIDER=opensky   # live data
+    ORBITAL_PROVIDER=opensky   # live data, metered
+    ORBITAL_PROVIDER=adsblol   # live data, free
+    ORBITAL_PROVIDER=union     # both, merged (D83)
 
-Adding adsb.fi or airplanes.live later means writing one module and adding one
-entry to ``_BUILDERS``. Nothing in ``app.api`` or the frontend changes.
+That last one is why the interface was worth having. Adding a second live
+source meant writing one module and one three-line factory; nothing in
+``app.api``, the store, the poller or the frontend knows there are now two.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, Mapping
 
+from app.providers.adsblol import AdsbLolProvider
 from app.providers.base import Provider
 from app.providers.fixture import FixtureProvider
 from app.providers.opensky import OpenSkyProvider
+from app.providers.union import UnionProvider
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
     from app.config import Settings
@@ -36,12 +41,31 @@ def _build_opensky(settings: "Settings") -> Provider:
     )
 
 
+def _build_adsblol(settings: "Settings") -> Provider:
+    return AdsbLolProvider(
+        base_url=settings.adsblol_base_url,
+        timeout_seconds=settings.adsblol_timeout_seconds,
+        user_agent=settings.adsblol_user_agent,
+    )
+
+
+def _build_union(settings: "Settings") -> Provider:
+    """The free feed every poll, the metered one occasionally (D83)."""
+    return UnionProvider(
+        primary=_build_adsblol(settings),
+        supplement=_build_opensky(settings),
+        supplement_interval_seconds=settings.union_supplement_interval_seconds,
+    )
+
+
 #: Provider name -> factory taking settings.
 #: Factories are lazy so that importing the registry never opens a socket or
 #: reads a fixture from disk; nothing is constructed until it is selected.
 _BUILDERS: Mapping[str, Callable[["Settings"], Provider]] = {
     "fixture": _build_fixture,
     "opensky": _build_opensky,
+    "adsblol": _build_adsblol,
+    "union": _build_union,
 }
 
 

@@ -99,8 +99,10 @@ cd frontend && npm test
 | `terminator.test.ts` | 33 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_flights.py` | 46 | **The origin inference and its refusals, and the cache that stops it spending credits** |
+| `test_adsblol.py` | 19 | **Feet and knots into the contract's units, "ground", one-request sweeps, HTTP 420** |
+| `test_union.py` | 17 | **Both feeds present, the metered one polled once an interval and never for a viewport, independent failure** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **871** | 371 backend, 500 frontend |
+| **Total** | **905** | 405 backend, 500 frontend |
 
 ### What the automated suites do not cover
 
@@ -2367,3 +2369,55 @@ drawn as a gap however brief it looks.
 **Both sets of fixtures had to be rewritten**: they flew at 927 m/s and
 1,855 m/s respectively, and the code correctly called them impossible. Writing
 test data that cannot exist is its own small lesson about fixtures (19.27).
+
+### 19.33 A second feed, and what it is worth
+
+Phone asked whether adsb.lol, adsb.fi or airplanes.live beat OpenSky.
+Reasoning in D83. **36 tests** - 19 for the provider, 17 for the union.
+
+**The survey, measured rather than read:**
+
+| | OpenSky | adsb.lol | adsb.fi | airplanes.live |
+|---|---|---|---|---|
+| access | OAuth2 | none | none | **403** |
+| worldwide | 11,651 | 10,009 | cannot answer | - |
+| Myanmar | **22** | 4 | 2 | - |
+| inland China | 0 | **33** | **36** | - |
+
+airplanes.live requires an email exchange; adsb.fi rejects radii over 250 nm
+and rate-limits, so it cannot answer a global query at all.
+
+**The union, measured on one global fetch of each:**
+
+```
+adsb.lol   10,260     only adsb.lol   1,585
+OpenSky    10,525     only OpenSky    1,850
+UNION      12,141     seen by both    8,675
+```
+
+**+15% over either alone.** Myanmar 4 to 20, inland China 0 to 45, Mongolia 0
+to 5 - all confirmed through our own API after switching.
+
+**And the cadence changes**, because only half the union is metered:
+
+| | old | new |
+|---|---|---|
+| global refresh | 300 s | **60 s** |
+| viewport refresh | 90 s | **30 s** |
+| projected credits/day | 3,072 | **1,152** |
+
+**Two defects found while building it**, both by tests rather than by eye: an
+aircraft reporting `alt_baro: "ground"` fell through to its geometric altitude
+and was placed at **11,361 m**; and a four-circle concurrent sweep earned an
+**HTTP 420** from the rate limiter, where one circle returns the same 10,013
+aircraft in 1.9 seconds.
+
+**What the tests guard**: feet and knots converted against a real flight level
+rather than a round number; `"ground"` as zero; a missing altitude as unknown
+rather than zero; `seen_pos` as an age rather than a timestamp, so stale
+aircraft still fade (D71); one request for the whole world; a viewport becoming
+the circle that *contains* it, including across the antimeridian; HTTP 420 and
+429 recognised as rate limiting rather than retried into a ban; both feeds
+present in the merge; the metered feed polled once an interval, never for a
+viewport, and always asked about the whole world; cached records keeping the
+age they arrived with; and either feed failing alone leaving the map drawn.

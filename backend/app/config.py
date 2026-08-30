@@ -52,6 +52,9 @@ class PollJob(BaseModel):
         return daily_credits(self.interval_seconds, self.cost_per_call)
 
 
+#: What one unbounded /states/all call costs OpenSky.
+GLOBAL_CALL_CREDITS = 4
+
 #: Named polling presets, one per quota level. See D21 for the arithmetic.
 #:
 #: Tier 2's bbox is None here because it is supplied at runtime from the
@@ -70,6 +73,16 @@ PRESETS: dict[str, tuple[PollJob, ...]] = {
     "authenticated": (
         PollJob(name="global", bbox=None, interval_seconds=300.0, tier=1),
         PollJob(name="viewport", bbox=None, interval_seconds=90.0, tier=2),
+    ),
+    # For the union provider, where the cadence is set by the free feed and the
+    # metered one answers once every supplement interval regardless (D83).
+    # A minute between global refreshes and half a minute between viewport
+    # ones is roughly five times what the credit ladder allowed, and costs
+    # 1,152 credits a day - 29% of the allowance, less than the preset it
+    # replaces.
+    "union": (
+        PollJob(name="global", bbox=None, interval_seconds=60.0, tier=1),
+        PollJob(name="viewport", bbox=None, interval_seconds=30.0, tier=2),
     ),
     # 8000 credits/day. 1920 + 2880 = 4800/day, 60% of budget.
     "contributor": (
@@ -113,6 +126,24 @@ class Settings(BaseSettings):
         "protocol/openid-connect/token"
     )
     opensky_timeout_seconds: float = Field(default=20.0, gt=0)
+
+    #: adsb.lol needs no credentials at all, which is most of its appeal (D83).
+    adsblol_base_url: str = "https://api.adsb.lol/v2"
+    adsblol_timeout_seconds: float = Field(default=30.0, gt=0)
+    adsblol_user_agent: str = Field(
+        default="Orbital/0.1 (CSC480 student project)",
+        description="Sent on every request; a free service deserves to know who is calling.",
+    )
+
+    union_supplement_interval_seconds: float = Field(
+        default=300.0,
+        gt=0,
+        description=(
+            "How often the metered feed is actually called when running 'union'. "
+            "The free feed answers every poll; this one answers at most this often, "
+            "so the poll cadence is no longer set by the credit ladder (D83)."
+        ),
+    )
 
     # ---- quota -------------------------------------------------------------
     quota_preset: str = Field(
@@ -253,6 +284,13 @@ class Settings(BaseSettings):
         Worst case because tier 2 only runs while a client is connected and
         zoomed in far enough; real consumption is lower.
         """
+        if self.provider == "union":
+            # The union polls the free feed on every job and the metered one
+            # once per supplement interval, on the global poll only (D83). Its
+            # cost is therefore fixed by that interval rather than by how fast
+            # the poller runs, which is the whole point of the arrangement.
+            return daily_credits(self.union_supplement_interval_seconds, GLOBAL_CALL_CREDITS)
+
         total = 0.0
         for job in self.jobs:
             if job.tier == 2:
