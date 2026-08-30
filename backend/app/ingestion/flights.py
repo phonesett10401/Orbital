@@ -32,6 +32,7 @@ import time
 from dataclasses import dataclass
 
 from app.airports import origin_of
+from app.geo import haversine_metres, initial_bearing
 from app.models import Airport, TrackedObjectDetail, TrackPoint, TrackSource
 from app.providers.base import Provider, ProviderError
 
@@ -46,6 +47,29 @@ logger = logging.getLogger(__name__)
 FLIGHT_TTL_SECONDS = 120.0
 
 
+#: The widest gap between two waypoints that still gives an instantaneous course.
+#:
+#: The provider's track samples every six seconds, so the bearing between two
+#: consecutive waypoints *is* the direction the aircraft is pointing. Our own
+#: polling is 90 to 300 seconds apart, where the same arithmetic measures the
+#: chord of whatever the aircraft did in between - which is why this correction
+#: lives here and not in the store (D80).
+COURSE_MAX_GAP_SECONDS = 30.0
+
+#: How far apart those two waypoints must be, so the bearing is not position noise.
+COURSE_MIN_MOVEMENT_M = 200.0
+
+#: How far the reported heading must be out before the track overrules it.
+#:
+#: Measured across 3,641 aircraft over western Europe: the median disagreement
+#: between a reported heading and the course actually flown is **0.3 degrees**,
+#: so the feed is normally excellent and a correction should be rare. 5.6%
+#: disagree by more than 30 degrees over a two-minute gap, but most of those
+#: are aircraft that turned rather than feeds that lied - which is exactly the
+#: ambiguity a six-second gap removes (D80).
+COURSE_MAX_DISAGREEMENT_DEG = 30.0
+
+
 @dataclass(frozen=True)
 class Flight:
     """What the provider knows about one aircraft's current flight."""
@@ -53,6 +77,26 @@ class Flight:
     track: tuple[TrackPoint, ...]
     origin: Airport | None
     fetched_at: float
+
+
+def course_from_track(track: tuple[TrackPoint, ...]) -> float | None:
+    """The direction of travel at the end of a track, or None.
+
+    Walks backwards for the most recent pair of waypoints close enough in time
+    to be an instantaneous course and far enough apart in space to be a
+    measurement rather than noise. Backwards because the *last* gap is often
+    the long one: the track ends at the provider's most recent sample, which
+    may be minutes old even when the samples before it are seconds apart.
+    """
+    for index in range(len(track) - 1, 0, -1):
+        later, earlier = track[index], track[index - 1]
+        gap = (later.timestamp - earlier.timestamp).total_seconds()
+        if gap <= 0 or gap > COURSE_MAX_GAP_SECONDS:
+            continue
+        if haversine_metres(earlier.lat, earlier.lon, later.lat, later.lon) < COURSE_MIN_MOVEMENT_M:
+            continue
+        return initial_bearing(earlier.lat, earlier.lon, later.lat, later.lon)
+    return None
 
 
 class FlightHistory:
@@ -78,13 +122,33 @@ class FlightHistory:
         flight = await self._flight(detail.id)
         if flight is None or not flight.track:
             return detail
-        return detail.model_copy(
-            update={
-                "track": flight.track,
-                "track_source": TrackSource.PROVIDER,
-                "origin": flight.origin,
-            }
-        )
+
+        update: dict[str, object] = {
+            "track": flight.track,
+            "track_source": TrackSource.PROVIDER,
+            "origin": flight.origin,
+        }
+
+        # A heading that contradicts the aircraft's own track loses to it. The
+        # 777 that started this reported 12 m/s on a heading of 7 degrees while
+        # crossing Myanmar eastbound at cruise, and the marker pointed north
+        # while its own line ran east (D80).
+        course = course_from_track(flight.track)
+        if (
+            course is not None
+            and detail.heading is not None
+            and abs((course - detail.heading + 540.0) % 360.0 - 180.0)
+            > COURSE_MAX_DISAGREEMENT_DEG
+        ):
+            # Said out loud rather than corrected silently: every other number
+            # in the panel is the source's own, and one that is not should be
+            # identifiable.
+            meta = dict(detail.meta)
+            meta["headingSource"] = "derived"
+            update["heading"] = course
+            update["meta"] = meta
+
+        return detail.model_copy(update=update)
 
     async def _flight(self, object_id: str) -> Flight | None:
         cached = self._cached(object_id)

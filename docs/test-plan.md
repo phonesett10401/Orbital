@@ -98,9 +98,9 @@ cd frontend && npm test
 | `status.test.ts` | 13 | **Failure classification, the stall notice, one-answer selection, querying before the layers exist** |
 | `terminator.test.ts` | 33 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
-| `test_flights.py` | 21 | **The origin inference and its refusals, and the cache that stops it spending credits** |
+| `test_flights.py` | 30 | **The origin inference and its refusals, and the cache that stops it spending credits** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **840** | 346 backend, 494 frontend |
+| **Total** | **849** | 355 backend, 494 frontend |
 
 ### What the automated suites do not cover
 
@@ -2262,3 +2262,43 @@ Airport" - the row was written with class names that do not exist rather than
 the `dl` structure every other field uses, so nothing separated the label from
 the value. A day-one mistake in code written an hour earlier, and exactly the
 kind that only shows up on screen.
+
+### 19.30 Letting the track correct the heading
+
+Asked for after the Flightradar comparison (19.29). Reasoning in D80. **9 new
+tests**, in `test_flights.py`.
+
+**The measurement that rejected the first design.** A store-wide correction was
+built first - every object, from consecutive polls - then measured against
+3,641 live aircraft, two snapshots 120 s apart:
+
+| disagreement | share |
+|---|---|
+| median | **0.3 deg** |
+| over 30 deg | 5.6% |
+| over 90 deg | 1.3% |
+
+The 5.6% is mostly aircraft that *turned*: the worst offenders reported 8 to
+60 m/s, and a light aircraft can reverse in two minutes while the chord between
+two positions says nothing about where it points now. The design was removed.
+
+**The track's own spacing is what makes it safe:** median **6 seconds** between
+waypoints, measured on a real track. The same arithmetic that is unsafe at
+120 s is sound at 6.
+
+**Verified live** on the population most likely to be broken - cruising
+aircraft reporting impossible ground speeds. Three of six corrected:
+
+| | reported | shown |
+|---|---|---|
+| DXT9686 | 0.0 deg | 195.6 deg |
+| HVN63 | 70.8 deg | 326.9 deg |
+| CBJ669 | 97.1 deg | 281.4 deg |
+
+The other three were left alone, which is the conservative behaviour working.
+
+**What the tests pin**: the course is read off the last *short* gap and skips a
+long final one; a pair too close together to measure yields nothing; an
+agreeing heading and a disagreement inside the threshold are both left exactly
+as reported; a null heading stays null; and a track of one point changes
+nothing.

@@ -3759,3 +3759,82 @@ Flightradar does not have this problem because it fuses many receivers with
 MLAT and smooths the result. We have one feed and show what it says, which is
 the same posture the contract takes everywhere else (D18): report what the
 source reported, and say where it came from.
+
+---
+
+## D80 — A heading that contradicts its own track loses to it
+
+**Decision:** when the selected aircraft's provider track shows a course more
+than 30 degrees away from the reported heading, the track wins, and the panel
+says the value was derived.
+
+Phone asked for this after the Flightradar comparison: a 777 crossing Myanmar
+eastbound at cruise was reported at 12 m/s on a heading of 7 degrees, so our
+marker pointed north while its own line ran east.
+
+### The first attempt was wrong, and the measurement said so
+
+The obvious place is the store: it already holds the previous position of
+everything seen twice, so every object could be corrected, not just the
+selected one. That was built, and then measured against 3,641 live aircraft
+over western Europe with two snapshots 120 seconds apart:
+
+| disagreement between reported heading and course flown | share |
+|---|---|
+| median | **0.3°** |
+| more than 30° | 5.6% |
+| more than 90° | 1.3% |
+
+The median says the feed is normally excellent. **The 5.6% is the problem: most
+of it is aircraft that turned, not feeds that lied.** The worst offenders were
+reporting 8 to 60 m/s — light aircraft and helicopters, which over two minutes
+can turn through 180 degrees while the chord between two positions says nothing
+about where they are pointing now. A store-wide correction would have
+"fixed" hundreds of aircraft that were already right.
+
+So it was taken back out.
+
+### The track removes the ambiguity
+
+The provider's own track samples every **six seconds** (median, measured). Over
+six seconds nothing turns far enough for the chord to lie, so the bearing
+between two consecutive waypoints *is* the instantaneous course — the same
+arithmetic that is unsafe at 120 seconds is sound at six.
+
+The correction therefore lives with the flight history, and applies to the
+selected aircraft only. That is a real limitation, stated plainly: an aircraft
+you have not clicked still shows whatever the feed said. It is also where the
+error is most visible — the 3D model's nose, and a panel that reads out a
+compass direction.
+
+The reader walks *backwards* through the track for the most recent pair with a
+gap under 30 seconds and at least 200 m between them. Backwards because the
+final gap is often the long one: a track ends at the provider's latest sample,
+which can be minutes after the one before it.
+
+**Verified live**, on the population most likely to be broken — cruising
+aircraft reporting impossible ground speeds. Of six: three corrected, three
+left alone.
+
+| | reported | shown |
+|---|---|---|
+| DXT9686 | 0.0° | 195.6° |
+| HVN63 | 70.8° | 326.9° |
+| CBJ669 | 97.1° | 281.4° |
+
+`0.0` in that first row is worth noticing: it is the classic "no data" value
+dressed as due north, which is exactly the confusion D18 exists to prevent.
+
+### What it refuses to do
+
+- **A null heading stays null.** Unknown is a value (D18, D40), and filling it
+  would quietly change what the legend's "heading unknown" disc means. That is
+  a separate decision.
+- **Small disagreements are left alone**, because the median is 0.3° and a
+  correction firing there would be noise replacing signal.
+- **It never touches speed.** The same aircraft's 12 m/s is equally wrong, and
+  correcting it would mean rewriting a second reported field from the same
+  chord. Not done, and worth doing only if the crawling marker becomes a real
+  complaint.
+- **It says so.** `meta.headingSource = "derived"` and the panel prints "from
+  its track", because every other number there is the source's own.

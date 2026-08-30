@@ -51,6 +51,21 @@ def destination_point(
     return math.degrees(lat2), wrap_longitude(math.degrees(lon2))
 
 
+def haversine_metres(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in metres.
+
+    Lives here rather than beside its first caller because it is a primitive:
+    the airport lookup wants kilometres, the store wants metres, and both want
+    the same arithmetic.
+    """
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    d_phi = phi2 - phi1
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return 2 * EARTH_RADIUS_M * math.asin(min(1.0, math.sqrt(a)))
+
+
 def initial_bearing(
     lat1: float, lon1: float, lat2: float, lon2: float
 ) -> float:

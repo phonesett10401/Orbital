@@ -135,6 +135,15 @@ export function DetailPanel() {
             {detail.heading === null
               ? 'Unknown'
               : `${Math.round(detail.heading)}° ${compass(detail.heading)}`}
+            {/*
+              Every other number in this panel is the source's own. This one
+              sometimes is not: when the reported heading contradicts the
+              aircraft's own track by more than a turn could explain, the track
+              wins - and says so rather than correcting silently (D80).
+            */}
+            {detail.meta.headingSource === 'derived' && (
+              <span className="panel__unit"> from its track</span>
+            )}
           </dd>
         </div>
         <div>

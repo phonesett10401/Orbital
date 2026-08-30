@@ -24,7 +24,11 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.airports import ORIGIN_MAX_KM, haversine_km, nearest_airport, origin_of
-from app.ingestion.flights import FlightHistory
+from app.ingestion.flights import (
+    COURSE_MAX_DISAGREEMENT_DEG,
+    FlightHistory,
+    course_from_track,
+)
 from app.models import ObjectType, TrackedObjectDetail, TrackPoint, TrackSource
 from app.providers.base import Provider, ProviderRateLimited
 
@@ -61,6 +65,10 @@ class StubProvider(Provider):
         if self.error is not None:
             raise self.error
         return self.track
+
+
+def detail_with(*, heading: float | None) -> TrackedObjectDetail:
+    return detail().model_copy(update={"heading": heading})
 
 
 def detail(object_id: str = "abc123") -> TrackedObjectDetail:
@@ -230,3 +238,82 @@ class TestFlightHistory:
         await history.enrich(detail("bbb222"))
         await history.enrich(detail("aaa111"))
         assert provider.calls == 2
+
+
+class TestCourseFromTrack:
+    """The direction of travel at the end of a track (D80).
+
+    The point of taking it from the *track* rather than from consecutive polls:
+    the provider samples every six seconds, so the bearing between two
+    waypoints is the instantaneous course. Our own polling is 90 to 300 seconds
+    apart, and over that gap the same arithmetic measures the chord of whatever
+    the aircraft did in between. Measured across 3,641 aircraft, 5.6% disagree
+    with their reported heading by over 30 degrees on a two-minute gap - and
+    most of those turned rather than lied.
+    """
+
+    def test_reads_the_course_off_the_last_short_gap(self) -> None:
+        track = (point(20.0, 95.0, offset=0), point(20.0, 95.05, offset=6))
+        assert course_from_track(track) == pytest.approx(90.0, abs=0.5)
+
+    def test_skips_a_long_final_gap_for_the_pair_before_it(self) -> None:
+        # Real tracks end this way: six-second samples and then a jump to the
+        # provider's latest position, minutes later.
+        track = (
+            point(20.0, 95.0, offset=0),
+            point(20.0, 95.05, offset=6),
+            point(21.0, 96.0, offset=300),
+        )
+        assert course_from_track(track) == pytest.approx(90.0, abs=0.5)
+
+    def test_ignores_a_pair_too_close_together_to_measure(self) -> None:
+        # A few metres apart is position noise, not a direction.
+        track = (point(20.0, 95.0, offset=0), point(20.00001, 95.00001, offset=6))
+        assert course_from_track(track) is None
+
+    def test_has_no_answer_for_a_track_of_one_point(self) -> None:
+        assert course_from_track((point(20.0, 95.0),)) is None
+        assert course_from_track(()) is None
+
+
+class TestHeadingFromTheTrack:
+    @pytest.mark.anyio
+    async def test_a_contradicted_heading_loses_to_the_track(self) -> None:
+        # The aircraft that started this: reported 7 degrees while its own
+        # track ran due east.
+        provider = StubProvider((point(20.0, 95.0, offset=0), point(20.0, 95.05, offset=6)))
+        enriched = await FlightHistory(provider).enrich(detail_with(heading=7.0))
+        assert enriched.heading == pytest.approx(90.0, abs=0.5)
+        assert enriched.meta["headingSource"] == "derived"
+
+    @pytest.mark.anyio
+    async def test_an_agreeing_heading_is_left_alone(self) -> None:
+        # The normal case by far: the median disagreement across the live feed
+        # is 0.3 degrees, and a correction that fires here would be noise.
+        provider = StubProvider((point(20.0, 95.0, offset=0), point(20.0, 95.05, offset=6)))
+        enriched = await FlightHistory(provider).enrich(detail_with(heading=88.0))
+        assert enriched.heading == 88.0
+        assert "headingSource" not in enriched.meta
+
+    @pytest.mark.anyio
+    async def test_a_disagreement_inside_the_threshold_is_left_alone(self) -> None:
+        provider = StubProvider((point(20.0, 95.0, offset=0), point(20.0, 95.05, offset=6)))
+        inside = 90.0 - (COURSE_MAX_DISAGREEMENT_DEG - 5.0)
+        enriched = await FlightHistory(provider).enrich(detail_with(heading=inside))
+        assert enriched.heading == inside
+
+    @pytest.mark.anyio
+    async def test_a_null_heading_stays_null(self) -> None:
+        # Unknown is a value (D18, D40). Filling it would change what the
+        # legend's "heading unknown" disc means, which is a separate decision.
+        provider = StubProvider((point(20.0, 95.0, offset=0), point(20.0, 95.05, offset=6)))
+        enriched = await FlightHistory(provider).enrich(detail_with(heading=None))
+        assert enriched.heading is None
+        assert "headingSource" not in enriched.meta
+
+    @pytest.mark.anyio
+    async def test_an_unmeasurable_track_leaves_the_heading_reported(self) -> None:
+        # One waypoint is a position, not a direction.
+        provider = StubProvider((point(20.0, 95.0, offset=0),))
+        enriched = await FlightHistory(provider).enrich(detail_with(heading=7.0))
+        assert enriched.heading == 7.0
