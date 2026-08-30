@@ -157,9 +157,37 @@ class Airport(OrbitalModel):
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
     country: str | None = Field(default=None, description="ISO 3166-1 alpha-2, when known.")
-    distance_km: float = Field(
-        ge=0, description="How far the track's first point was from this airport."
+    municipality: str | None = Field(default=None, description="The town or city it serves.")
+    iata: str | None = Field(default=None, description="IATA code, e.g. DXB, when known.")
+    distance_km: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "How far the track's first point was from this airport. Present only "
+            "for an origin *inferred* from a track (D78); a scheduled route names "
+            "its airports outright and has nothing to be near."
+        ),
     )
+
+
+class FlightRoute(OrbitalModel):
+    """The route a callsign is scheduled to fly.
+
+    **Scheduled, not observed**, and the distinction is the whole reason this
+    is a separate field from `origin`. `origin` is inferred from where the
+    aircraft's own track begins and is therefore a fact about this flight;
+    this is what the callsign is published as flying, which is usually the same
+    thing and occasionally is not - a diversion, a callsign reused for a
+    different sector, or a stale entry in a community database (D88).
+
+    It is the only source of a *destination* anywhere in this application: no
+    position feed carries one, because an aircraft does not transmit where it
+    is going.
+    """
+
+    airline: str | None = Field(default=None, description="Operator name, as published.")
+    origin: Airport | None = Field(default=None, description="Scheduled departure airport.")
+    destination: Airport | None = Field(default=None, description="Scheduled arrival airport.")
 
 
 class TrackSource(str, Enum):
@@ -193,6 +221,10 @@ class TrackedObjectDetail(TrackedObjectRecord):
     origin: Airport | None = Field(
         default=None,
         description="Where the flight appears to have departed from, if its track begins there.",
+    )
+    route: FlightRoute | None = Field(
+        default=None,
+        description="The scheduled route for this callsign, when one is published (D88).",
     )
 
 

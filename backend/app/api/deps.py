@@ -12,6 +12,7 @@ from fastapi import Request
 
 from app.config import Settings
 from app.ingestion.flights import FlightHistory
+from app.ingestion.flightroutes import FlightRoutes
 from app.ingestion.poller import Poller
 from app.ingestion.store import ObjectStore
 
@@ -26,6 +27,10 @@ def get_poller(request: Request) -> Poller:
 
 def get_flights(request: Request) -> FlightHistory:
     return request.app.state.flights
+
+
+def get_routes(request: Request) -> FlightRoutes:
+    return request.app.state.routes
 
 
 def get_settings_dep(request: Request) -> Settings:

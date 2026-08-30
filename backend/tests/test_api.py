@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
+from tests.conftest import offline_routes
 from app.models import BBox, ObjectType, TrackedObjectRecord, utcnow
 from app.providers.base import Provider, ProviderUnavailable
 
@@ -84,7 +85,7 @@ def settings() -> Settings:
 def client(provider, settings):
     """A live app. Entering the context manager runs the lifespan, which starts
     the poller -- so by the first request the store is already populated."""
-    app = create_app(settings=settings, provider=provider)
+    app = create_app(settings=settings, provider=provider, routes=offline_routes())
     with TestClient(app) as test_client:
         yield test_client
 
@@ -284,7 +285,7 @@ class TestOutageOverHttp:
     def test_a_failing_provider_leaves_the_response_intact_and_flags_it(
         self, provider, settings
     ):
-        app = create_app(settings=settings, provider=provider)
+        app = create_app(settings=settings, provider=provider, routes=offline_routes())
         with TestClient(app) as client:
             assert client.get("/api/aircraft").json()["returned"] == 5
 
@@ -315,7 +316,7 @@ class TestOutageOverHttp:
             assert stale_body["returned"] == 5          # still served
 
     def test_detail_and_search_also_survive_an_outage(self, provider, settings):
-        app = create_app(settings=settings, provider=provider)
+        app = create_app(settings=settings, provider=provider, routes=offline_routes())
         with TestClient(app) as client:
             provider.error = ProviderUnavailable("down")
             assert client.get("/api/aircraft/a1").status_code == 200
@@ -324,7 +325,7 @@ class TestOutageOverHttp:
             ).status_code == 200
 
     def test_health_reports_degraded_during_an_outage(self, provider, settings):
-        app = create_app(settings=settings, provider=provider)
+        app = create_app(settings=settings, provider=provider, routes=offline_routes())
         with TestClient(app) as client:
             poller = client.app.state.poller
             provider.error = ProviderUnavailable("down")
@@ -343,7 +344,7 @@ class TestOutageOverHttp:
         # telling it we have nothing.
         provider = ControllableProvider(records=[])
         provider.error = ProviderUnavailable("down from the start")
-        app = create_app(settings=settings, provider=provider)
+        app = create_app(settings=settings, provider=provider, routes=offline_routes())
         with TestClient(app) as client:
             body = client.get("/api/aircraft").json()
             assert body["stale"] is True

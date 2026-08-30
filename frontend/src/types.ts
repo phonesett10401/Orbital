@@ -70,7 +70,31 @@ export interface Airport {
   lat: number;
   lon: number;
   country: string | null;
-  distanceKm: number;
+  municipality: string | null;
+  iata: string | null;
+  /**
+   * How far the track's first point was from this airport.
+   *
+   * `null` for an airport named by a *schedule* rather than inferred from a
+   * track: nothing was measured, and a zero would claim otherwise (D88).
+   */
+  distanceKm: number | null;
+}
+
+/**
+ * The route a callsign is scheduled to fly.
+ *
+ * **Scheduled, not observed**, and that is the whole reason it is separate
+ * from `origin`. `origin` is where this aircraft's own track began; this is
+ * what the callsign is published as flying, which is usually the same and
+ * occasionally is not - a diversion, or a stale row in a community database.
+ * It is the only place a *destination* can come from: an aircraft does not
+ * transmit where it is going (D88).
+ */
+export interface FlightRoute {
+  airline: string | null;
+  origin: Airport | null;
+  destination: Airport | null;
 }
 
 /**
@@ -87,6 +111,7 @@ export interface TrackedObjectDetail extends TrackedObject {
   track: TrackPoint[];
   trackSource: TrackSource;
   origin: Airport | null;
+  route: FlightRoute | null;
   /** Source-specific fields the universal shape omits, e.g. `originCountry`. */
   meta: Record<string, string>;
 }

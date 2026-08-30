@@ -4286,3 +4286,79 @@ OpenSky call every 120 seconds. The dial is that one interval and nothing else:
 
 That last row is the one worth reading twice: flight history is OpenSky's alone,
 so dropping it would take the origin airport and the path-from-takeoff with it.
+
+---
+
+## D88 - Where a flight is going, from somewhere that is not a flight
+
+**Decision:** the by-id endpoint enriches an aircraft with the route its
+callsign is **scheduled** to fly, looked up in **adsbdb**: free, keyless, one
+request per selection, cached six hours including the misses. It is shown as
+its own "Scheduled route" section, above the observed path and clearly separate
+from it.
+
+### The gap it fills
+
+Every field Orbital has served so far is an observation. There has never been a
+destination, and not for want of trying: **no position feed carries one**. An
+aircraft transmits where it is, not where it intends to be. Every "DXB -> HAN"
+on a flight tracker comes from a schedule database, and until now we had none.
+
+adsbdb also supplies the operator's name outright, where D46 decodes it from
+the first three letters of the callsign against a designator table. Reported
+beats inferred, so where both exist the published name wins and the caveat
+under the field changes from "decoded from the callsign prefix" to "published
+against this callsign".
+
+### What it answers
+
+Measured on 60 callsigns sampled at random from the live store:
+
+| | resolved |
+|---|---|
+| airline-format callsigns (`ABC123`) | **48 / 54** |
+| everything else - registrations, GA, military | 1 / 6 |
+| overall | **49 / 60** |
+
+The second row is not a failure. `N490SA` is a private aircraft, and a private
+aircraft has no published route to find. The 11 that returned nothing simply
+have no "Scheduled route" section.
+
+### Scheduled is not observed, and the panel must not blur them
+
+It is keyed by **callsign**, not by aircraft, so it describes what that
+callsign is published as flying. A diversion, a callsign reused for a different
+sector, or a stale community row each produce a confident wrong answer - the
+same failure mode D18 forbids for a heading, arriving through a different door.
+
+So it does not replace the origin inferred from the aircraft's own track (D78);
+it sits beside it. Where both exist and agree, that is corroboration - the
+first aircraft this was tried on live, AAH40, had an observed origin 1.91 km
+from PHNL and a scheduled origin of PHNL. Where they disagree, the observed one
+is about *this* flight and wins, and the panel says the schedule disagreed
+rather than quietly picking one.
+
+A scheduled airport therefore carries **`distanceKm: null`**. The field means
+"how far the track's first point was from here", and a schedule measured
+nothing; a zero would assert the aircraft took off from directly overhead.
+
+### Bought like the flight track, and cached like it
+
+One request per aircraft **selected**, never on a poll, on the same reasoning
+as D78. Cached six hours, because a schedule does not change mid-flight - and
+**cached when it fails**, because roughly one callsign in five has no published
+route and re-asking a free service every few seconds for an answer that will
+not change is simply rude.
+
+### Two things the tests found
+
+**The 404 body is `{"response": "unknown callsign"}` - `response` is a string
+where the success path puts an object.** The first parser did
+`(payload.get("response") or {}).get("flightroute")` and would have raised
+`AttributeError` on any 200 carrying that shape.
+
+**The suite had started calling a live third-party service.** Every detail test
+enriches, so wiring this in silently added several real network calls per run -
+0.6 s each, flaky offline, and unkind to a service that charges nothing.
+`create_app` now takes an injectable lookup and the tests pass an offline one,
+the same way they already inject a fake provider.

@@ -14,6 +14,12 @@
  *    anything; it is read off the first three letters of the callsign (D46).
  *    Shown without that note it would look like a field the aircraft
  *    transmitted, which is precisely what it is not.
+ * 4. **It separates the scheduled route from the observed one.** The
+ *    destination, and the airport pair beside it, come from a schedule
+ *    database keyed by callsign - not from the aircraft, which transmits no
+ *    such thing (D88). Where the schedule and the aircraft's own track
+ *    disagree about where it departed from, the panel believes the track and
+ *    says the schedule disagreed, rather than quietly picking one.
  *
  * `meta` is rendered generically as key/value rows, so a provider can add a
  * field without a frontend change (D4).
@@ -23,6 +29,8 @@ import { useEffect, useState } from 'react';
 import { STALE_AFTER_SECONDS } from '../globe/interpolate';
 
 import { useAirline } from '../airlines';
+import type { Airport } from '../types';
+import { legLabel, summariseRoute } from './routeSummary';
 import { useOrbitalStore } from '../state/store';
 
 const MS_PER_SECOND = 1000;
@@ -41,6 +49,17 @@ function formatMetaKey(key: string): string {
     .replace(/([A-Z])/g, ' $1')
     .replace(/^./, (c) => c.toUpperCase())
     .trim();
+}
+
+/** One end of a scheduled route. The wording is decided in `legLabel`. */
+function Leg({ airport }: { airport: Airport | null }) {
+  const { code, place } = legLabel(airport);
+  return (
+    <div className="panel__leg">
+      <span className="panel__leg-code mono">{code}</span>
+      <span className="panel__leg-place">{place}</span>
+    </div>
+  );
 }
 
 /** Compass point, because "287°" alone is hard to picture. */
@@ -83,6 +102,14 @@ export function DetailPanel() {
   // (D71). This sentence is only true because the extrapolation stops here.
   const isStale = ageSec > STALE_AFTER_SECONDS;
 
+  // Which operator name to believe, whether there is a route worth a section,
+  // and whether the schedule contradicts the track: all judgements rather than
+  // layout, so they are decided as data and tested there (D88).
+  const { scheduled, operator, operatorIsReported, originDisagrees } = summariseRoute(
+    detail,
+    airline ?? null,
+  );
+
   return (
     <aside className="panel" aria-label={`Details for ${detail.label}`}>
       <header className="panel__header">
@@ -102,14 +129,22 @@ export function DetailPanel() {
           <dt>Identifier</dt>
           <dd className="mono">{detail.id}</dd>
         </div>
-        {airline && (
+        {operator && (
           <div>
             <dt>Airline</dt>
             <dd>
-              {airline.name}{' '}
-              <span className="panel__derived" title="Decoded from the callsign prefix">
-                from {airline.code}
-              </span>
+              {operator}{' '}
+              {operatorIsReported ? (
+                <span className="panel__derived" title="Published against this callsign">
+                  from a route database
+                </span>
+              ) : (
+                airline && (
+                  <span className="panel__derived" title="Decoded from the callsign prefix">
+                    from {airline.code}
+                  </span>
+                )
+              )}
             </dd>
           </div>
         )}
@@ -186,7 +221,7 @@ export function DetailPanel() {
         ))}
       </dl>
 
-      {airline && (
+      {airline && !operatorIsReported && (
         <p className="panel__caveat">
           The airline is decoded from the callsign prefix, not reported by the
           aircraft. Designators are occasionally reassigned, so an unfamiliar
@@ -194,8 +229,36 @@ export function DetailPanel() {
         </p>
       )}
 
+      {scheduled && (
+        <section className="panel__route">
+          <h3 className="panel__subtitle">Scheduled route</h3>
+          <div className="panel__legs">
+            <Leg airport={scheduled.origin} />
+            <span className="panel__leg-arrow" aria-hidden="true">
+              &rarr;
+            </span>
+            <Leg airport={scheduled.destination} />
+          </div>
+          {/*
+            The one field in this panel that describes an intention rather than
+            an observation, and the only one that can be confidently wrong: a
+            diverted flight still flies its published route here. Saying where
+            it comes from is the whole point (D88).
+          */}
+          <p className="panel__caveat">
+            {originDisagrees
+              ? 'Published against this callsign in a community database. It disagrees ' +
+                'with where this aircraft was actually seen to depart from, below, ' +
+                'which is the more reliable of the two.'
+              : 'Published against this callsign in a community database, not ' +
+                'reported by the aircraft - nothing on board transmits a ' +
+                'destination. A diverted flight still shows its scheduled one.'}
+          </p>
+        </section>
+      )}
+
       <section className="panel__route">
-        <h3 className="panel__subtitle">Route</h3>
+        <h3 className="panel__subtitle">{scheduled ? 'Observed path' : 'Route'}</h3>
         {detail.track.length < 2 ? (
           <p className="panel__note">
             Not enough observations yet to draw a path. The route builds up as we
@@ -241,8 +304,10 @@ export function DetailPanel() {
               <p className="panel__caveat">
                 The path flown since departure, from the network's own flight
                 history. The airport is the nearest one to where the track begins,{' '}
-                {detail.origin.distanceKm.toFixed(1)} km away — not a filed flight
-                plan.
+                {detail.origin.distanceKm === null
+                  ? ''
+                  : `${detail.origin.distanceKm.toFixed(1)} km away`}{' '}
+                — not a filed flight plan.
               </p>
             ) : (
               <p className="panel__caveat">

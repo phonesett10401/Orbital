@@ -2548,3 +2548,46 @@ is free. The whole bill is the global sweep's OpenSky call every 120 s, and
 that single interval is the only dial: 300 s costs 1,152, 180 s costs 1,920,
 and dropping OpenSky entirely costs nothing but loses ~1,850 aircraft along
 with every departure airport and flight track (19.28).
+
+### 19.38 Where the flight is going
+
+Nine tests in `backend/tests/test_flightroutes.py`, thirteen in
+`frontend/src/components/routeSummary.test.ts`, one added to
+`test_flights.py`, and one change to how the whole suite runs (D88).
+
+**The fixture is a recorded live answer** - UAE394, the flight Phone compared
+against Flightradar24 - trimmed to the fields the parser reads and otherwise
+left exactly as the service returned it. The thing most likely to break this is
+adsbdb changing its envelope, not our logic changing its mind, so an invented
+fixture would test nothing worth testing.
+
+**The 404 body is in there too, and it caught a crash.** adsbdb answers an
+unknown callsign with `{"response": "unknown callsign"}` - `response` is a
+*string* where the success path puts an object. The parser assumed a dict and
+would have raised on any 200 carrying that shape.
+
+**The negative cache is the test that matters.** About one callsign in five has
+no published route. `test_an_unknown_callsign_is_cached_too` selects the same
+aircraft three times and asserts **one** request left the process; without it,
+the miss path would re-ask a free service forever for an answer that will not
+change.
+
+**The panel's judgements are tested as data.** This project has no
+component-render harness, so the three decisions that are judgement rather than
+layout - is there a route worth a section, which of two operator names to
+believe, do the schedule and the track disagree about the origin - live in
+`routeSummary.ts` and are asserted directly. `originDisagrees` has both a
+positive case and the two cases that are *not* a disagreement (only one source
+has an origin), which is the common one by far.
+
+**One test asserts a thing that is only about honesty.**
+`test_a_scheduled_airport_claims_no_distance`: `distanceKm` means "how far the
+track's first point was from here", and a scheduled airport measured nothing.
+A zero there would read as an aircraft on the runway.
+
+**And the suite stopped calling a live service.** Wiring the lookup into the
+by-id endpoint silently gave every detail test a real network call - 0.6 s
+each, flaky offline, rude to a service that charges nothing. `create_app` now
+takes an injectable lookup and `conftest.offline_routes()` answers the real 404
+from a `MockTransport`. The detail tests went from 0.6 s to 0.01 s, which is
+how the calls were noticed at all.

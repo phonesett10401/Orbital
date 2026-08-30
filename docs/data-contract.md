@@ -120,7 +120,8 @@ list response for a value the UI shows one at a time, on click.
 |---|---|---|
 | `track` | array of `TrackPoint` | Positions, **oldest first**, from `trackSource`. |
 | `trackSource` | `"provider"` \| `"observed"` | Where the track came from. See below. |
-| `origin` | `Airport` \| `null` | Where the flight appears to have departed from. `null` is common and meaningful. |
+| `origin` | `Airport` \| `null` | Where the flight appears to have departed from, **observed**. `null` is common and meaningful. |
+| `route` | `FlightRoute` \| `null` | Where the callsign is **scheduled** to fly. `null` for about one aircraft in five. |
 
 ### `Airport`
 
@@ -130,7 +131,30 @@ list response for a value the UI shows one at a time, on click.
 | `name` | string | Airport name as published. |
 | `lat` / `lon` | number | Degrees. |
 | `country` | string \| null | ISO 3166-1 alpha-2. |
-| `distanceKm` | number | How far the track's first point was from this airport. |
+| `municipality` | string \| null | The town or city it serves, e.g. `Sydney`. |
+| `iata` | string \| null | IATA code, e.g. `SYD`. |
+| `distanceKm` | number \| null | How far the track's first point was from this airport. **`null` on a scheduled airport**, which measured nothing. |
+
+### `FlightRoute`
+
+| Field | JSON type | Meaning |
+|---|---|---|
+| `airline` | string \| null | Operator name, as published against the callsign. |
+| `origin` | `Airport` \| null | Scheduled departure airport. |
+| `destination` | `Airport` \| null | Scheduled arrival airport. |
+
+**This is the only destination in the contract, and it is scheduled rather than
+observed.** No position feed carries a destination, because an aircraft does
+not transmit where it is going. `route` is looked up by *callsign* in adsbdb, a
+community database, once per selection (D88) - so a diverted flight still
+reports its published route, and a wrong row is a confident wrong answer rather
+than a `null`. A client showing it must say where it came from; Orbital's panel
+heads the section "Scheduled route" and says so underneath.
+
+`route.origin` and the top-level `origin` answer the same question from two
+directions, and **they are not interchangeable**: the top-level one is where
+*this aircraft's track* began and is a fact about this flight; `route.origin`
+is about the callsign. Where both exist and disagree, prefer the observed one.
 
 ### `TrackPoint`
 

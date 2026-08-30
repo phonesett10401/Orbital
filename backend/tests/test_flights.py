@@ -111,6 +111,18 @@ class TestNearestAirport:
         assert found.name.startswith("Sydney")
         assert found.distance_km < 1.5
 
+    def test_the_inferred_origin_is_named_the_way_a_scheduled_one_is(self) -> None:
+        """The panel puts the two side by side (D88).
+
+        Both come from the same table, so an observed origin showing "YSSY"
+        beside a scheduled "SYD Sydney" would be our omission rather than a
+        difference in what is known.
+        """
+        found = nearest_airport(*SYDNEY_TRACK_START)
+        assert found is not None
+        assert found.iata == "SYD"
+        assert found.municipality == "Sydney"
+
     def test_finds_nothing_in_the_middle_of_an_ocean(self) -> None:
         # The South Pacific, thousands of kilometres from anywhere. A
         # nearest-match with no limit would still answer.

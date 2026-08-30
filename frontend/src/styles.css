@@ -331,6 +331,47 @@ body {
   padding-left: 9px;
 }
 
+/* The two ends of a scheduled route. The airport codes carry the size,
+   because "DXB -> HAN" is what the eye actually reads; the city names sit
+   under them for anyone who does not think in three-letter codes (D88).
+   `minmax(0, 1fr)` rather than `1fr` so a long airport name wraps inside its
+   column instead of widening the panel. */
+.panel__legs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 4px;
+}
+
+.panel__leg {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.panel__leg-code {
+  font-size: 19px;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+}
+
+.panel__leg-place {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* Sits between the codes rather than under them, so it aligns with the line
+   the eye reads across. Nudged up a size: at 16px the glyph is thin enough at
+   this panel width to read as a dash. */
+.panel__leg-arrow {
+  font-size: 18px;
+  line-height: 1.1;
+  align-self: start;
+  color: var(--text-dim);
+}
+
 /* The designator a name was decoded from, alongside the name itself. Dimmer
    and smaller: it is the evidence for the row, not the content of it (D46). */
 .panel__derived {

@@ -50,6 +50,7 @@ function detail(id: string): TrackedObjectDetail {
     ...object(id),
     track: [],
     trackSource: 'observed' as const,
+    route: null,
     origin: null,
     meta: { originCountry: 'Testland' },
   };

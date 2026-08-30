@@ -108,6 +108,11 @@ def nearest_airport(lat: float, lon: float, *, max_km: float = ORIGIN_MAX_KM) ->
                 lat=row["lat"],
                 lon=row["lon"],
                 country=row["country"] or None,
+                # The same two fields a scheduled airport carries (D88), from
+                # the same table, so the two origins are directly comparable
+                # rather than one being conspicuously thinner than the other.
+                municipality=row["city"] or None,
+                iata=row["iata"] or None,
                 distance_km=round(distance, 2),
             )
     return best

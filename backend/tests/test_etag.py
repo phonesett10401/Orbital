@@ -19,6 +19,8 @@ from app.api import etag as etag_module
 from app.api.etag import compute_etag, if_none_match_matches, process_token
 from app.config import Settings
 from app.main import create_app
+from tests.conftest import offline_routes
+from tests.conftest import offline_routes
 from app.models import BBox, ObjectType, TrackedObjectRecord, utcnow
 from app.providers.base import Provider
 
@@ -149,7 +151,7 @@ def provider() -> CountingProvider:
 @pytest.fixture
 def client(provider):
     app = create_app(settings=Settings(quota_preset="authenticated", provider="fixture"),
-                     provider=provider)
+                     provider=provider, routes=offline_routes())
     with TestClient(app) as test_client:
         yield test_client
 

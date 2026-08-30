@@ -18,6 +18,7 @@ from app.api import aircraft, health
 from app.config import Settings, get_settings
 from app.ingestion.poller import Poller
 from app.ingestion.flights import FlightHistory
+from app.ingestion.flightroutes import FlightRoutes
 from app.ingestion.store import ObjectStore
 from app.logging_config import configure_logging
 from app.providers import registry
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 def create_app(
     settings: Settings | None = None,
     provider: Provider | None = None,
+    routes: FlightRoutes | None = None,
 ) -> FastAPI:
     """Build the application.
 
@@ -37,6 +39,9 @@ def create_app(
             own rather than mutating the process environment.
         provider: overrides the configured provider. Tests inject a fake so
             they can make upstream fail on demand.
+        routes: overrides the scheduled-route lookup. Tests inject an offline
+            one; without it every detail request in the suite would call a
+            live third-party service.
     """
     settings = settings or get_settings()
     # Before anything else, so provider and poller startup logging is visible.
@@ -55,10 +60,15 @@ def create_app(
         # Bought per selection rather than polled, so it hangs off the app
         # beside the poller rather than inside it (D78).
         flights = FlightHistory(active_provider)
+        # Free, keyless, and unrelated to the position provider: adsbdb answers
+        # what a callsign is scheduled to fly, which no position feed carries
+        # (D88).
+        route_lookup = routes or FlightRoutes()
 
         app.state.settings = settings
         app.state.store = store
         app.state.flights = flights
+        app.state.routes = route_lookup
         app.state.poller = poller
 
         await poller.start()
@@ -69,6 +79,7 @@ def create_app(
             yield
         finally:
             await poller.stop()
+            await route_lookup.aclose()
 
     app = FastAPI(
         title="Orbital API",

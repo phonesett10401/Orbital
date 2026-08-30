@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.logging_config import APP_LOGGER, configure_logging
 from app.main import create_app
+from tests.conftest import offline_routes
 from app.models import ObjectType, TrackedObjectRecord, utcnow
 from app.providers.base import Provider, ProviderUnavailable
 
@@ -64,7 +65,7 @@ def settings() -> Settings:
 
 @pytest.fixture
 def client(settings):
-    app = create_app(settings=settings, provider=BulkProvider())
+    app = create_app(settings=settings, provider=BulkProvider(), routes=offline_routes())
     with TestClient(app) as test_client:
         yield test_client
 
@@ -110,6 +111,7 @@ class TestCompression:
         app = create_app(
             settings=Settings(quota_preset="authenticated", gzip_min_bytes=10**9),
             provider=BulkProvider(),
+            routes=offline_routes(),
         )
         with TestClient(app) as client:
             response = client.get("/api/aircraft", headers={"Accept-Encoding": "gzip"})
@@ -147,14 +149,14 @@ class TestLogOutput:
 
     def test_poll_results_are_logged(self, settings, caplog):
         with caplog.at_level(logging.INFO, logger="app.ingestion.poller"):
-            app = create_app(settings=settings, provider=BulkProvider())
+            app = create_app(settings=settings, provider=BulkProvider(), routes=offline_routes())
             with TestClient(app):
                 pass
         assert any("job=global" in r.getMessage() for r in caplog.records)
 
     def test_the_logged_poll_result_names_the_object_count(self, settings, caplog):
         with caplog.at_level(logging.INFO, logger="app.ingestion.poller"):
-            app = create_app(settings=settings, provider=BulkProvider(count=400))
+            app = create_app(settings=settings, provider=BulkProvider(count=400), routes=offline_routes())
             with TestClient(app):
                 pass
         messages = [r.getMessage() for r in caplog.records]
@@ -162,7 +164,7 @@ class TestLogOutput:
 
     def test_poller_startup_is_logged_with_the_budget(self, settings, caplog):
         with caplog.at_level(logging.INFO, logger="app.ingestion.poller"):
-            app = create_app(settings=settings, provider=BulkProvider())
+            app = create_app(settings=settings, provider=BulkProvider(), routes=offline_routes())
             with TestClient(app):
                 pass
         messages = [r.getMessage() for r in caplog.records]
@@ -172,7 +174,7 @@ class TestLogOutput:
         provider = BulkProvider()
         provider.error = ProviderUnavailable("simulated outage")
         with caplog.at_level(logging.WARNING, logger="app.ingestion.poller"):
-            app = create_app(settings=settings, provider=provider)
+            app = create_app(settings=settings, provider=provider, routes=offline_routes())
             with TestClient(app):
                 pass
         messages = [r.getMessage() for r in caplog.records]
