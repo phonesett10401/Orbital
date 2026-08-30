@@ -41,6 +41,7 @@ import {
   resolveVectorSources,
   styleForImagery,
   withImagery,
+  firstLabelLayerId,
 } from './basemap';
 import { isRenderable, unrenderableMessage, whenRenderable } from './container';
 import { readoutLines, requestCounts, tileUrlFor, vectorSourceState } from './diagnostics';
@@ -744,5 +745,46 @@ describe('the readout does not judge on internals', () => {
     }).join('\n');
     expect(lines).not.toContain('SOURCE NOT LOADED');
     expect(lines).not.toContain('LOADED BUT NO FEATURES');
+  });
+});
+
+describe('firstLabelLayerId', () => {
+  // Where night belongs in the stack. Drawn over the top it dims the place
+  // names with the ground, and the night side stops being readable while the
+  // day side stays crisp - which is not what night does to a map (defect #24).
+  const style = {
+    layers: [
+      { id: 'imagery-far', type: 'raster' },
+      { id: 'imagery-close', type: 'raster' },
+      { id: 'road-motorway', type: 'line' },
+      { id: 'building-3d', type: 'fill-extrusion' },
+      { id: 'place_label_city', type: 'symbol' },
+      { id: 'label_country_1', type: 'symbol' },
+    ],
+  };
+
+  it('finds the first piece of text in the style', () => {
+    expect(firstLabelLayerId(style)).toBe('place_label_city');
+  });
+
+  it('puts night above the ground and below every label', () => {
+    // Asserted as an ordering rather than as an id, because the id is
+    // Liberty's and could be renamed upstream: what matters is that every
+    // symbol layer ends up after the insertion point and no raster or line
+    // does.
+    const at = style.layers.findIndex((l) => l.id === firstLabelLayerId(style));
+    style.layers.forEach((layer, index) => {
+      if (layer.type === 'symbol') expect(index).toBeGreaterThanOrEqual(at);
+      else expect(index).toBeLessThan(at);
+    });
+  });
+
+  it('says so when the style has no labels at all', () => {
+    // Then the layer goes on top, which is the old behaviour and still better
+    // than throwing at a name that is not there.
+    expect(firstLabelLayerId({ layers: [{ id: 'a', type: 'raster' }] })).toBeNull();
+    expect(firstLabelLayerId({ layers: [] })).toBeNull();
+    expect(firstLabelLayerId(null)).toBeNull();
+    expect(firstLabelLayerId(undefined)).toBeNull();
   });
 });

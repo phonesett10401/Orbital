@@ -32,7 +32,7 @@ import {
   hitsAt,
   selectionFromHits,
 } from './aircraftLayer';
-import { loadPlanetStyle } from './basemap';
+import { firstLabelLayerId, loadPlanetStyle } from './basemap';
 import { createModelLayer, modelTarget } from './modelLayer';
 import { createTerminatorControl } from './terminatorControl';
 import { createTerminatorLayer } from './terminatorLayer';
@@ -165,17 +165,19 @@ export function PlanetView() {
             });
           }
 
-          // Night goes in before the route and the aircraft, so it washes over
-          // the map and not over the things drawn on top of it. Everything
-          // underneath it - imagery, roads, place names - is dimmed, which is
-          // what night does; the aircraft, their tracks and their callsigns stay
-          // at full strength, because they are the reason the view is open.
+          // Night goes in **below the first label**, and above everything
+          // else. The ground is what the sun is or is not shining on; the
+          // labels are annotation drawn on top of the world rather than part
+          // of it, and dimming them leaves the night side unreadable while the
+          // day side stays crisp (D74). The aircraft, their tracks and their
+          // callsigns come later still, because they are the reason the view
+          // is open.
           terminator = createTerminatorLayer({
             enabled: config.terminator,
             lightsUrl: config.textures.night,
             strength: config.terminatorStrength,
           });
-          map.addLayer(terminator);
+          map.addLayer(terminator, firstLabelLayerId(map.getStyle()) ?? undefined);
 
           const control = createTerminatorControl((enabled) => {
             terminator?.setEnabled(enabled);

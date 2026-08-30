@@ -3464,3 +3464,38 @@ whole-world mesh to contribute nothing.
 This is the same shape of argument as D53, which set the globe-to-city hand-off
 by measuring texels per screen pixel rather than by taste, and the same lesson
 as D49: a thing that looks right at one scale is not thereby right at another.
+
+---
+
+## D74 — Night falls on the ground, not on the labels
+
+**Decision:** the terminator is inserted **below the first symbol layer** in the
+style, so it darkens imagery, roads and buildings and leaves every place name
+at full strength.
+
+Phone, looking at the working terminator: *"you will see the texts not even
+readable in night side unlike day side."* Correct, and it was drawn that way —
+the layer went in above the whole basemap, so the 0.85 wash fell on the labels
+along with the ground.
+
+**The principle it got wrong:** a map's labels are not lit by the sun. They are
+annotation, drawn on top of the world rather than existing in it. Nothing about
+"it is night in Chicago" should make the word *Chicago* harder to read — if
+anything the opposite, since a dark ground is exactly when a light label reads
+best. The globe never had this problem because its labels were DOM elements
+over the canvas; on MapLibre everything is in one stack and the position in it
+is the decision.
+
+The same rule already governed the aircraft, their tracks and their callsigns:
+they are added after the terminator because they are the reason the view is
+open. Labels belong on that side of the line too.
+
+**The boundary is the first symbol layer, not a named id.** Liberty orders its
+layers the way every cartographic style does — ground, then lines, then labels
+— so "before the first symbol" puts night above the imagery and the roads and
+below every piece of text, without depending on an id that could be renamed
+upstream. The test asserts the *ordering* for that reason rather than the id:
+every symbol layer after the insertion point, no raster or line after it.
+
+A style with no labels at all returns null and the layer goes on top, which is
+the previous behaviour and better than throwing on a name that is not there.

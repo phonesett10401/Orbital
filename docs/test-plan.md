@@ -93,13 +93,13 @@ cd frontend && npm test
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
-| `planet.test.ts` | 53 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
+| `planet.test.ts` | 57 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
 | `route.test.ts` (planet) | 19 | **Great-circle densification, antimeridian unwrapping, the casing** |
 | `status.test.ts` | 13 | **Failure classification, the stall notice, one-answer selection, querying before the layers exist** |
 | `terminator.test.ts` | 33 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **801** | 325 backend, 476 frontend |
+| **Total** | **804** | 325 backend, 479 frontend |
 
 ### What the automated suites do not cover
 
@@ -224,6 +224,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 24 | **Night dimmed the place names with the ground** — the terminator went in above the whole basemap, so labels on the night side were washed out while the day side's stayed crisp | Low, visual | A screenshot from Phone (D74, §19.24) | Fixed |
 | 23 | **Night became a milky fog when zoomed in** — the lights texture is 9.8 km per texel, so at z10 one texel covered a sixth of the screen and was painted over the map at 0.85 opacity, washing out every label under it | Medium, visual | Two screenshots from Phone (D73, §19.23) | Fixed |
 | 22 | **The track never reached the aircraft** — the track ends at the last reported position and the marker is drawn at its interpolated one, so the two sat `age x speed` apart at every zoom, obvious from z9 | Low, visual | Phone: "when the plane moves on, the line end is left behind" (D72, §19.22) | Fixed |
 | 21 | **The marker outran what the app admitted it knew** — dead reckoning ran for ten minutes while the marker faded and the panel said "position shown is the last one we received" from two, so a stale aircraft was drawn kilometres from the end of its own observed track | Medium, visual | Six screenshots from Phone (D71, §19.21) | Fixed |
@@ -2087,3 +2088,22 @@ nothing is still rasterised.
 
 The readout now prints the fade, so `on · globe frame · 1 draw · fade 0.42`
 says both that it is working and how much of it is being drawn.
+
+### 19.24 Where night belongs in the stack
+
+Phone: *"the texts not even readable in night side unlike day side"* (defect
+#24). The terminator was inserted above the whole basemap, so its wash fell on
+the place names along with the ground. Reasoning in D74. **3 tests**.
+
+A map's labels are not lit by the sun - they are annotation over the world
+rather than part of it - so night now goes in **below the first symbol layer**.
+
+**The tests assert the ordering, not the id.** `firstLabelLayerId` returns
+Liberty's first symbol layer, and the test checks that every symbol layer falls
+at or after the insertion point while no raster or line does. Pinning the id
+itself would break the day OpenFreeMap renames a layer, and would not have
+caught the thing that actually matters.
+
+The null case is covered too: a style with no labels puts the layer on top,
+which is the old behaviour and better than throwing on a name that is not
+there.

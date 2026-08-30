@@ -266,3 +266,29 @@ async function defaultFetch(url: string): Promise<StyleSpecification> {
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
   return (await response.json()) as StyleSpecification;
 }
+
+/**
+ * The id of the first label in the style, or null if it has none.
+ *
+ * **Night goes underneath this.** Drawn over the top instead, the wash dims the
+ * place names along with the ground, and on the night side they stop being
+ * readable while the day side's stay crisp - which is not what night does to a
+ * map. A map's labels are not lit by the sun; they are annotation, drawn on top
+ * of the world rather than in it. The same reasoning already applies to the
+ * aircraft, their tracks and their callsigns, which are added after the
+ * terminator for exactly this reason (defect #24, D74).
+ *
+ * The first symbol layer is the boundary because Liberty orders its layers the
+ * way every cartographic style does: ground, then lines, then labels. So
+ * inserting here puts night above the imagery and the roads and below every
+ * piece of text in the style, without naming a single layer id that could be
+ * renamed upstream.
+ */
+export function firstLabelLayerId(style: {
+  layers?: Array<{ id: string; type: string }>;
+} | null | undefined): string | null {
+  for (const layer of style?.layers ?? []) {
+    if (layer.type === 'symbol') return layer.id;
+  }
+  return null;
+}
