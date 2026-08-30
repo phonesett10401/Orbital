@@ -93,13 +93,13 @@ cd frontend && npm test
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
-| `planet.test.ts` | 64 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
+| `planet.test.ts` | 66 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
 | `route.test.ts` (planet) | 19 | **Great-circle densification, antimeridian unwrapping, the casing** |
 | `status.test.ts` | 13 | **Failure classification, the stall notice, one-answer selection, querying before the layers exist** |
 | `terminator.test.ts` | 33 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **811** | 325 backend, 486 frontend |
+| **Total** | **813** | 325 backend, 488 frontend |
 
 ### What the automated suites do not cover
 
@@ -224,6 +224,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 25 | **The whole style failed to load** — the imagery crossfade was wrapped in a multiplication, which the spec forbids for `zoom` expressions; MapLibre rejects an invalid paint property by discarding the entire style, so the map went to 0 layers and black while seven new tests stayed green | **High** | The dev readout named it verbatim; Phone: "I cant see my earth anymore" (D76, §19.26) | Fixed |
 | 24 | **Night dimmed the place names with the ground** — the terminator went in above the whole basemap, so labels on the night side were washed out while the day side's stayed crisp | Low, visual | A screenshot from Phone (D74, §19.24) | Fixed |
 | 23 | **Night became a milky fog when zoomed in** — the lights texture is 9.8 km per texel, so at z10 one texel covered a sixth of the screen and was painted over the map at 0.85 opacity, washing out every label under it | Medium, visual | Two screenshots from Phone (D73, §19.23) | Fixed |
 | 22 | **The track never reached the aircraft** — the track ends at the last reported position and the marker is drawn at its interpolated one, so the two sat `age x speed` apart at every zoom, obvious from z9 | Low, visual | Phone: "when the plane moves on, the line end is left behind" (D72, §19.22) | Fixed |
@@ -2138,3 +2139,32 @@ with the arms swapped.
 Liberty's fills are used as authored, so the risk is low, but the road and
 label colours over them are ours and are the kind of thing D49 says to check
 against what they sit on.
+
+### 19.26 Asking the spec whether the style is valid
+
+D75 shipped a style MapLibre refuses to load, and the suite was green (defect
+#25). Reasoning in D76. **2 tests**.
+
+The imagery crossfade was wrapped in a multiplication. `zoom` may only be the
+input to a top-level step or interpolate, and **MapLibre rejects an invalid
+paint property by discarding the whole style** - 0 layers, no sources, black
+screen. Seven tests written the same hour asserted the expression's shape and
+could not have caught it: they compared our output against our own
+expectations.
+
+`validateStyleMin` from `@maplibre/maplibre-gl-style-spec` is the code MapLibre
+itself validates with, and it answers the only question that matters: will this
+load. Two cases:
+
+| Case | Why |
+|---|---|
+| The assembled style validates | The end-to-end question, asked of the authority |
+| ...also when the input style already has zoom-dependent paint | The shape that broke it, and what every real basemap looks like |
+
+**The fix was chosen by measurement too**: four candidate expressions were run
+through the validator, and the one that passed - the switch inside the
+interpolate's outputs - was the one kept.
+
+**And the test was checked against the defect.** Reverting the expression makes
+it fail; restoring it makes it pass. A test that cannot fail is not evidence
+(D63).

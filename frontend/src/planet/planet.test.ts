@@ -172,10 +172,17 @@ describe('withImagery', () => {
     // A dissolve between two photographs of the same ground, rather than a cut
     // between a photograph and a colour.
     const near = style.layers.find((l) => l.id === 'orbital-imagery-near');
-    // The crossfade, multiplied by whether a photograph is being shown at all.
+    // The crossfade ends at however much photograph this mode shows. The
+    // switch is inside the outputs because `zoom` may only be the input to a
+    // top-level interpolate - see the validation test below, which is the one
+    // that would have caught getting this wrong (defect #25).
     expect(asRaster(near!).paint?.['raster-opacity']).toEqual([
-      '*',
-      ['interpolate', ['linear'], ['zoom'], IMAGERY_CROSSFADE_START, 0, IMAGERY_CROSSFADE_END, 1],
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      IMAGERY_CROSSFADE_START,
+      0,
+      IMAGERY_CROSSFADE_END,
       whenFlat(0, 1),
     ]);
     // Fully arrived before the far tier runs out of tiles of its own.
@@ -890,5 +897,49 @@ describe('the basemap control', () => {
     const element = control.onAdd({} as import('maplibre-gl').Map);
     expect(element.className).toContain('maplibregl-ctrl-group');
     expect(element.contains(control.button)).toBe(true);
+  });
+});
+
+describe('the assembled style is valid, according to the spec itself', () => {
+  // **The test that was missing.** Every other assertion here checks that the
+  // style says what this file meant it to say; none of them could tell whether
+  // MapLibre would accept it. It would not: wrapping the zoom crossfade in a
+  // multiplication is rejected outright, and a rejected paint property fails
+  // the *whole* style - 0 layers, a black screen, and a working map replaced by
+  // nothing (defect #25). The suite was green throughout.
+  //
+  // So the style is now handed to the style spec's own validator, which is the
+  // same code MapLibre validates with. Asking the authority beats asserting the
+  // shape, and it is the technique D32 and 19.17 already established for
+  // arithmetic MapLibre also knows.
+
+  it('passes the style-spec validator', async () => {
+    const { validateStyleMin } = await import('@maplibre/maplibre-gl-style-spec');
+    const style = withImagery(bareStyle);
+    const errors = validateStyleMin(style as never);
+    expect(errors.map((e) => `${e.message}`)).toEqual([]);
+  });
+
+  it('is still valid with a zoom-dependent paint property in the input', async () => {
+    // The exact shape that broke: a layer whose opacity already interpolates on
+    // zoom before this file touches it.
+    const { validateStyleMin } = await import('@maplibre/maplibre-gl-style-spec');
+    const withZoomFade = {
+      ...bareStyle,
+      layers: [
+        ...bareStyle.layers,
+        {
+          id: 'fading-road',
+          type: 'line' as const,
+          source: 'openmaptiles',
+          'source-layer': 'transportation',
+          paint: {
+            'line-opacity': ['interpolate', ['linear'], ['zoom'], 5, 0, 10, 1],
+          },
+        },
+      ],
+    };
+    const errors = validateStyleMin(withImagery(withZoomFade as never) as never);
+    expect(errors.map((e) => `${e.message}`)).toEqual([]);
   });
 });

@@ -246,19 +246,23 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
     paint: {
       // Fades in over the far tier rather than replacing it, so the seam is a
       // dissolve between two photographs of the same ground rather than a cut.
-      // The crossfade between the two photographs, multiplied by whether a
-      // photograph is being shown at all.
+      // The crossfade between the two photographs, ending at "however much
+      // photograph this mode shows" rather than at 1.
+      //
+      // **The switch goes in the outputs, not around the whole thing.** A
+      // `zoom` expression may only be the input to a *top-level* step or
+      // interpolate, so multiplying this by the mode - the obvious way to
+      // write it - is rejected by the style spec, and a rejected paint
+      // property fails the entire style: 0 layers, black screen, no map
+      // (defect #25). Checked against the spec's own validator rather than by
+      // reasoning about it.
       'raster-opacity': [
-        '*',
-        [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          IMAGERY_CROSSFADE_START,
-          0,
-          IMAGERY_CROSSFADE_END,
-          1,
-        ],
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        IMAGERY_CROSSFADE_START,
+        0,
+        IMAGERY_CROSSFADE_END,
         whenFlat(0, 1),
       ],
     },

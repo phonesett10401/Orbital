@@ -3561,3 +3561,44 @@ map than look at it, and `VITE_BASEMAP=flat` starts there.
 expression, so a test says which map it is asking about. Asserting the raw
 `match` array would pin the encoding and would pass just as happily with the
 two arms swapped.
+
+---
+
+## D76 — Validate the style against the spec, not against our own intentions
+
+**Decision:** the assembled planet style is handed to the style spec's own
+validator in a test.
+
+**What happened.** D75 wrapped the imagery crossfade in a multiplication:
+`['*', ['interpolate', ['linear'], ['zoom'], ...], whenFlat(0, 1)]`. The style
+spec forbids it — a `zoom` expression may only be the input to a *top-level*
+step or interpolate — and MapLibre rejects a style with an invalid paint
+property **entirely**. Not the layer: the style. The result was 0 layers, no
+sources, a black screen, and a working map replaced by nothing (defect #25).
+
+**Seven new tests had just been written and the whole suite was green.** They
+asserted that the style said what this file meant it to say. Not one of them
+could tell whether MapLibre would accept it, because every one of them compared
+our output against our own expectations — the same shape of mistake as the
+readout that reported `cached tiles 0` while 120 features were drawn (D65), and
+the probe that measured the glint against nothing (D49).
+
+The fix in the assembly is small: the switch moves inside the interpolate's
+outputs, so the crossfade ends at "however much photograph this mode shows"
+rather than at 1. It was chosen by running four candidate expressions through
+the validator rather than by reasoning about the rule.
+
+**The test that now exists is the point.** `validateStyleMin` is the same code
+MapLibre validates with, so it answers the only question that matters: will
+this style load? It is asserted to fail on the broken expression before being
+kept — a test that cannot fail is not evidence, which this project has already
+paid to learn once (D63).
+
+A second case pins the shape that broke it: a style whose layers *already*
+carry zoom-dependent paint, which is what every real basemap looks like and
+what the hand-written fixture did not.
+
+**The general rule, now stated:** where an authority exists — the style spec's
+validator, MapLibre's `MercatorCoordinate`, `globe.gl`'s own screen
+projection — ask it. Asserting our own output against our own expectations
+tests the transcription and nothing else.
