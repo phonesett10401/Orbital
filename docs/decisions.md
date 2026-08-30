@@ -4240,3 +4240,49 @@ An eviction window is an assertion about how long a position stays worth
 drawing, and it was left over from a polling design that no longer exists. When
 the cadence changed by a factor of five, every constant derived from the old
 cadence became a guess about a system that had gone.
+
+---
+
+## D87 — The free feed animates the map; the metered one only fills its gaps
+
+**Decision:** the viewport poll runs every **15 seconds** and is served entirely
+by adsb.lol; OpenSky is called only by the global sweep, every 120 seconds, and
+contributes only what the free feed cannot see.
+
+Phone: *"can we depend on adsb.lol for refreshing planes live for all the
+planes available with them, and only depend on OpenSky for the planes not
+available with adsb.lol?"* That was already the merge policy — the primary
+overwrites the supplement, so a shared aircraft always shows adsb.lol's
+position — and after D84 a viewport poll never calls the metered feed at all.
+What was missing was speed.
+
+**The viewport job's interval was being chosen as though it cost something.**
+It is one request to a free service. Its interval is therefore a question of
+what is decent to ask, not of what the credit ladder allows, and 60 seconds of
+budget reasoning had been applied to a job with no budget.
+
+At 15 seconds it is four requests a minute. The global sweep stays at 60
+seconds because it is four requests rather than one, and because its job is to
+keep the parts of the map nobody is looking at from going stale rather than to
+animate them.
+
+Measured in a watched viewport over western Europe, 1,022 aircraft:
+
+| | |
+|---|---|
+| median position age | **2 s** |
+| aircraft whose position changed within 20 s | **86%** |
+| past the two-minute fade | 7% |
+
+**The credit bill does not move**: 2,880 a day, all of it the global sweep's
+OpenSky call every 120 seconds. The dial is that one interval and nothing else:
+
+| OpenSky refresh | credits/day | cost |
+|---|---|---|
+| 300 s | 1,152 | its exclusive aircraft freeze up to 3 min |
+| 180 s | 1,920 | freeze up to 1 min |
+| **120 s** | **2,880** | never freeze because of us |
+| never (adsb.lol alone) | **0** | lose ~1,850 aircraft, and every departure airport and flight track (D78) |
+
+That last row is the one worth reading twice: flight history is OpenSky's alone,
+so dropping it would take the origin airport and the path-from-takeoff with it.

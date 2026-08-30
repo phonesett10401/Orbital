@@ -2528,3 +2528,23 @@ The test asserts the window against the *preset's own intervals* rather than a
 literal - at least four times the longest poll, at most ten minutes - so it
 follows the cadence rather than having to be remembered when the cadence
 changes again, which is exactly how this one went stale.
+
+### 19.37 Live where it is being watched
+
+The viewport poll costs nothing - it is one request to adsb.lol, and a union
+viewport poll never calls the metered feed (19.34) - so its interval was
+shortened from 60 s to **15 s**. Reasoning in D87.
+
+**Measured in a watched viewport over western Europe**, 1,022 aircraft:
+
+| | |
+|---|---|
+| median position age | **2 s** |
+| positions that changed within 20 s | **86%** |
+| past the two-minute fade | 7% |
+
+**The credit bill is unchanged at 2,880/day**, because every one of those polls
+is free. The whole bill is the global sweep's OpenSky call every 120 s, and
+that single interval is the only dial: 300 s costs 1,152, 180 s costs 1,920,
+and dropping OpenSky entirely costs nothing but loses ~1,850 aircraft along
+with every departure airport and flight track (19.28).

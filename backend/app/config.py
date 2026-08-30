@@ -75,14 +75,21 @@ PRESETS: dict[str, tuple[PollJob, ...]] = {
         PollJob(name="viewport", bbox=None, interval_seconds=90.0, tier=2),
     ),
     # For the union provider, where the cadence is set by the free feed and the
-    # metered one answers once every supplement interval regardless (D83).
-    # A minute between global refreshes and half a minute between viewport
-    # ones is roughly five times what the credit ladder allowed, and costs
-    # 1,152 credits a day - 29% of the allowance, less than the preset it
-    # replaces.
+    # metered one answers once every supplement interval regardless (D83, D87).
+    #
+    # **The viewport job costs nothing at all.** It is served entirely by
+    # adsb.lol - a union viewport poll never calls the metered feed (D84) - so
+    # its interval is a question of what is decent to ask of a free service
+    # rather than of what the credit ladder allows. 15 s is one request per
+    # poll, four a minute, against the whole-world sweep's four every sixty
+    # seconds.
+    #
+    # The global sweep stays at 60 s because it is four requests, not one, and
+    # it exists to keep the parts of the map nobody is looking at from going
+    # stale rather than to animate them.
     "union": (
         PollJob(name="global", bbox=None, interval_seconds=60.0, tier=1),
-        PollJob(name="viewport", bbox=None, interval_seconds=30.0, tier=2),
+        PollJob(name="viewport", bbox=None, interval_seconds=15.0, tier=2),
     ),
     # 8000 credits/day. 1920 + 2880 = 4800/day, 60% of budget.
     "contributor": (
