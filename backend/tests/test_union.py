@@ -103,15 +103,38 @@ class TestMerging:
         assert supplement.calls == 0
 
     @pytest.mark.anyio
-    async def test_a_viewport_poll_still_includes_what_only_it_can_see(self) -> None:
-        # Otherwise an aircraft only OpenSky sees would vanish the moment the
-        # user zoomed in on it.
+    async def test_a_viewport_poll_carries_nothing_from_the_cache(self) -> None:
+        # **This test previously asserted the opposite**, on the reasoning that
+        # an aircraft only OpenSky sees would otherwise vanish when the user
+        # zoomed in on it. That reasoning was wrong and the test defended a
+        # real defect (#30): the store *merges* a poll into what it holds and
+        # evicts on age (D10), so nothing vanishes by being left out.
+        #
+        # What replaying the cache did instead: re-applied ten thousand records
+        # with the timestamps they arrived with, so their positions stopped
+        # advancing and the client froze them (D71) - and, because a viewport
+        # poll's primary only covers what is on screen, overwrote every
+        # aircraft *outside* the viewport with a five-minute-old copy.
         primary = Fake("adsblol", [record("aaa111")])
         supplement = Fake("opensky", [record("bbb222")])
         union = UnionProvider(primary, supplement)
         await union.fetch(None)
         merged = await union.fetch(BBox(lat_min=0, lon_min=0, lat_max=1, lon_max=1))
+        assert {r.id for r in merged} == {"aaa111"}
+
+    @pytest.mark.anyio
+    async def test_a_global_poll_between_refreshes_still_carries_the_cache(self) -> None:
+        # The cache still earns its place on global polls: that is what keeps
+        # OpenSky-only aircraft in the store between five-minute refreshes,
+        # and a global poll re-asserts every aircraft anyway, so no fresh
+        # record is overwritten by a stale one.
+        primary = Fake("adsblol", [record("aaa111")])
+        supplement = Fake("opensky", [record("bbb222")])
+        union = UnionProvider(primary, supplement, supplement_interval_seconds=600)
+        await union.fetch(None)
+        merged = await union.fetch(None)
         assert {r.id for r in merged} == {"aaa111", "bbb222"}
+        assert supplement.calls == 1
 
     @pytest.mark.anyio
     async def test_the_metered_feed_is_always_asked_about_the_whole_world(self) -> None:

@@ -136,12 +136,17 @@ class Settings(BaseSettings):
     )
 
     union_supplement_interval_seconds: float = Field(
-        default=300.0,
+        default=120.0,
         gt=0,
         description=(
             "How often the metered feed is actually called when running 'union'. "
             "The free feed answers every poll; this one answers at most this often, "
-            "so the poll cadence is no longer set by the credit ladder (D83)."
+            "so the poll cadence is no longer set by the credit ladder (D83). "
+            "120 s because that is the freeze threshold (D71): a longer interval "
+            "leaves aircraft only OpenSky can see sitting motionless for the "
+            "difference, which is what 'the planes are not moving' looked like "
+            "(defect #30). At 4 credits a call it is 2,880 a day, still below "
+            "the 3,072 the OpenSky-only preset spent."
         ),
     )
 

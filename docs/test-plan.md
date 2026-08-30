@@ -99,10 +99,10 @@ cd frontend && npm test
 | `terminator.test.ts` | 33 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_flights.py` | 46 | **The origin inference and its refusals, and the cache that stops it spending credits** |
-| `test_adsblol.py` | 19 | **Feet and knots into the contract's units, "ground", one-request sweeps, HTTP 420** |
-| `test_union.py` | 17 | **Both feeds present, the metered one polled once an interval and never for a viewport, independent failure** |
+| `test_adsblol.py` | 21 | **Feet and knots into the contract's units, "ground", one-request sweeps, HTTP 420** |
+| `test_union.py` | 18 | **Both feeds present, the metered one polled once an interval and never for a viewport, independent failure** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **905** | 405 backend, 500 frontend |
+| **Total** | **913** | 413 backend, 500 frontend |
 
 ### What the automated suites do not cover
 
@@ -227,6 +227,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 30 | **The map froze, and worse the further you zoomed in** — the union replayed its whole cached OpenSky snapshot on every viewport poll, so positions stopped advancing (frozen and faded by D71) and every aircraft outside the viewport was overwritten by a copy up to five minutes old | **High** | Phone: "the planes are not moving" (D84, §19.34) | Fixed |
 | 29 | **A flight drew a detour it never flew** — a bad waypoint put a V-shaped spike in the track, and stretches nobody watched were drawn as confident line | Medium, visual | Phone, comparing against Flightradar24 (D82, §19.32) | Fixed |
 | 28 | **The departure row ran its label into its value** — "DepartedDubai International Airport": the new row used class names that do not exist instead of the `dl` every other field uses | Low, visual | A screenshot from Phone (§19.29) | Fixed |
 | 27 | **Altitude was geometric where aviation is barometric** — Orbital showed 10,317 m for a flight Flightradar24 had at 37,000 ft; both real, one the wrong quantity, differing by a median of 290 m across 859 aircraft | Medium | Phone compared the two sites on UAE394 (D79, §19.29) | Fixed |
@@ -2421,3 +2422,45 @@ the circle that *contains* it, including across the antimeridian; HTTP 420 and
 present in the merge; the metered feed polled once an interval, never for a
 viewport, and always asked about the whole world; cached records keeping the
 age they arrived with; and either feed failing alone leaving the map drawn.
+
+### 19.34 The union froze the map
+
+Reported within minutes of going live: planes not moving, then vanishing and
+changing colour when zoomed in (defect #30). Reasoning in D84.
+
+**The measurement that found it** was one log line:
+
+```
+job=viewport applied=10859
+```
+
+A viewport poll for a box a few kilometres across was applying ten thousand
+aircraft - the union replaying its cached OpenSky snapshot every 30 seconds,
+with the timestamps those records arrived with. Positions stopped advancing,
+the client stopped dead-reckoning them (D71) and faded them, and every aircraft
+*outside* the viewport had its fresh position overwritten by a copy up to five
+minutes old.
+
+**A passing test defended it.** `test_a_viewport_poll_still_includes_what_only
+_it_can_see` asserted precisely that behaviour, written the same hour, from the
+same wrong assumption as the code: that leaving records out of a poll would
+make them vanish. The store merges and evicts on age (D10) - it never needed
+the reminder. The test now asserts the opposite and says why.
+
+**Measured in a live viewport, before and after:**
+
+| | before | after |
+|---|---|---|
+| positions older than 120 s | 30% | **10%** |
+| timestamps in the future | about half | **0** |
+| records applied per viewport poll | 10,859 | **48** |
+
+Two further corrections came out of measuring the result rather than from the
+report: the metered feed is refreshed every **120 s**, because that is the
+freeze threshold and a longer interval is itself a cause of motionless
+aircraft; and adsb.lol's ages are taken from the `now` in its own payload,
+because measuring `seen_pos` against our wall clock produced a median age of
+**minus two seconds**.
+
+The residual 10% is honest - OpenSky's own feed carries 7% of positions older
+than two minutes, and an aircraft nobody has heard from should sit still.

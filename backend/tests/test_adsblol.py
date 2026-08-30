@@ -15,7 +15,7 @@ the ground reports the *string* `"ground"` where a number is expected.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -133,6 +133,24 @@ class TestMissingData:
         records = await provider(responds({"ac": [entry]})).fetch()
         age = (datetime.now(timezone.utc) - records[0].last_seen).total_seconds()
         assert age == pytest.approx(90, abs=5)
+
+    @pytest.mark.anyio
+    async def test_age_is_measured_from_the_feed_s_clock(self) -> None:
+        # `seen_pos` counts back from the `now` in the payload, so measuring it
+        # against our own wall clock adds the round trip and any skew between
+        # the machines. Live, that produced a median age of *minus two
+        # seconds* - positions timestamped in the future, in a system where
+        # everything downstream reasons about age (D83).
+        served_at = datetime(2026, 8, 30, 12, 0, tzinfo=timezone.utc)
+        payload = {"now": served_at.timestamp() * 1000, "ac": [{**LIVE_RECORD, "seen_pos": 30.0}]}
+        records = await provider(responds(payload)).fetch()
+        assert records[0].last_seen == served_at - timedelta(seconds=30)
+
+    @pytest.mark.anyio
+    async def test_our_clock_is_the_fallback(self) -> None:
+        # A payload without `now` is still usable; it is only less precise.
+        records = await provider(responds({"ac": [LIVE_RECORD]})).fetch()
+        assert (datetime.now(timezone.utc) - records[0].last_seen).total_seconds() < 5
 
 
 class TestRequestShape:

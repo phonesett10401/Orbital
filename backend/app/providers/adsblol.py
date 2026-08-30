@@ -142,7 +142,19 @@ class AdsbLolProvider(Provider):
         if not isinstance(aircraft, list):
             raise ProviderBadResponse("'ac' was not a list")
 
-        now = datetime.now(timezone.utc)
+        # **The feed's own clock, not ours.** `seen_pos` counts seconds back
+        # from the `now` in the payload, so subtracting it from our wall clock
+        # adds the network round trip and any skew between the two machines -
+        # which measured as a median age of *minus two seconds*, timestamps in
+        # the future. Everything downstream reasons about age (D71 freezes a
+        # position older than two minutes, the marker fades at the same point),
+        # and a negative age is a small lie in the middle of all of it.
+        served_at = _number(payload.get("now"))
+        now = (
+            datetime.fromtimestamp(served_at / 1000.0, tz=timezone.utc)
+            if served_at and served_at > 1e11  # milliseconds, as this feed sends
+            else datetime.now(timezone.utc)
+        )
         records = []
         for entry in aircraft:
             record = self._to_record(entry, now)

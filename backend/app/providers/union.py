@@ -48,11 +48,16 @@ logger = logging.getLogger(__name__)
 
 #: How often the metered source is actually called.
 #:
-#: Five minutes is the global cadence the credit ladder already budgets for
-#: (D21's "authenticated" preset), so supplementing at this rate costs exactly
-#: what the previous design cost while the free source polls as often as it
-#: likes.
-DEFAULT_SUPPLEMENT_INTERVAL = 300.0
+#: **Shorter than the freeze threshold, deliberately.** The client refuses to
+#: dead-reckon a position older than two minutes and fades the marker instead
+#: (D71), so a supplement interval longer than that leaves every aircraft only
+#: OpenSky can see sitting motionless for the difference. At five minutes that
+#: was 60% of their cycle, and it is exactly what "the planes are not moving"
+#: looked like (defect #30).
+#:
+#: 120 s costs 2,880 credits a day, which is still less than the 3,072 the
+#: OpenSky-only preset spent for a fifth of the refresh rate.
+DEFAULT_SUPPLEMENT_INTERVAL = 120.0
 
 
 class UnionProvider(Provider):
@@ -110,12 +115,24 @@ class UnionProvider(Provider):
         for it would multiply the credit cost by the poll rate, which is
         precisely what this design exists to avoid.
 
-        The cache is returned for viewport polls regardless, so an aircraft
-        only OpenSky can see does not blink out of a zoomed-in view.
+        **A viewport poll contributes nothing from it**, and returning the
+        cache there was a real defect rather than a nicety (defect #30). The
+        store *merges* a poll into what it already holds and evicts on age
+        (D10), so an aircraft it saw four minutes ago is still there without
+        being re-asserted. Handing back ten thousand cached records on every
+        viewport poll instead did two bad things: it re-applied them with the
+        timestamps they arrived with, so their positions stopped advancing and
+        the client - which refuses to dead-reckon a position older than two
+        minutes (D71) - froze them on screen; and because a viewport poll's
+        primary only covers what is on screen, every aircraft *outside* the
+        viewport had its fresh position overwritten by a five-minute-old copy.
+        The map went stale everywhere except the few kilometres being looked at.
         """
         now = time.monotonic()
         due = self._supplement_at is None or now - self._supplement_at >= self._interval
-        if bbox is not None or not due:
+        if bbox is not None:
+            return []
+        if not due:
             return self._supplement_cache
 
         records = await self.supplement.fetch(None)

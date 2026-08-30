@@ -102,9 +102,32 @@ class TestConfiguredPresetsFitTheirBudget:
 
     @pytest.mark.parametrize("preset", sorted(PRESETS))
     def test_preset_stays_within_its_safety_ceiling(self, preset):
-        settings = Settings(quota_preset=preset)
+        # The `union` preset is the one preset that is affordable only with the
+        # provider it was written for: its intervals are five times faster than
+        # the credit ladder allows, and it fits because adsb.lol answers every
+        # poll for nothing while OpenSky answers once every five minutes (D83).
+        provider = "union" if preset == "union" else "opensky"
+        settings = Settings(quota_preset=preset, provider=provider)
         ceiling = settings.daily_allowance * settings.budget_safety_fraction
         assert settings.projected_daily_credits() <= ceiling
+
+    def test_the_fast_preset_is_refused_on_a_metered_provider(self):
+        # And the guard says so rather than letting it through: on OpenSky
+        # alone those intervals project 11,520 credits against an allowance of
+        # 4,000, which would be spent by mid-morning.
+        with pytest.raises(ValueError, match="credits/day"):
+            Settings(quota_preset="union", provider="opensky")
+
+    def test_the_union_preset_costs_less_than_the_one_it_replaces(self):
+        # Five times the refresh rate for a third of the credits, because the
+        # fast half of the union is free (D83).
+        union = Settings(quota_preset="union", provider="union")
+        authenticated = Settings(quota_preset="authenticated", provider="opensky")
+        # 2,880: one global OpenSky call every 120 s, which is the freeze
+        # threshold (D71, defect #30). Still under the 3,072 the OpenSky-only
+        # preset spent for a fifth of the refresh rate.
+        assert union.projected_daily_credits() == 2880
+        assert union.projected_daily_credits() < authenticated.projected_daily_credits()
 
     def test_authenticated_preset_projects_the_documented_figure(self):
         assert Settings(quota_preset="authenticated").projected_daily_credits() == 3072

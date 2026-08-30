@@ -4049,3 +4049,77 @@ A test caught it.
 adsb.lol drawing the map; adsb.lol throttled leaves OpenSky. Only both failing
 raises, so the store keeps its last good snapshot (D10) rather than being wiped
 by a successful-looking empty poll.
+
+---
+
+## D84 — The union froze the map, and a test defended the reason
+
+**Decision:** a viewport poll contributes nothing from the supplement cache,
+the metered feed is refreshed every **120 s** rather than every 300, and
+adsb.lol's timestamps are measured against the feed's own clock.
+
+Phone, minutes after the union went live: *"we got a bigger problem now, the
+planes are not moving"*, and then *"planes started suddenly disappearing when I
+zoomed in from z10 to z12, plus the planes' colour changed"*. All three
+symptoms, one cause.
+
+### What the log said
+
+```
+job=viewport applied=10859
+```
+
+A viewport poll — for a box a few kilometres across — was applying **ten
+thousand aircraft**. The union was returning its whole cached OpenSky snapshot
+for every viewport poll, and the store applies what it is given:
+
+- those records carried **the timestamps they arrived with**, so their
+  positions stopped advancing, and the client refuses to dead-reckon a position
+  older than two minutes (D71) — the markers froze and faded, which is the
+  colour change;
+- and because a viewport poll's *primary* only covers what is on screen, every
+  aircraft **outside** the viewport had its fresh position overwritten by a
+  copy up to five minutes old. The map went stale everywhere except the few
+  kilometres being looked at, which is why zooming in made it worse.
+
+**The store never needed the reminder.** It merges a poll into what it holds
+and evicts on age (D10); an aircraft it saw four minutes ago is still there
+without being re-asserted. `applied` fell from 10,859 to **48**.
+
+### A test defended the bug
+
+`test_a_viewport_poll_still_includes_what_only_it_can_see` asserted exactly the
+behaviour that caused this, on the reasoning that an aircraft only OpenSky sees
+would otherwise vanish when the user zoomed in. That reasoning was wrong, and
+the test was written the same hour as the code, by the same mistaken
+assumption. It passed continuously while the map froze.
+
+Tests written from the same misunderstanding as the code cannot catch that
+misunderstanding. The measurement that found this was `applied=10859` in a log
+line — a number that could have come out the other way.
+
+### Two corrections that came out of measuring the result
+
+**The supplement interval is now shorter than the freeze threshold.** At 300 s,
+an aircraft only OpenSky could see spent 60% of every cycle past the
+two-minute mark, motionless. 120 s is the largest interval that cannot itself
+freeze a marker, and costs 2,880 credits a day — still less than the 3,072 the
+OpenSky-only preset spent for a fifth of the refresh rate.
+
+**adsb.lol's ages are measured against its own clock.** `seen_pos` counts back
+from the `now` in the payload; subtracting it from *our* wall clock added the
+round trip and the skew between machines, and measured a median age of **minus
+two seconds** — positions timestamped in the future, in a system where
+everything downstream reasons about age.
+
+Measured in a live viewport, before and after:
+
+| | before | after |
+|---|---|---|
+| positions older than 120 s | 30% | **10%** |
+| timestamps in the future | about half | **0** |
+| records applied per viewport poll | 10,859 | **48** |
+
+The remaining 10% is honest: OpenSky's own feed carries 7% of positions older
+than two minutes, and an aircraft nobody has heard from in three minutes
+*should* sit still and fade.
