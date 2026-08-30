@@ -32,7 +32,10 @@ import {
   graticule,
   nightAlpha,
   subsolarVector,
+  TERMINATOR_FULL_ZOOM,
+  TERMINATOR_GONE_ZOOM,
   translation,
+  zoomFade,
 } from './terminatorLayer';
 
 /** Noon UTC at an equinox: the sun is over the Gulf of Guinea, near 0/0. */
@@ -196,7 +199,7 @@ describe('translation', () => {
 });
 
 describe('the layer', () => {
-  function harness(enabled: boolean) {
+  function harness(enabled: boolean, zoom = 2) {
     const renderer = { autoClear: true, resetState: vi.fn(), render: vi.fn() };
     const texture = new THREE.Texture();
     const loadTexture = vi.fn(() => texture);
@@ -209,6 +212,7 @@ describe('the layer', () => {
     });
     const map = {
       getCanvas: () => document.createElement('canvas'),
+      getZoom: () => zoom,
     } as unknown as import('maplibre-gl').Map;
     layer.onAdd?.(map, {} as WebGL2RenderingContext);
     return { layer, renderer, loadTexture, texture };
@@ -303,11 +307,21 @@ describe('the layer', () => {
     expect(renderer.render).toHaveBeenCalledTimes(1);
   });
 
+  it('draws nothing at all at street zooms, and says why', () => {
+    // Not merely faded to invisible: skipped, so a whole-world mesh is not
+    // rasterised every frame to contribute nothing (defect #23).
+    const { layer, renderer } = harness(true, 12);
+    layer.render({} as WebGL2RenderingContext, args());
+    expect(renderer.render).not.toHaveBeenCalled();
+    expect(layer.drawsLastFrame()).toBe(0);
+    expect(layer.describe()).toMatch(/off above z7/);
+  });
+
   it('says what it is doing, for the readout', () => {
     const { layer } = harness(true);
     expect(layer.describe()).toBe('never rendered');
     layer.render({} as WebGL2RenderingContext, args());
-    expect(layer.describe()).toMatch(/^on · globe frame · 1 draw$/);
+    expect(layer.describe()).toMatch(/^on · globe frame · 1 draw · fade 1\.00$/);
   });
 });
 
@@ -348,5 +362,36 @@ describe('the toggle', () => {
     const element = control.onAdd({} as import('maplibre-gl').Map);
     expect(element.className).toContain('maplibregl-ctrl-group');
     expect(element.contains(control.button)).toBe(true);
+  });
+});
+
+describe('zoomFade', () => {
+  // The lights texture is 9.8 km per texel. Measured against the screen at 40
+  // degrees north: 0.7 px per texel at z2, 5.2 at z5, and 167 at z10 - where a
+  // single texel spans a sixth of the screen and the "city lights" are one
+  // smeared blob painted over the map (defect #23).
+
+  it('draws night in full where the texture still resolves', () => {
+    expect(zoomFade(0)).toBe(1);
+    expect(zoomFade(2.9)).toBe(1);
+    expect(zoomFade(TERMINATOR_FULL_ZOOM)).toBe(1);
+  });
+
+  it('is gone before a texel is tens of pixels across', () => {
+    expect(zoomFade(TERMINATOR_GONE_ZOOM)).toBe(0);
+    expect(zoomFade(10)).toBe(0);
+    expect(zoomFade(19)).toBe(0);
+  });
+
+  it('dissolves rather than switching off mid-gesture', () => {
+    const middle = zoomFade((TERMINATOR_FULL_ZOOM + TERMINATOR_GONE_ZOOM) / 2);
+    expect(middle).toBeCloseTo(0.5, 6);
+    let previous = 1;
+    for (let zoom = 0; zoom <= 12; zoom += 0.25) {
+      const fade = zoomFade(zoom);
+      expect(fade).toBeLessThanOrEqual(previous + 1e-12);
+      expect(fade).toBeGreaterThanOrEqual(0);
+      previous = fade;
+    }
   });
 });

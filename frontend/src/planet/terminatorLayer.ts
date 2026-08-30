@@ -72,6 +72,49 @@ export const LIGHTS_GAIN = 1.5;
  */
 const MERCATOR_LIMIT = 85.051129;
 
+/**
+ * The zooms between which night fades out entirely.
+ *
+ * **Measured, not chosen.** The lights texture is 4096 x 2048 for the whole
+ * planet, which is 9.8 km per texel, and one texel covers this much of the
+ * screen at 40 degrees north:
+ *
+ * | zoom | screen pixels per texel |
+ * |---|---|
+ * | 2 | 0.7 |
+ * | 4 | 2.6 |
+ * | 5 | 5.2 |
+ * | 7 | 20.9 |
+ * | 10 | **167** |
+ *
+ * At z10 a single texel spans a sixth of the screen: what is drawn is not city
+ * lights but one smeared blob of them, painted over the map at 0.85 opacity,
+ * which is what Phone saw as a milky fog over the whole of New Jersey
+ * (defect #23). There is no texture that fixes this - a street-scale night
+ * would need per-building light data, not a bigger image.
+ *
+ * So night bows out instead. It is a planetary phenomenon and it is drawn at
+ * planetary zooms; by the time the map is showing streets, the map is what the
+ * user came for. The same reasoning as the globe-to-city hand-off, which was
+ * also settled by measuring texels per pixel rather than by taste (D53).
+ */
+export const TERMINATOR_FULL_ZOOM = 4;
+export const TERMINATOR_GONE_ZOOM = 7;
+
+/**
+ * How much of the night to draw at a zoom: 1 out to z4, nothing from z7.
+ *
+ * Smoothstepped rather than switched, so it dissolves over three zoom levels
+ * instead of blinking off mid-gesture.
+ */
+export function zoomFade(zoom: number): number {
+  const t = Math.min(
+    1,
+    Math.max(0, (zoom - TERMINATOR_FULL_ZOOM) / (TERMINATOR_GONE_ZOOM - TERMINATOR_FULL_ZOOM)),
+  );
+  return 1 - t * t * (3 - 2 * t);
+}
+
 /** How coarse the mesh is, in degrees. */
 export const GRID_STEP_DEGREES = 2;
 
@@ -185,6 +228,7 @@ const fragmentShader = /* glsl */ `
   uniform vec3 sun;
   uniform float strength;
   uniform float gain;
+  uniform float fade;
   uniform vec4 clippingPlane;
   uniform bool clipToHorizon;
   uniform float nightAt;
@@ -206,7 +250,7 @@ const fragmentShader = /* glsl */ `
     // imagery underneath wherever the lights are black, and paints the lights
     // where they are not.
     vec3 lit = hasLights ? texture2D(lights, vUv).rgb * gain : vec3(0.0);
-    gl_FragColor = vec4(lit, night * strength);
+    gl_FragColor = vec4(lit, night * strength * fade);
   }
 `;
 
@@ -284,6 +328,7 @@ export function createTerminatorLayer(options: TerminatorOptions): TerminatorLay
       sun: { value: new THREE.Vector3(0, 0, 1) },
       strength: { value: strength },
       gain: { value: LIGHTS_GAIN },
+      fade: { value: 1 },
       clippingPlane: { value: new THREE.Vector4(0, 0, 0, 0) },
       clipToHorizon: { value: false },
       nightAt: { value: NIGHT_AT },
@@ -303,6 +348,7 @@ export function createTerminatorLayer(options: TerminatorOptions): TerminatorLay
   camera.matrixWorldAutoUpdate = false;
 
   let renderer: TerminatorRenderer | null = null;
+  let map: MapLibreMap | null = null;
   let texture: THREE.Texture | null = null;
   let draws = 0;
   let status = 'never rendered';
@@ -332,15 +378,16 @@ export function createTerminatorLayer(options: TerminatorOptions): TerminatorLay
     renderingMode: '2d',
     camera,
 
-    onAdd(map: MapLibreMap, gl: WebGL2RenderingContext) {
-      renderer = createRenderer(map.getCanvas(), gl);
+    onAdd(addedMap: MapLibreMap, gl: WebGL2RenderingContext) {
+      map = addedMap;
+      renderer = createRenderer(addedMap.getCanvas(), gl);
       renderer.autoClear = false;
       if (enabled) ensureTexture();
     },
 
     render(_gl: WebGL2RenderingContext, args: CustomRenderMethodInput) {
       draws = 0;
-      if (!renderer) {
+      if (!renderer || !map) {
         status = 'not added to a map';
         return;
       }
@@ -348,6 +395,15 @@ export function createTerminatorLayer(options: TerminatorOptions): TerminatorLay
         status = 'off';
         return;
       }
+
+      // Past the zoom where the lights texture stops being lights, there is
+      // nothing worth drawing and a great deal worth not drawing over.
+      const fade = zoomFade(map.getZoom());
+      if (fade <= 0.002) {
+        status = `off above z${TERMINATOR_GONE_ZOOM} (the lights texture is 9.8 km per texel)`;
+        return;
+      }
+      material.uniforms.fade.value = fade;
 
       const projection = args.defaultProjectionData;
       const globe = usesGlobeFrame(projection.projectionTransition);
@@ -377,7 +433,7 @@ export function createTerminatorLayer(options: TerminatorOptions): TerminatorLay
 
       status = `on · ${globe ? 'globe' : 'mercator'} frame · ${draws} draw${
         draws === 1 ? '' : 's'
-      }${texture ? '' : ' · no lights texture'}`;
+      } · fade ${fade.toFixed(2)}${texture ? '' : ' · no lights texture'}`;
     },
 
     setEnabled(next: boolean) {

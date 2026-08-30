@@ -96,10 +96,10 @@ cd frontend && npm test
 | `planet.test.ts` | 53 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
 | `route.test.ts` (planet) | 19 | **Great-circle densification, antimeridian unwrapping, the casing** |
 | `status.test.ts` | 13 | **Failure classification, the stall notice, one-answer selection, querying before the layers exist** |
-| `terminator.test.ts` | 29 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
+| `terminator.test.ts` | 33 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **797** | 325 backend, 472 frontend |
+| **Total** | **801** | 325 backend, 476 frontend |
 
 ### What the automated suites do not cover
 
@@ -224,6 +224,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 23 | **Night became a milky fog when zoomed in** — the lights texture is 9.8 km per texel, so at z10 one texel covered a sixth of the screen and was painted over the map at 0.85 opacity, washing out every label under it | Medium, visual | Two screenshots from Phone (D73, §19.23) | Fixed |
 | 22 | **The track never reached the aircraft** — the track ends at the last reported position and the marker is drawn at its interpolated one, so the two sat `age x speed` apart at every zoom, obvious from z9 | Low, visual | Phone: "when the plane moves on, the line end is left behind" (D72, §19.22) | Fixed |
 | 21 | **The marker outran what the app admitted it knew** — dead reckoning ran for ten minutes while the marker faded and the panel said "position shown is the last one we received" from two, so a stale aircraft was drawn kilometres from the end of its own observed track | Medium, visual | Six screenshots from Phone (D71, §19.21) | Fixed |
 | 20 | **The planet view failed silently** — no `catch`, no message: a blocked basemap host, a collapsed container, a browser without WebGL 2 and an unknown throw all produced the same black rectangle, and the container helper's carefully written explanation was rejected into nothing | Medium | Found while diagnosing a black screen from a console (D70, §19.20) | Fixed |
@@ -2061,3 +2062,28 @@ permanent rather than a glitch. A dashed leader now joins them.
 **Not verified: how it looks.** Standing limitation (§19.19). The dash pattern
 in particular is a guess at a few kilometres of screen length and may want
 tuning by eye.
+
+### 19.23 Night at the wrong scale
+
+Phone turned night on at z10 and got a milky fog over every label; the same
+layer at z2.9 looked right (defect #23). Reasoning in D73. **4 tests**.
+
+**The measurement that decided it**, texture texels against screen pixels at
+40 degrees north:
+
+| zoom | screen px per texel |
+|---|---|
+| 2 | 0.7 |
+| 4 | 2.6 |
+| 5 | 5.2 |
+| 7 | 20.9 |
+| 10 | **167** |
+
+The lights texture is 9.8 km per texel and no texture fixes that at street
+scale. The tests pin full strength out to z4, zero from z7, a smooth monotonic
+dissolve between, and that above z7 the layer **skips drawing entirely** rather
+than drawing at zero alpha - a whole-world mesh rasterised to contribute
+nothing is still rasterised.
+
+The readout now prints the fade, so `on · globe frame · 1 draw · fade 0.42`
+says both that it is working and how much of it is being drawn.

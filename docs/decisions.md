@@ -3425,3 +3425,42 @@ or a marker sitting exactly on its last report — which is what a stale aircraf
 now does (D71), so as an aircraft goes stale the dashes shrink to nothing and
 the solid track is all that is left. That is the right picture: the estimate
 disappears when we stop making one.
+
+---
+
+## D73 — Night bows out where its texture stops being lights
+
+**Decision:** the terminator fades to nothing between z4 and z7, and is skipped
+entirely above z7.
+
+Phone turned night on and reported that at z10 it "covered up in faint vision
+all names and that side" — a milky fog over the whole of New Jersey. At
+planetary zoom the same layer looked right.
+
+**Measured rather than tuned.** The lights texture is 4096 x 2048 for the whole
+planet: **9.8 km per texel**. Against the screen at 40 degrees north:
+
+| zoom | screen pixels per texel |
+|---|---|
+| 2 | 0.7 |
+| 4 | 2.6 |
+| 5 | 5.2 |
+| 7 | 20.9 |
+| 10 | **167** |
+
+At z10 one texel spans a sixth of the screen. What is drawn there is not city
+lights, it is a single smeared blob of them at 0.85 opacity over the map — and
+0.85 of a bright texel is a *pale* wash, not a dark one, which is why it read
+as fog rather than as night.
+
+**No texture fixes this.** A street-scale night side would need per-building
+light data, not a bigger image. So the layer withdraws: night is a planetary
+phenomenon drawn at planetary zooms, and by the time the map is showing streets
+the map is what the user came for. It dissolves over three zoom levels rather
+than switching, so it does not blink off mid-gesture, and above z7 the mesh is
+not drawn at all rather than drawn at zero alpha — no point rasterising a
+whole-world mesh to contribute nothing.
+
+This is the same shape of argument as D53, which set the globe-to-city hand-off
+by measuring texels per screen pixel rather than by taste, and the same lesson
+as D49: a thing that looks right at one scale is not thereby right at another.
