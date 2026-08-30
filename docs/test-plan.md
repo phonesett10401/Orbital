@@ -227,6 +227,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 33 | **The panel said the same thing twice** - registration and aircraft type had labelled rows of their own *and* came back four rows later from the generic `meta` renderer, so one fact read as two | Low, visual | Reading the live panel while verifying the scheduled route (§19.38) | Fixed |
 | 32 | **Two of every five aircraft drawn were ghosts** — the 30-minute eviction window was set for a 300-second poll; with two feeds sweeping every 60 s it kept aircraft nobody had reported for half an hour, drawn frozen and faded | Medium, visual | Phone: two crops of the same aircraft, one bright and one pale (D86, §19.36) | Fixed |
 | 31 | **A single global circle left a quarter of the world unswept** — 6,000 nm is about 100 degrees of arc, so Australia, New Zealand and the south Pacific were refreshed only when OpenSky carried them; their aircraft sat frozen and faded | **High** | Phone: "the planes are stuck for 2-3 minutes" (D85, §19.35) | Fixed |
 | 30 | **The map froze, and worse the further you zoomed in** — the union replayed its whole cached OpenSky snapshot on every viewport poll, so positions stopped advancing (frozen and faded by D71) and every aircraft outside the viewport was overwritten by a copy up to five minutes old | **High** | Phone: "the planes are not moving" (D84, §19.34) | Fixed |
@@ -2591,3 +2592,24 @@ each, flaky offline, rude to a service that charges nothing. `create_app` now
 takes an injectable lookup and `conftest.offline_routes()` answers the real 404
 from a `MockTransport`. The detail tests went from 0.6 s to 0.01 s, which is
 how the calls were noticed at all.
+
+### 19.39 The panel said the same thing twice
+
+Four tests in `frontend/src/components/panelFields.test.ts` (defect #33).
+
+`meta` is rendered generically so a provider can add a field without a frontend
+change (D4). Then adsb.lol's registration and aircraft type were given proper
+labelled rows (D83), and `headingSource` / `velocitySource` were printed beside
+the numbers they qualify (D80, D81) - without either change removing anything
+from the generic list. JAL18's panel showed "Registration JA866J" and then
+"Registration JA866J" again four rows down, which reads as a data fault rather
+than a display one.
+
+**The test that matters is the third one**, which asserts an unrecognised key
+still gets a row. A filter like this invites being used to hide anything
+untidy, and doing that would quietly undo the reason the generic renderer
+exists. The list is allowed to name only keys the panel renders somewhere else.
+
+Found by reading the rendered panel in the live app, not by any assertion - the
+same way defects #22, #23, #26 and #28 were found. Nothing was wrong with the
+data, the types, or any test.

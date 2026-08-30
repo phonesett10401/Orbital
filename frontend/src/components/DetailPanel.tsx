@@ -30,6 +30,7 @@ import { STALE_AFTER_SECONDS } from '../globe/interpolate';
 
 import { useAirline } from '../airlines';
 import type { Airport } from '../types';
+import { generalMetaRows } from './panelFields';
 import { legLabel, summariseRoute } from './routeSummary';
 import { useOrbitalStore } from '../state/store';
 
@@ -213,7 +214,13 @@ export function DetailPanel() {
             {detail.lat.toFixed(3)}, {detail.lon.toFixed(3)}
           </dd>
         </div>
-        {Object.entries(detail.meta).map(([key, value]) => (
+        {/*
+          Everything the panel has not already shown. Registration and type
+          have labelled rows above, and the two `*Source` keys are printed
+          beside the numbers they qualify - rendered again here they read as
+          separate facts (defect #33).
+        */}
+        {generalMetaRows(detail.meta).map(([key, value]) => (
           <div key={key}>
             <dt>{formatMetaKey(key)}</dt>
             <dd>{value}</dd>
