@@ -95,9 +95,24 @@ function object(overrides: Partial<RenderableObject> = {}): RenderableObject {
 
 const bareStyle: StyleSpecification = {
   version: 8,
-  sources: { openmaptiles: { type: 'vector', url: 'https://example.invalid/planet' } },
+  sources: {
+    openmaptiles: { type: 'vector', url: 'https://example.invalid/planet' },
+    // Liberty ships a shaded-relief raster, and the fixture has to have one
+    // too: without it the test asserting that we drop it could not fail
+    // (defect #26, and the D63 rule about tests that cannot come out the other
+    // way).
+    ne2_shaded: { type: 'raster', tiles: ['https://example.invalid/{z}/{x}/{y}.png'], tileSize: 256 },
+  },
   layers: [
     { id: 'background', type: 'background', paint: { 'background-color': '#f8f4f0' } },
+    {
+      id: 'natural_earth',
+      type: 'raster',
+      source: 'ne2_shaded',
+      paint: {
+        'raster-opacity': ['interpolate', ['exponential', 1.5], ['zoom'], 0, 0.6, 6, 0.1],
+      },
+    },
     { id: 'water', type: 'fill', source: 'openmaptiles', 'source-layer': 'water' },
     { id: 'road', type: 'line', source: 'openmaptiles', 'source-layer': 'transportation' },
     { id: 'place', type: 'symbol', source: 'openmaptiles', 'source-layer': 'place' },
@@ -139,6 +154,15 @@ describe('withImagery', () => {
     expect(ids.slice(2)).toEqual(style.layers.slice(2).map((l) => l.id));
     expect(ids).toContain('road');
     expect(ids).toContain('building-3d');
+  });
+
+  it('drops the relief raster the basemap ships, which would paint over the imagery', () => {
+    // Liberty's second layer is Natural Earth shaded relief at 0.6 opacity.
+    // Kept, it draws a pale wash over the satellite photograph - obvious over
+    // the ocean, where nothing else covers it (defect #26). The only rasters in
+    // the finished style are the two this file adds.
+    const rasters = style.layers.filter((l) => l.type === 'raster').map((l) => l.id);
+    expect(rasters).toEqual(['orbital-imagery-far', 'orbital-imagery-near']);
   });
 
   it('keeps the background and the fills, switched off rather than deleted', () => {

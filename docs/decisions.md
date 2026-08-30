@@ -3602,3 +3602,38 @@ what the hand-written fixture did not.
 validator, MapLibre's `MercatorCoordinate`, `globe.gl`'s own screen
 projection — ask it. Asserting our own output against our own expectations
 tests the transcription and nothing else.
+
+---
+
+## D77 — The basemap's own raster is ground, and we already have ground
+
+**Decision:** `withImagery` drops every `raster` layer the vector style ships,
+keeping only the two imagery layers this file adds.
+
+Phone: *"this original mode water seem wrong and unlike before"* — the oceans
+had turned a flat grey-lavender while the land still looked like a photograph.
+
+Liberty's **second layer** is `natural_earth`, a Natural Earth shaded-relief
+raster at `interpolate(zoom, 0 → 0.6, 6 → 0.1)` opacity. While the build kept
+only lines, symbols and extrusions it was discarded silently. D75 changed the
+rule to "keep everything and switch it with expressions", and that quietly
+promoted a whole second basemap image to drawing **over** our satellite
+imagery — 60% opacity of a pale relief map at z2, which is precisely the wash
+in the screenshot. It shows on water because water is where nothing else covers
+it.
+
+**Why dropped rather than gated.** The fills and the background are switched
+off by a paint expression, and that works because their opacity is a constant
+we can replace. This raster's opacity is *someone else's zoom curve*, so gating
+it would mean reaching inside their expression and rewriting its outputs — the
+exact operation that broke the whole style one commit earlier (D76). Dropping
+it costs the flat map some relief shading that ride-hailing maps do not have
+anyway, and saves fetching a second raster source in **both** modes.
+
+**The fixture had to change before the test meant anything.** The hand-written
+style in `planet.test.ts` had no raster layer, so a test asserting "we drop the
+basemap's raster" passed against a style that never had one. It now carries
+Liberty's shape — relief raster, zoom-curve opacity, its own source — and the
+assertion was checked by reverting the filter and watching it fail. Three
+defects in three commits have now come from the fixture being simpler than the
+real style; that is worth more attention than any of the individual fixes.

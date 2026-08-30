@@ -230,7 +230,19 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
   // the imagery-only build used to discard: they are the flat basemap, and
   // they are switched on and off by paint expressions rather than by being
   // present or absent (D75).
-  const cartography = style.layers.map(styleForImagery);
+  //
+  // **Except the basemap's own raster.** Liberty's second layer is Natural
+  // Earth shaded relief at 0.6 opacity, and keeping it drew a pale grey wash
+  // over our satellite imagery - most visibly over the ocean, which is where
+  // there is nothing else to hide it (defect #26). It is ground, like the
+  // fills, but unlike them it cannot simply be switched off by opacity: its
+  // own opacity is a zoom curve, so gating it would mean rewriting someone
+  // else's expression from the inside. Dropping it costs the flat map some
+  // relief shading that ride-hailing maps do not have anyway, and saves
+  // fetching a second raster source in both modes.
+  const cartography = style.layers
+    .filter((layer) => layer.type !== 'raster')
+    .map(styleForImagery);
 
   const far: LayerSpecification = {
     id: 'orbital-imagery-far',
