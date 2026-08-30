@@ -38,7 +38,7 @@
  * that produced the cream screen.
  */
 
-import type { LayerSpecification, StyleSpecification } from 'maplibre-gl';
+import type { ExpressionSpecification, LayerSpecification, StyleSpecification } from 'maplibre-gl';
 
 import { config } from '../config';
 
@@ -72,6 +72,50 @@ export const CLOSE_IMAGERY_ATTRIBUTION =
  * colour an area — water blue, parks green, everything else cream — which is
  * exactly what imagery is there to do, and better.
  */
+/**
+ * The two looks, and the state property that chooses between them.
+ *
+ * `imagery` is a photograph of the ground with cartography drawn over it.
+ * `flat` is the vector basemap on its own - land, water, parks and buildings
+ * drawn as areas - which is the look every ride-hailing app uses, and which
+ * Liberty already contains: **16 fill layers and a background** that the
+ * imagery build discards.
+ *
+ * ## One style, not two
+ *
+ * The switch is a MapLibre **global state** property, read by `global-state`
+ * expressions in the paint of every layer. The alternative was `setStyle` with
+ * a second stylesheet, and that would mean tearing down and re-adding the
+ * aircraft, their tracks, the leader, the model and the terminator on every
+ * toggle - five layers, three sources, two custom layers and a texture, all
+ * re-created at the moment the user is watching. One style whose colours are
+ * expressions has none of that: `setGlobalStateProperty` and the next frame is
+ * the other map.
+ *
+ * It also means the flat mode costs **no extra network**. The fills come from
+ * the vector tiles already being fetched for the roads and labels; only the
+ * imagery requests stop.
+ */
+export const BASEMAP_STATE = 'basemap';
+export const BASEMAP_IMAGERY = 'imagery';
+export const BASEMAP_FLAT = 'flat';
+
+/**
+ * `flat` when the vector basemap is showing, `imagery` when the photograph is.
+ *
+ * Every colour in this file goes through here, so no layer can end up styled
+ * for one mode and drawn in the other.
+ */
+export function whenFlat<T>(flat: T, imagery: T): ExpressionSpecification {
+  return [
+    'match',
+    ['global-state', BASEMAP_STATE],
+    BASEMAP_FLAT,
+    flat,
+    imagery,
+  ] as unknown as ExpressionSpecification;
+}
+
 export const KEPT_LAYER_TYPES = new Set(['line', 'symbol', 'fill-extrusion']);
 
 /**
@@ -93,28 +137,34 @@ export function styleForImagery(layer: LayerSpecification): LayerSpecification {
       ...layer,
       paint: {
         ...layer.paint,
-        'text-color': '#ffffff',
-        'text-halo-color': 'rgba(0, 0, 0, 0.85)',
-        'text-halo-width': 1.6,
-        'icon-halo-color': 'rgba(0, 0, 0, 0.85)',
+        // White on a dark halo over a photograph; near-black on a light halo
+        // over a pale basemap. Each is unreadable on the other background.
+        'text-color': whenFlat('#39404d', '#ffffff'),
+        'text-halo-color': whenFlat('rgba(255, 255, 255, 0.9)', 'rgba(0, 0, 0, 0.85)'),
+        'text-halo-width': whenFlat(1.2, 1.6),
+        'icon-halo-color': whenFlat('rgba(255, 255, 255, 0.9)', 'rgba(0, 0, 0, 0.85)'),
         'icon-halo-width': 1.2,
       },
-    };
+    } as LayerSpecification;
   }
 
   if (layer.type === 'line') {
     // Casings are the wider line drawn under a road to outline it. Over
     // imagery they are what makes a road legible at all, so they go dark and
-    // the road itself stays bright.
+    // the road itself stays bright. Over the flat basemap the relationship
+    // inverts: white roads, a pale grey casing, which is the look every
+    // ride-hailing map uses because the ground behind it is already light.
     const isCasing = /casing|outline/.test(layer.id);
     return {
       ...layer,
       paint: {
         ...layer.paint,
-        'line-color': isCasing ? 'rgba(0, 0, 0, 0.55)' : 'rgba(255, 255, 255, 0.9)',
-        'line-opacity': isCasing ? 0.85 : 0.95,
+        'line-color': isCasing
+          ? whenFlat('#dfe4ec', 'rgba(0, 0, 0, 0.55)')
+          : whenFlat('#ffffff', 'rgba(255, 255, 255, 0.9)'),
+        'line-opacity': isCasing ? whenFlat(1, 0.85) : whenFlat(1, 0.95),
       },
-    };
+    } as LayerSpecification;
   }
 
   if (layer.type === 'fill-extrusion') {
@@ -122,15 +172,50 @@ export function styleForImagery(layer: LayerSpecification): LayerSpecification {
       ...layer,
       paint: {
         ...layer.paint,
-        'fill-extrusion-color': '#d7dee8',
-        // Translucent so the building reads as a volume over its own footprint
-        // in the photograph rather than replacing it.
-        'fill-extrusion-opacity': 0.6,
+        'fill-extrusion-color': whenFlat('#e3e7ee', '#d7dee8'),
+        // Translucent over imagery so the building reads as a volume over its
+        // own footprint in the photograph rather than replacing it. Opaque on
+        // the flat map, where there is no photograph to preserve.
+        'fill-extrusion-opacity': whenFlat(0.95, 0.6),
       },
-    };
+    } as LayerSpecification;
+  }
+
+  // Fills and the background are Liberty's own palette, kept as authored -
+  // that palette *is* the flat map, and it is the one part of this style
+  // nobody here can draw better than its authors. They are simply switched
+  // off when a photograph is doing their job.
+  if (layer.type === 'fill') {
+    return {
+      ...layer,
+      paint: { ...layer.paint, 'fill-opacity': whenFlat(fillOpacityOf(layer), 0) },
+    } as LayerSpecification;
+  }
+
+  if (layer.type === 'background') {
+    return {
+      ...layer,
+      paint: { ...layer.paint, 'background-opacity': whenFlat(1, 0) },
+    } as LayerSpecification;
   }
 
   return layer;
+}
+
+/**
+ * Liberty's own opacity for a fill layer, or 1.
+ *
+ * Read back rather than overwritten with 1: several of its fills are
+ * deliberately semi-transparent - hillshade-like landcover, park washes - and
+ * flattening them all to opaque would be a different map, not a restyled one.
+ * Only expressions are dropped, because a `match` cannot switch between an
+ * expression and a number, and the layers that use one are not the ones whose
+ * transparency carries meaning.
+ */
+function fillOpacityOf(layer: LayerSpecification): number {
+  const paint = (layer as { paint?: Record<string, unknown> }).paint;
+  const opacity = paint?.['fill-opacity'];
+  return typeof opacity === 'number' ? opacity : 1;
 }
 
 /**
@@ -141,15 +226,17 @@ export function styleForImagery(layer: LayerSpecification): LayerSpecification {
  * a label, how buildings extrude — survives this filter intact.
  */
 export function withImagery(style: StyleSpecification): StyleSpecification {
-  const cartography = style.layers
-    .filter((layer) => KEPT_LAYER_TYPES.has(layer.type))
-    .map(styleForImagery);
+  // Every layer is kept now, including the 16 fills and the background that
+  // the imagery-only build used to discard: they are the flat basemap, and
+  // they are switched on and off by paint expressions rather than by being
+  // present or absent (D75).
+  const cartography = style.layers.map(styleForImagery);
 
   const far: LayerSpecification = {
     id: 'orbital-imagery-far',
     type: 'raster',
     source: 'orbital-imagery-far',
-    paint: { 'raster-opacity': 1 },
+    paint: { 'raster-opacity': whenFlat(0, 1) },
   };
 
   const near: LayerSpecification = {
@@ -159,14 +246,20 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
     paint: {
       // Fades in over the far tier rather than replacing it, so the seam is a
       // dissolve between two photographs of the same ground rather than a cut.
+      // The crossfade between the two photographs, multiplied by whether a
+      // photograph is being shown at all.
       'raster-opacity': [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        IMAGERY_CROSSFADE_START,
-        0,
-        IMAGERY_CROSSFADE_END,
-        1,
+        '*',
+        [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          IMAGERY_CROSSFADE_START,
+          0,
+          IMAGERY_CROSSFADE_END,
+          1,
+        ],
+        whenFlat(0, 1),
       ],
     },
   };

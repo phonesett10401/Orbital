@@ -146,6 +146,18 @@ export const config = {
   terminator: str(import.meta.env.VITE_TERMINATOR, 'off') !== 'off',
 
   /**
+   * Which basemap the planet view starts on.
+   *
+   * `imagery` is the satellite photograph with cartography over it; `flat` is
+   * the vector basemap on its own, the look every ride-hailing app uses.
+   * Imagery by default because it is what makes an aircraft tracker read as
+   * one - a flight over a photograph of the ground is the picture the app is
+   * for - and the flat map is a button away for anyone who wants to read the
+   * map rather than look at it (D75).
+   */
+  basemap: str(import.meta.env.VITE_BASEMAP, 'imagery') === 'flat' ? 'flat' : 'imagery',
+
+  /**
    * Opacity of the night side at its darkest.
    *
    * 0.85 is not a taste: it leaves 15% of the imagery showing through, which

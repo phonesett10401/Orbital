@@ -3499,3 +3499,65 @@ every symbol layer after the insertion point, no raster or line after it.
 
 A style with no labels at all returns null and the layer goes on top, which is
 the previous behaviour and better than throwing on a name that is not there.
+
+---
+
+## D75 — Two maps in one style, switched by a state property
+
+**Decision:** the planet view offers a **flat vector basemap** beside the
+satellite one — the look every ride-hailing app uses — and switches between
+them with a MapLibre global-state property rather than by swapping stylesheets.
+
+Phone asked whether the view could look like Grab, Bolt or Uber. It is the
+easier of the two directions, because the flat map was already being fetched
+and thrown away: Liberty is 111 layers, and `withImagery` was keeping 93 of
+them and discarding **16 fills and a background** — which are precisely the
+land, water, parks and landuse that make a flat map a map.
+
+### One style, not two
+
+The obvious implementation is a second stylesheet and `setStyle`. That would
+tear down and re-add the aircraft layer, the callsign layer, the route, the
+leader, the model and the terminator — five layers, three sources, two custom
+layers and a texture — at the exact moment the user is watching, and every one
+of those re-additions is a chance to reintroduce a race this project has
+already paid for once (D65's route seeding).
+
+Instead every colour in the style is a two-armed `match` on a global-state
+property, and the toggle is one call to `setGlobalStateProperty`. Nothing is
+added, removed or re-created; the next frame is simply the other map.
+
+It also costs **no extra network**. The fills come from the vector tiles
+already being fetched for the roads and the labels. Flat mode strictly
+*reduces* traffic, because the GIBS and Esri rasters stop being requested —
+which makes it the faster mode to demonstrate on a bad connection.
+
+### The palettes invert, and that is the whole point
+
+| | Over imagery | Over the flat map |
+|---|---|---|
+| Labels | white on a dark halo | near-black on a light halo |
+| Roads | bright white, dark casing | white, pale grey casing |
+| Buildings | translucent, so the roof shows through | opaque; there is no photograph to preserve |
+| Fills and background | invisible | Liberty's own palette, as authored |
+
+Each of those is unreadable in the other mode, which is the argument D59 made
+for the imagery styling in the first place — it is just that there are now two
+backgrounds to be legible against rather than one.
+
+**The fills keep Liberty's colours deliberately.** That palette *is* the flat
+map and its authors are cartographers; the only thing done to them here is
+switching them off when a photograph is doing their job. Their own opacities
+are read back rather than overwritten, so the deliberately semi-transparent
+landcover washes stay semi-transparent.
+
+### Imagery stays the default
+
+A flight drawn over a photograph of the ground is the picture this application
+is *for*. The plain map is a button away for anyone who would rather read the
+map than look at it, and `VITE_BASEMAP=flat` starts there.
+
+**The tests assert appearance, not encoding.** A helper reads one arm of each
+expression, so a test says which map it is asking about. Asserting the raw
+`match` array would pin the encoding and would pass just as happily with the
+two arms swapped.

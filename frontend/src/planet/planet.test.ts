@@ -42,7 +42,12 @@ import {
   styleForImagery,
   withImagery,
   firstLabelLayerId,
+  BASEMAP_FLAT,
+  BASEMAP_IMAGERY,
+  BASEMAP_STATE,
+  whenFlat,
 } from './basemap';
+import { createBasemapControl } from './basemapControl';
 import { isRenderable, unrenderableMessage, whenRenderable } from './container';
 import { readoutLines, requestCounts, tileUrlFor, vectorSourceState } from './diagnostics';
 import { boundsToBBox, coversWholeWorld, wrapLongitude } from './viewport';
@@ -106,6 +111,20 @@ const bareStyle: StyleSpecification = {
   glyphs: 'https://example.invalid/{fontstack}/{range}.pbf',
 };
 
+/**
+ * Read one arm of a `whenFlat` expression.
+ *
+ * Every colour in the style is now a two-armed `match` on the basemap state,
+ * so a test that wants to know what a layer looks like has to say *which map*
+ * it is asking about. Asserting the raw expression instead would pin the
+ * encoding rather than the appearance, and would pass just as happily with the
+ * two arms swapped (D75).
+ */
+function forMode(value: unknown, mode: 'flat' | 'imagery'): unknown {
+  if (!Array.isArray(value) || value[0] !== 'match') return value;
+  return mode === 'flat' ? value[3] : value[4];
+}
+
 describe('withImagery', () => {
   const style = withImagery(bareStyle);
 
@@ -115,37 +134,49 @@ describe('withImagery', () => {
 
   it('makes imagery the ground and puts cartography over it', () => {
     const ids = style.layers.map((layer) => layer.id);
-    expect(ids).toEqual([
-      'orbital-imagery-far',
-      'orbital-imagery-near',
-      'road',
-      'place',
-      'building-3d',
-    ]);
+    expect(ids.slice(0, 2)).toEqual(['orbital-imagery-far', 'orbital-imagery-near']);
+    // Everything the basemap brought, in the order its authors chose.
+    expect(ids.slice(2)).toEqual(style.layers.slice(2).map((l) => l.id));
+    expect(ids).toContain('road');
+    expect(ids).toContain('building-3d');
   });
 
-  it('drops the background and every area fill', () => {
-    // This is the defect it exists for. A fill's job is to colour ground, and
-    // the basemap's background is #f8f4f0 -- so under the old ordering,
-    // zooming anywhere without roads faded real imagery out into a cream
-    // screen (D56).
+  it('keeps the background and the fills, switched off rather than deleted', () => {
+    // They used to be dropped, and dropping them was right while there was
+    // only one look: a fill's job is to colour ground, and the basemap's cream
+    // background faded real imagery into a blank screen (D56). They are the
+    // flat basemap, so they are now kept and their opacity is an expression
+    // that is zero while a photograph is showing (D75).
     const types = style.layers.map((layer) => layer.type);
-    expect(types).not.toContain('background');
-    expect(types).not.toContain('fill');
+    expect(types).toContain('background');
+    expect(types).toContain('fill');
+
+    const background = style.layers.find((l) => l.type === 'background');
+    expect((background as { paint: Record<string, unknown> }).paint['background-opacity']).toEqual(
+      whenFlat(1, 0),
+    );
+    const fill = style.layers.find((l) => l.type === 'fill');
+    expect((fill as { paint: Record<string, unknown> }).paint['fill-opacity']).toEqual(
+      whenFlat(1, 0),
+    );
+  });
+
+  it('turns the imagery off in the other direction', () => {
+    // The switch has to cut both ways, or flat mode is a photograph with
+    // cartography drawn twice over it.
+    const far = style.layers.find((l) => l.id === 'orbital-imagery-far');
+    expect(asRaster(far!).paint?.['raster-opacity']).toEqual(whenFlat(0, 1));
   });
 
   it('crossfades the close imagery in over the far one', () => {
     // A dissolve between two photographs of the same ground, rather than a cut
     // between a photograph and a colour.
     const near = style.layers.find((l) => l.id === 'orbital-imagery-near');
+    // The crossfade, multiplied by whether a photograph is being shown at all.
     expect(asRaster(near!).paint?.['raster-opacity']).toEqual([
-      'interpolate',
-      ['linear'],
-      ['zoom'],
-      IMAGERY_CROSSFADE_START,
-      0,
-      IMAGERY_CROSSFADE_END,
-      1,
+      '*',
+      ['interpolate', ['linear'], ['zoom'], IMAGERY_CROSSFADE_START, 0, IMAGERY_CROSSFADE_END, 1],
+      whenFlat(0, 1),
     ]);
     // Fully arrived before the far tier runs out of tiles of its own.
     expect(IMAGERY_CROSSFADE_END).toBeLessThanOrEqual(IMAGERY_FAR_MAX_ZOOM);
@@ -190,11 +221,20 @@ describe('withImagery', () => {
   });
 
   it('survives a style with nothing but fills', () => {
+    // They are kept now rather than dropped (D75), so what "survives" means
+    // is that they are drawn at zero opacity under a photograph, not that they
+    // are gone.
     const fillsOnly = withImagery({ ...bareStyle, layers: bareStyle.layers.slice(0, 2) });
-    expect(fillsOnly.layers.map((l) => l.id)).toEqual([
+    expect(fillsOnly.layers.slice(0, 2).map((l) => l.id)).toEqual([
       'orbital-imagery-far',
       'orbital-imagery-near',
     ]);
+    for (const layer of fillsOnly.layers.slice(2)) {
+      const paint = (layer as { paint: Record<string, unknown> }).paint;
+      const opacity = paint[layer.type === 'background' ? 'background-opacity' : 'fill-opacity'];
+      expect(forMode(opacity, 'imagery')).toBe(0);
+      expect(forMode(opacity, 'flat')).toBe(1);
+    }
   });
 });
 
@@ -549,8 +589,12 @@ describe('styling cartography for imagery', () => {
     });
     expect(styled.type).toBe('symbol');
     const paint = (styled as { paint: Record<string, unknown> }).paint;
-    expect(paint['text-color']).toBe('#ffffff');
-    expect(String(paint['text-halo-color'])).toContain('0, 0, 0');
+    expect(forMode(paint['text-color'], 'imagery')).toBe('#ffffff');
+    expect(String(forMode(paint['text-halo-color'], 'imagery'))).toContain('0, 0, 0');
+    // And the other way round on the flat map, where the ground is pale: dark
+    // text on a light halo. Each is unreadable over the other background.
+    expect(String(forMode(paint['text-color'], 'flat'))).not.toBe('#ffffff');
+    expect(String(forMode(paint['text-halo-color'], 'flat'))).toContain('255, 255, 255');
   });
 
   it('darkens road casings and brightens the roads themselves', () => {
@@ -607,7 +651,11 @@ describe('styling cartography for imagery', () => {
       paint: { 'fill-extrusion-height': 10 },
     });
     const paint = (styled as { paint: Record<string, unknown> }).paint;
-    expect(paint['fill-extrusion-opacity']).toBeLessThan(1);
+    expect(forMode(paint['fill-extrusion-opacity'], 'imagery')).toBeLessThan(1);
+    // Opaque on the flat map: there is no photograph underneath to preserve.
+    expect(forMode(paint['fill-extrusion-opacity'], 'flat')).toBeGreaterThan(
+      forMode(paint['fill-extrusion-opacity'], 'imagery') as number,
+    );
     expect(paint['fill-extrusion-height']).toBe(10);
   });
 });
@@ -786,5 +834,61 @@ describe('firstLabelLayerId', () => {
     expect(firstLabelLayerId({ layers: [] })).toBeNull();
     expect(firstLabelLayerId(null)).toBeNull();
     expect(firstLabelLayerId(undefined)).toBeNull();
+  });
+});
+
+describe('the basemap switch', () => {
+  it('reads one state property, so nothing can be styled for the wrong map', () => {
+    // Every colour in the style goes through `whenFlat`, and they all read the
+    // same property. A layer keyed on something else would look right in one
+    // mode and wrong in the other with nothing to catch it.
+    const expression = whenFlat('A', 'B') as unknown[];
+    expect(expression[0]).toBe('match');
+    expect(expression[1]).toEqual(['global-state', BASEMAP_STATE]);
+    expect(expression[2]).toBe(BASEMAP_FLAT);
+    expect(expression[3]).toBe('A');
+    expect(expression[4]).toBe('B');
+  });
+
+  it('is a switch, not a style swap', () => {
+    // The point of doing it this way: `setStyle` would tear down and re-add
+    // the aircraft, their tracks, the leader, the model and the terminator on
+    // every press. This is one property, and the next frame is the other map.
+    expect(BASEMAP_IMAGERY).not.toBe(BASEMAP_FLAT);
+  });
+});
+
+describe('the basemap control', () => {
+  it('offers the map you are not looking at', () => {
+    // A button labelled with its current state reads as a status line and gets
+    // pressed by someone trying to confirm what they see (D68).
+    const onImagery = createBasemapControl(() => {}, false);
+    expect(onImagery.button.title).toBe('Show the plain map');
+    expect(onImagery.button.getAttribute('aria-pressed')).toBe('false');
+
+    const onFlat = createBasemapControl(() => {}, true);
+    expect(onFlat.button.title).toBe('Show satellite imagery');
+    expect(onFlat.button.classList.contains('is-on')).toBe(true);
+  });
+
+  it('reports each change once', () => {
+    const changes: boolean[] = [];
+    const control = createBasemapControl((flat) => changes.push(flat), false);
+    control.button.click();
+    control.button.click();
+    expect(changes).toEqual([true, false]);
+  });
+
+  it('can be told about a change it did not cause', () => {
+    const control = createBasemapControl(() => {}, false);
+    control.setFlat(true);
+    expect(control.button.title).toBe('Show satellite imagery');
+  });
+
+  it('hands MapLibre a control group to place', () => {
+    const control = createBasemapControl(() => {}, false);
+    const element = control.onAdd({} as import('maplibre-gl').Map);
+    expect(element.className).toContain('maplibregl-ctrl-group');
+    expect(element.contains(control.button)).toBe(true);
   });
 });

@@ -32,7 +32,14 @@ import {
   hitsAt,
   selectionFromHits,
 } from './aircraftLayer';
-import { firstLabelLayerId, loadPlanetStyle } from './basemap';
+import {
+  BASEMAP_FLAT,
+  BASEMAP_IMAGERY,
+  BASEMAP_STATE,
+  firstLabelLayerId,
+  loadPlanetStyle,
+} from './basemap';
+import { createBasemapControl } from './basemapControl';
 import { createModelLayer, modelTarget } from './modelLayer';
 import { createTerminatorControl } from './terminatorControl';
 import { createTerminatorLayer } from './terminatorLayer';
@@ -152,6 +159,14 @@ export function PlanetView() {
           window.clearTimeout(stallTimer);
           setStalled(false);
 
+          // Which of the two looks the style's expressions resolve to. Set
+          // before anything else is added, so the first frame is already the
+          // right map rather than the imagery flashing up and being switched.
+          map.setGlobalStateProperty(
+            BASEMAP_STATE,
+            config.basemap === 'flat' ? BASEMAP_FLAT : BASEMAP_IMAGERY,
+          );
+
           // SDF, so one silhouette can be tinted per aircraft by altitude rather
           // than baking an image per colour (D28).
           for (const [id, canvas] of [
@@ -178,6 +193,14 @@ export function PlanetView() {
             strength: config.terminatorStrength,
           });
           map.addLayer(terminator, firstLabelLayerId(map.getStyle()) ?? undefined);
+
+          // Satellite or plain map. Above the night toggle in the corner
+          // because it changes more of the screen than night does.
+          const basemapControl = createBasemapControl((flat) => {
+            map?.setGlobalStateProperty(BASEMAP_STATE, flat ? BASEMAP_FLAT : BASEMAP_IMAGERY);
+            map?.triggerRepaint();
+          }, config.basemap === 'flat');
+          map.addControl(basemapControl, 'top-right');
 
           const control = createTerminatorControl((enabled) => {
             terminator?.setEnabled(enabled);

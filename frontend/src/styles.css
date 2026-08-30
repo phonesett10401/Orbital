@@ -712,3 +712,32 @@ body {
   transform: translateX(-50%);
   border-color: rgba(255, 217, 138, 0.35);
 }
+
+/*
+ * The basemap toggle, sharing the night toggle's rules.
+ *
+ * Both are `.maplibregl-ctrl` buttons over a map that may be a night-time
+ * photograph, so both carry their own dark background rather than inheriting
+ * MapLibre's light-basemap styling (defect #19).
+ */
+.app .maplibregl-ctrl button.orbital-basemap-toggle {
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
+  line-height: 1;
+  color: #cfe3ff;
+  background: rgba(12, 14, 20, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.app .maplibregl-ctrl button.orbital-basemap-toggle:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.app .maplibregl-ctrl-group button.orbital-basemap-toggle.is-on {
+  background: rgba(207, 227, 255, 0.16);
+  border-color: rgba(207, 227, 255, 0.5);
+}

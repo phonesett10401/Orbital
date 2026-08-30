@@ -93,13 +93,13 @@ cd frontend && npm test
 | `labels.test.ts` | 42 | **Altitude tiers, the horizon and frustum tests, collision and caps** |
 | `airlines.test.ts` | 21 | **The callsign decode rule, the id guard, one-shot table loading** |
 | `cityMode.test.ts` | 19 | **Scale matching across the renderer hand-off, hysteresis, lazy loading, aircraft** |
-| `planet.test.ts` | 57 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
+| `planet.test.ts` | 64 | **The MapLibre style and source resolution, cartography over imagery, aircraft as GeoJSON, bounds, diagnostics, container sizing** |
 | `route.test.ts` (planet) | 19 | **Great-circle densification, antimeridian unwrapping, the casing** |
 | `status.test.ts` | 13 | **Failure classification, the stall notice, one-answer selection, querying before the layers exist** |
 | `terminator.test.ts` | 33 | **The sun's direction, the night band, one grid in two projections, texture orientation, the wrapped draws, the toggle** |
 | `model.test.ts` | 38 | **Both projection frames, the sphere convention checked against MapLibre, handedness, horizon clipping, sizing, float32 precision** |
 | `test_etag.py` | 26 | **What goes into a validator, and the 304 path end to end** |
-| **Total** | **804** | 325 backend, 479 frontend |
+| **Total** | **811** | 325 backend, 486 frontend |
 
 ### What the automated suites do not cover
 
@@ -2107,3 +2107,34 @@ caught the thing that actually matters.
 The null case is covered too: a style with no labels puts the layer on top,
 which is the old behaviour and better than throwing on a name that is not
 there.
+
+### 19.25 A flat basemap beside the satellite one
+
+The look every ride-hailing app uses, offered beside the imagery and switched
+by a button. Reasoning in D75. **7 tests**, in `planet.test.ts`.
+
+The flat map was already being fetched and discarded: Liberty is 111 layers,
+`withImagery` kept 93 and dropped **16 fills and a background**. Those are now
+kept and switched off by a paint expression instead, so the two looks live in
+one style and the toggle is a single `setGlobalStateProperty` - no `setStyle`,
+so nothing tears down and re-adds the aircraft, route, leader, model and
+terminator on every press.
+
+**The tests ask about appearance, not encoding.** `forMode` reads one arm of
+each two-armed `match`, so an assertion names the map it is asking about.
+Asserting the raw expression would pin the encoding and pass just as happily
+with the arms swapped.
+
+| Checked | In both modes |
+|---|---|
+| Fills and background | invisible over imagery, Liberty's own palette on the flat map |
+| The imagery rasters | full opacity with the crossfade over imagery, zero on the flat map |
+| Labels | white on a dark halo over imagery; dark on a light halo on the flat map |
+| Buildings | translucent over a photograph, more opaque without one |
+| The switch itself | one `global-state` property, read by every layer |
+| The control | offers the map you are *not* looking at, reports each change once |
+
+**Not verified: how the flat palette looks.** Standing limitation (§19.19).
+Liberty's fills are used as authored, so the risk is low, but the road and
+label colours over them are ours and are the kind of thing D49 says to check
+against what they sit on.
