@@ -40,6 +40,7 @@ import {
   firstLabelLayerId,
   loadPlanetStyle,
 } from './basemap';
+import { AIRPORT_SOURCE, airportFeature, airportLayers } from './airportLayer';
 import { createBasemapControl } from './basemapControl';
 import {
   COVERAGE_HATCH_IMAGE,
@@ -280,6 +281,16 @@ export function PlanetView() {
           });
           for (const layer of coverageLayers()) map.addLayer(layer);
 
+          // The airport a search flew to, above the coverage annotation and
+          // below the aircraft: it is the answer to a question the user just
+          // asked, so nothing on the ground may hide it and no aircraft may be
+          // hidden by it.
+          map.addSource(AIRPORT_SOURCE, {
+            type: 'geojson',
+            data: airportFeature(useOrbitalStore.getState().focusedAirport),
+          });
+          for (const layer of airportLayers()) map.addLayer(layer);
+
           map.addSource(AIRCRAFT_SOURCE, {
             type: 'geojson',
             data: aircraftFeatures([], Date.now()),
@@ -381,8 +392,26 @@ export function PlanetView() {
           }
 
           // A search hit flies the camera, as it does on the globe.
+          if (state.focusedAirport !== previous.focusedAirport && map) {
+            const source = map.getSource(AIRPORT_SOURCE);
+            if (source && 'setData' in source) {
+              (source as { setData: (data: unknown) => void }).setData(
+                airportFeature(state.focusedAirport),
+              );
+            }
+          }
+
           if (state.flyTo !== previous.flyTo && state.flyTo && map) {
-            map.flyTo({ center: [state.flyTo.lon, state.flyTo.lat], zoom: 9, duration: 1600 });
+            // An aircraft keeps the old z9: it is a moving thing and its
+            // surroundings are not the point. An airport is a place, and the
+            // request carries a closer zoom so the runways are visible - the
+            // whole complaint about searching one was arriving somewhere
+            // indistinguishable from anywhere else.
+            map.flyTo({
+              center: [state.flyTo.lon, state.flyTo.lat],
+              zoom: state.flyTo.zoom ?? 9,
+              duration: 1600,
+            });
           }
         });
 

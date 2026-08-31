@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { AIRPORT_ZOOM } from '../planet/airportLayer';
 import { useOrbitalStore } from '../state/store';
 import type { Airport, TrackedObject } from '../types';
 import {
@@ -36,6 +37,7 @@ export function SearchBar() {
   const setSearchQuery = useOrbitalStore((s) => s.setSearchQuery);
   const select = useOrbitalStore((s) => s.select);
   const requestFlyTo = useOrbitalStore((s) => s.requestFlyTo);
+  const focusAirport = useOrbitalStore((s) => s.focusAirport);
 
   const [recent, setRecent] = useState<RecentSearch[]>([]);
   const [focused, setFocused] = useState(false);
@@ -61,8 +63,11 @@ export function SearchBar() {
 
   const chooseAirport = (airport: Airport) => {
     // No selection: an airport is not a tracked object, and pretending it were
-    // would open a detail panel with nothing honest to put in it.
-    requestFlyTo(airport.lat, airport.lon);
+    // would open a detail panel with nothing honest to put in it. It is marked
+    // instead - flying the camera to a coordinate and stopping tells you
+    // nothing about which patch of ground you were asking for.
+    focusAirport(airport);
+    requestFlyTo(airport.lat, airport.lon, AIRPORT_ZOOM);
     keep(airportEntry(airport));
     setSearchQuery('');
   };
@@ -71,7 +76,23 @@ export function SearchBar() {
     // An aircraft is re-selected by id where it is still tracked; its stored
     // position is minutes old by now and only worth using as a fallback.
     if (entry.kind === 'aircraft') select(entry.id);
-    requestFlyTo(entry.lat, entry.lon);
+    if (entry.kind === 'airport') {
+      // Rebuilt from what was stored rather than re-fetched: a recent entry
+      // holds everything the marker draws, and going back to the network to
+      // re-answer a question already answered would make a remembered search
+      // slower than a new one.
+      focusAirport({
+        icao: entry.id,
+        name: entry.sublabel,
+        municipality: entry.sublabel,
+        iata: entry.label === entry.id ? null : entry.label,
+        country: null,
+        lat: entry.lat,
+        lon: entry.lon,
+        distanceKm: null,
+      });
+    }
+    requestFlyTo(entry.lat, entry.lon, entry.kind === 'airport' ? AIRPORT_ZOOM : undefined);
     keep(entry);
     setSearchQuery('');
   };

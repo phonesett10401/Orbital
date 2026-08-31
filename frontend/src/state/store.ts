@@ -101,8 +101,18 @@ export interface OrbitalState {
   setViewport(bbox: BoundingBox | null): void;
 
   /** Camera target requested by a search hit, consumed by the globe. */
-  flyTo: { lat: number; lon: number; nonce: number } | null;
-  requestFlyTo(lat: number, lon: number): void;
+  flyTo: { lat: number; lon: number; nonce: number; zoom?: number } | null;
+  requestFlyTo(lat: number, lon: number, zoom?: number): void;
+
+  /**
+   * The airport a search just flew to, drawn and named until it is dismissed.
+   *
+   * Flying the camera somewhere is not an answer on its own: the motion ends
+   * over a patch of ground and nothing says which patch was asked for. This is
+   * what gets marked.
+   */
+  focusedAirport: Airport | null;
+  focusAirport(airport: Airport | null): void;
 }
 
 const initialFeed: FeedStatus = {
@@ -131,6 +141,7 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
       selectedDetail: null,
       searchResults: [],
       searchAirports: [],
+      focusedAirport: null,
     });
   },
 
@@ -140,7 +151,11 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
     if (id === get().selectedId) return;
     // Clear the old detail immediately so the panel never shows one aircraft's
     // track under another's callsign while the fetch is in flight.
-    set({ selectedId: id, selectedDetail: null });
+    //
+    // The focused airport goes with it. An aircraft and an airport are two
+    // answers to two different questions, and leaving both marked would say
+    // the map is showing you both when the camera can only be at one.
+    set({ selectedId: id, selectedDetail: null, focusedAirport: null });
   },
   setSelectedDetail(detail) {
     // Ignore a response that arrived after the user moved on.
@@ -202,10 +217,15 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   },
 
   flyTo: null,
-  requestFlyTo(lat, lon) {
+  requestFlyTo(lat, lon, zoom) {
     // The nonce makes two consecutive requests to the same coordinates distinct,
     // so re-selecting the same search hit still moves the camera.
-    set({ flyTo: { lat, lon, nonce: Date.now() } });
+    set({ flyTo: { lat, lon, nonce: Date.now(), zoom } });
+  },
+
+  focusedAirport: null,
+  focusAirport(airport) {
+    set({ focusedAirport: airport });
   },
 }));
 
