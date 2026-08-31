@@ -1,8 +1,11 @@
 # Orbital
 
-An interactive 3D globe in the browser with live aircraft positions plotted on
-it. Rotate and zoom the Earth, search for a flight by callsign, click an
+Live aircraft positions plotted on the Earth in the browser. Rotate and zoom,
+search for a flight by callsign or for an airport by name or code, click an
 aircraft for its details, and see the path it has been observed to fly.
+
+There are **two renderers over the same data**: a 3D globe drawn with three.js,
+and a map drawn with MapLibre on satellite imagery. `VITE_VIEW` picks one.
 
 CSC480 team project.
 
@@ -35,21 +38,44 @@ cd frontend && npm install && npm run dev
 Then open http://localhost:5173. The dev server proxies `/api` to the backend,
 so the browser sees a single origin.
 
+That starts the globe. To get the map instead, put `VITE_VIEW=planet` in
+`frontend/.env.local` (git-ignored, and works in any shell), or set it inline:
+
+```bash
+cd frontend && VITE_VIEW=planet npm run dev
+```
+
 `npm run dev` first runs `npm run assets`, which copies the Earth textures and
-reduces the geography datasets out of `node_modules` into `public/`. Both
-directories are generated rather than committed, so after `npm install` the app
-is fully self-contained offline — no CDN, no tile server, no API key.
+reduces the geography and airline datasets out of `node_modules` into `public/`.
+Those directories are generated rather than committed, so after `npm install`
+**the globe is fully self-contained offline** — no CDN, no tile server, no API
+key. The map is the exception: it fetches basemap tiles, and is where the
+airport markers and the receiver-coverage overlay are drawn.
 
 ## Using live data
 
-Copy `.env.example` to `backend/.env` and fill in OpenSky OAuth2 client
-credentials, then set `ORBITAL_PROVIDER=opensky`.
+Copy `.env.example` to `backend/.env` and set `ORBITAL_PROVIDER`. There are
+three live sources:
 
-Read [docs/decisions.md](docs/decisions.md) D21 first. OpenSky bills by the
-**geographic area requested**, not per request, and the free tier is small
-enough that a careless poll interval exhausts a day's credits before lunch. The
-backend refuses to start if the configured intervals project past a safety
-ceiling, but the arithmetic is worth understanding before you change anything.
+| Provider | Credentials | Cost | Catch |
+|---|---|---|---|
+| `opensky` | OAuth2 client pair | Metered, 4000 credits/day free | Bills by **area requested**, not per request |
+| `adsblol` | None | Free | Rate limited: a burst of 4, then ~1 request per 12 s |
+| `union` | OpenSky pair, optional | Free feed every poll, metered one occasionally | The one we run |
+
+`union` polls adsb.lol on every cycle and calls OpenSky only every 120 s, to
+fill in the aircraft adsb.lol's receiver network cannot see. The reasoning is
+D83; the pacing is D71.
+
+Read [docs/decisions.md](docs/decisions.md) D21 before touching poll intervals.
+OpenSky's free tier is small enough that a careless interval exhausts a day's
+credits before lunch. The backend refuses to start if the configured intervals
+project past a safety ceiling, but the arithmetic is worth understanding first.
+
+**Neither free feed sees the whole planet.** Both depend on volunteer ground
+receivers, and there are regions — western China most visibly — where there are
+none, so aircraft genuinely vanish there. That is upstream, not a bug here, and
+the map draws the gaps rather than letting them look like empty sky.
 
 ## Tests
 
@@ -99,6 +125,11 @@ cd backend && .venv/Scripts/python benchmarks/bench_backend.py
   begins when an aircraft entered our polling window and is lost when the
   backend restarts. This is a deliberate limitation, explained in the data
   contract and stated in the UI.
+- **Where a flight is going is looked up, not observed.** An aircraft does not
+  transmit its destination, so that comes from what its callsign is *scheduled*
+  to fly, which is occasionally wrong. Where it came *from* is inferred instead:
+  the nearest airport to the first point of its track. The panel words the two
+  differently on purpose (D88).
 - **An upstream outage does not break the display.** The backend keeps serving
   its last good snapshot with a `stale` flag; the frontend keeps drawing
   last-known positions with their age. Both refuse to show an empty globe.

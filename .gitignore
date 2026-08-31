@@ -38,6 +38,8 @@ dist-ssr/
 *.tsbuildinfo
 build/
 .vite/
+# `vitest --coverage`, the frontend's counterpart to htmlcov/ above.
+coverage/
 *.local
 npm-debug.log*
 yarn-debug.log*
