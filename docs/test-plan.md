@@ -227,7 +227,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
-| 35 | **The last circle of every global sweep was refused and thrown away** - a 2 s pause was under adsb.lol's rate limit, so the fourth request 429'd on every poll; a partial sweep is tolerated by design, so it logged a warning and carried on without the Americas | Medium | Reading the server log during a live union run, then reversing the sweep order to prove it followed position not region (19.41) | **Improved, not closed** - see 19.43 |
+| 35 | **The last circle of every global sweep was refused and thrown away** - a 2 s pause was under adsb.lol's rate limit, so the fourth request 429'd on every poll; a partial sweep is tolerated by design, so it logged a warning and carried on without the Americas | Medium | Reading the server log during a live union run, then reversing the sweep order to prove it followed position not region (19.41, 19.43, 19.44) | Fixed |
 | 34 | **The throttle ladder was dead in the only configuration that spends credits** - `Poller.remaining_credits` read the balance through a `getattr` default, `UnionProvider` had no such attribute, and `throttle_for(None, ...)` is NORMAL by design, so the union reported no balance and could never step down | Medium | Reading `/api/health` during a live union run, against the credit balances the OpenSky provider was logging beside it (19.40) | Fixed |
 | 33 | **The panel said the same thing twice** - registration and aircraft type had labelled rows of their own *and* came back four rows later from the generic `meta` renderer, so one fact read as two | Low, visual | Reading the live panel while verifying the scheduled route (§19.38) | Fixed |
 | 32 | **Two of every five aircraft drawn were ghosts** — the 30-minute eviction window was set for a 300-second poll; with two feeds sweeping every 60 s it kept aircraft nobody had reported for half an hour, drawn frozen and faded | Medium, visual | Phone: two crops of the same aircraft, one bright and one pale (D86, §19.36) | Fixed |
@@ -2785,3 +2785,30 @@ obviously correct, and the choice is Phone's.
 enough to look clean. The pattern is in this document twice already
 (19.40, and "Three defects in a row came from my own measurements" in the
 handoff). Watch longer before calling a rate limit fixed.
+
+### 19.44 Closed, and why this reading is worth believing
+
+**Defect #35 is fixed.** Twelve consecutive global polls over twenty-five
+uninterrupted minutes lost no circle at all.
+
+The reason to trust this, having called the same defect fixed three times
+before on samples that turned out to mean nothing: under the previous 38%
+failure rate, twelve clean polls in a row has probability 0.62^12, about
+**0.3%**. The earlier "clean" readings were three polls and two polls, which at
+38% happen 24% and 38% of the time - they were consistent with nothing having
+changed at all, which is precisely why they were worthless.
+
+The other half is that the cause was **measured rather than inferred**. 19.43
+records the experiment: sending at a steady 4 s with nothing else running gives
+four requests through and then roughly one every twelve seconds - a burst of
+four over about five a minute. Every earlier attempt tuned the *gap* between
+requests, and no gap makes eight requests a minute fit a budget of five. Once
+the budget was known, the fix was arithmetic: 4 sweep requests per 120 s plus
+1 viewport request per 30 s is 4 a minute, a fifth under the cap.
+
+**The lesson, which cost three wrong calls to learn.** A rate limit cannot be
+characterised by a burst; it has to be measured by sustained sending, because a
+burst is exactly what a token bucket is designed to allow. And a fix to an
+intermittent failure needs a sample long enough that the old failure rate would
+have shown itself - three polls against a 38% rate is not evidence, it is a
+coin landing heads twice.
