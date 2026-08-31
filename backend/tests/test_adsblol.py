@@ -345,6 +345,15 @@ class TestFailures:
         assert await provider(responds({})).fetch(VIEWPORT) == []
 
 
+#: A test interval, and the gap a test is willing to call "spaced".
+#:
+#: Windows' timer granularity is about 15 ms, so `asyncio.sleep(0.05)` can
+#: return in 40 ms and an exact assertion fails for reasons that have nothing
+#: to do with the gate. The tolerance is granularity, not slack in the rule.
+INTERVAL = 0.2
+SPACED_ENOUGH = 0.15
+
+
 class TestTheRequestGate:
     """Defect #35, second half.
 
@@ -365,12 +374,12 @@ class TestTheRequestGate:
 
         provider = AdsbLolProvider(
             client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
-            min_request_interval_seconds=0.05,
+            min_request_interval_seconds=INTERVAL,
         )
         await provider.fetch(VIEWPORT)
         await provider.fetch(VIEWPORT)
         assert len(sent) == 2
-        assert sent[1] - sent[0] >= 0.05
+        assert sent[1] - sent[0] >= SPACED_ENOUGH
 
     @pytest.mark.anyio
     async def test_two_callers_at_once_get_two_slots_not_one(self) -> None:
@@ -384,26 +393,29 @@ class TestTheRequestGate:
 
         provider = AdsbLolProvider(
             client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
-            min_request_interval_seconds=0.05,
+            min_request_interval_seconds=INTERVAL,
         )
         async with anyio.create_task_group() as group:
             group.start_soon(provider.fetch, VIEWPORT)
             group.start_soon(provider.fetch, VIEWPORT)
         assert len(sent) == 2
-        assert abs(sent[1] - sent[0]) >= 0.05
+        assert abs(sent[1] - sent[0]) >= SPACED_ENOUGH
 
     @pytest.mark.anyio
-    async def test_the_first_request_does_not_wait(self) -> None:
-        # A gate that made every poll pay an interval before its first request
-        # would add latency for nothing; only the gaps matter.
+    async def test_the_first_request_waits_too(self) -> None:
+        # Deliberate, and the opposite of what this test first asserted. A
+        # fresh process cannot know the address was quiet, and after a restart
+        # it usually was not: across two restarts the first sweep of each was
+        # the only one to lose a circle. One interval of startup latency, once
+        # per process, buys that back.
         provider = AdsbLolProvider(
             client=httpx.AsyncClient(
                 transport=httpx.MockTransport(
                     lambda request: httpx.Response(200, json={"ac": []})
                 )
             ),
-            min_request_interval_seconds=5.0,
+            min_request_interval_seconds=INTERVAL,
         )
         started = time.monotonic()
         await provider.fetch(VIEWPORT)
-        assert time.monotonic() - started < 1.0
+        assert time.monotonic() - started >= SPACED_ENOUGH

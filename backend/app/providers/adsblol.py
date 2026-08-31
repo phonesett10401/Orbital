@@ -134,7 +134,18 @@ class AdsbLolProvider(Provider):
         #: clock, both see a free slot, and both take it.
         self._gate = asyncio.Lock()
         #: Monotonic time before which no request may be sent.
-        self._next_allowed_at = 0.0
+        #:
+        #: **Starts one interval in the future, not at zero.** A fresh process
+        #: has no idea whether the address it is calling from was busy a moment
+        #: ago, and after a restart it usually was - the previous process was
+        #: polling this same API until seconds earlier. Measured across two
+        #: restarts, the *first* sweep of each was the only one that lost a
+        #: circle, both times about 20 s after boot; every later poll was
+        #: clean. Beginning at zero means sprinting into a window somebody else
+        #: just filled.
+        #:
+        #: The cost is one interval of startup latency, once per process.
+        self._next_allowed_at = time.monotonic() + min_request_interval_seconds
         # Sent on every request because the service asks for one, and because a
         # free service run on donations deserves to know who is calling it.
         self._client = client or httpx.AsyncClient(
