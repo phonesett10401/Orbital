@@ -89,3 +89,46 @@ describe('the geometry built from a shape', () => {
     expect(aircraftGeometryFor('A388')).not.toBe(aircraftGeometryFor('A320'));
   });
 });
+
+describe('proportions are tempered before they are drawn', () => {
+  /** Widest extent across the fuselage, at the centreline. */
+  function bodyWidth(geometry: ReturnType<typeof aircraftGeometryFor>): number {
+    const position = geometry.attributes.position.array as Float32Array;
+    let max = 0;
+    for (let i = 0; i < position.length; i += 3) {
+      // Only the tube: ignore anything out on the wings.
+      if (Math.abs(position[i]) < 0.1) max = Math.max(max, Math.abs(position[i]));
+    }
+    return max;
+  }
+
+  it('never draws a big aircraft with a spindly body', () => {
+    // The table is right and a literal reading of it is wrong: an A380's tube
+    // really is 0.089 of its span against an A320's 0.110, so applying the
+    // ratio faithfully drew the biggest aircraft with the thinnest body. This
+    // model is a silhouette a few dozen pixels across whose baseline tube is
+    // already exaggerated for legibility, and multiplying an exaggeration by a
+    // true ratio gives neither.
+    const generic = bodyWidth(aircraftGeometryFor(null));
+    for (const code of ['A388', 'B744', 'A333', 'B789', 'A359']) {
+      expect(bodyWidth(aircraftGeometryFor(code))).toBeGreaterThan(generic * 0.9);
+    }
+  });
+
+  it('keeps which aircraft is longer, which is the recognisable part', () => {
+    // Tempering pulls magnitudes toward the baseline; it must not flatten the
+    // ordering, or the whole exercise is decoration.
+    const regional = extent(aircraftGeometryFor('CRJ7'), 2);
+    const jumbo = extent(aircraftGeometryFor('A388'), 2);
+    const light = extent(aircraftGeometryFor('C172'), 2);
+    expect(regional).toBeGreaterThan(jumbo);
+    expect(jumbo).toBeGreaterThan(light);
+  });
+
+  it('leaves engine count and sweep alone', () => {
+    // Those are recognisable rather than proportional, and neither fights
+    // legibility, so neither is tempered.
+    expect(shapeFor('A388').engines).toBe(4);
+    expect(shapeFor('C172').sweep).toBe(0);
+  });
+});

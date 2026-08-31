@@ -148,8 +148,24 @@ export function createAircraftGeometry(
   // rather than absolute sizes, which keeps the span normalised to
   // MODEL_SPAN_UNITS whatever the proportions are (that is the one invariant
   // callers rely on).
-  const stretch = shape.lengthRatio / DEFAULT_SHAPE.lengthRatio;
-  const girth = shape.fuselageRatio / DEFAULT_SHAPE.fuselageRatio;
+  //
+  // **Both are tempered, and the fuselage heavily.** The proportions in the
+  // table are true, and applying them faithfully made widebodies look spindly:
+  // an A380's tube really is 0.089 of its span against an A320's 0.110, so a
+  // literal reading draws the biggest aircraft with the thinnest body. The
+  // reason that fails is that this model is not a scale drawing - it is a
+  // silhouette a few dozen pixels across whose baseline tube is already
+  // exaggerated for legibility (D42, and the sprite has the same compromise at
+  // D30). Multiplying an exaggerated-for-legibility number by a true ratio
+  // gives neither.
+  //
+  // So the deviation from the baseline is kept, at 30% of its real size for
+  // width and 60% for length, and bounded. Which aircraft is longer or fatter
+  // survives; the extremes that read as broken do not. Engine count and wing
+  // sweep are untouched, because those are recognisable rather than
+  // proportional and nothing about them fights legibility.
+  const stretch = temper(shape.lengthRatio / DEFAULT_SHAPE.lengthRatio, 0.6, 0.86, 1.24);
+  const girth = temper(shape.fuselageRatio / DEFAULT_SHAPE.fuselageRatio, 0.3, 0.97, 1.1);
   const r = (radius: number) => radius * girth;
 
   // Every cylinder below reads (forwardRadius, aftRadius, length) -- see `at`.
@@ -325,4 +341,17 @@ export function aircraftGeometryFor(model: string | null | undefined): THREE.Buf
 export function disposeAirframes(): void {
   for (const geometry of geometries.values()) geometry.dispose();
   geometries.clear();
+}
+
+
+/**
+ * Keep a proportion's direction while pulling it back toward 1, then bound it.
+ *
+ * `strength` of 1 is the true ratio and 0 is no variation at all. This is the
+ * same shape of compromise as the sprite's square-root scaling: the ordering
+ * is what carries the information, and the magnitude is free to be whatever
+ * stays readable.
+ */
+function temper(ratio: number, strength: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, 1 + (ratio - 1) * strength));
 }
