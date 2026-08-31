@@ -28,6 +28,7 @@ import * as THREE from 'three';
 
 import { createAircraftGeometry } from '../airframe';
 import type { RenderableObject } from '../types';
+import { scaleFor } from '../wingspan';
 import { latLonToVector3 } from './earth';
 import { positionAt } from './interpolate';
 import {
@@ -94,7 +95,7 @@ export function canRenderModel(object: RenderableObject | null | undefined): boo
  *
  * Derived from the *sprite's* sizing model rather than invented, so selecting
  * an aircraft does not change how big it looks: same world size, same selected
- * multiplier, only the clamps differ. World-anchored, so it grows on approach
+ * multiplier, same per-airframe factor, only the clamps differ. World-anchored, so it grows on approach
  * exactly as the sprites around it do, until the ceiling binds.
  *
  * **The distinction is the whole bug this signature exists to prevent.** The
@@ -115,11 +116,15 @@ export function modelSpanWorld(
   globeRadius: number,
   fovDegrees: number,
   viewportHeightPx: number,
-  { min = MODEL_MIN_PX, max = MODEL_MAX_PX } = {},
+  { min = MODEL_MIN_PX, max = MODEL_MAX_PX, airframeScale = 1 } = {},
 ): number {
   const perPixel = worldUnitsPerPixel(cameraToModelDistance, fovDegrees, viewportHeightPx);
   if (perPixel <= 0) return 0;
-  const world = MARKER_WORLD_SIZE * SELECTED_SIZE_MULTIPLIER * globeRadius;
+  // `airframeScale` goes in **before** the clamp, which is where the sprite
+  // shader applies it too (`worldSize * sizeScale` is what gets clamped). After
+  // the clamp it would let a widebody exceed the ceiling that exists to stop a
+  // close approach filling the viewport.
+  const world = MARKER_WORLD_SIZE * SELECTED_SIZE_MULTIPLIER * airframeScale * globeRadius;
   const px = Math.min(max, Math.max(min, world / perPixel));
   return px * perPixel;
 }
@@ -276,6 +281,9 @@ export function createSelectedAircraftLayer(globeRadius: number): SelectedAircra
         globeRadius,
         camera.fov,
         viewportHeightPx,
+        // The same factor the sprite beside it uses, so the aircraft does not
+        // change size at the moment it is selected.
+        { airframeScale: scaleFor(object.model) },
       ),
     );
     mesh.visible = true;

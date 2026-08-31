@@ -238,8 +238,19 @@ export function metresPerPixel(zoom: number, latDeg: number): number {
 }
 
 /**
- * An airliner's wingspan, in metres. A 737 is 35.8 m and an A350 is 64.8; this
- * is one generic airframe (D42), so it is one generic number.
+ * Fallback wingspan in metres, for an aircraft whose type we do not know.
+ *
+ * It used to be the *only* wingspan: one generic airframe, so one generic
+ * number. That is no longer true - the feed carries an ICAO type designator
+ * and `wingspan.ts` turns it into metres - so this is now what to draw when
+ * the feed said nothing, which is about a quarter of a live map.
+ *
+ * Kept at 50 rather than the 35.8 m the sprite uses as its reference, because
+ * these two numbers answer different questions. The sprite reference is "the
+ * commonest aircraft", chosen so the map's density of ink barely changes. This
+ * is "an unremarkable airliner seen up close", and an unknown drawn at 35.8
+ * next to a known A350 at 64.8 would imply we had measured it and found it
+ * small.
  */
 export const REAL_SPAN_METRES = 50;
 
@@ -252,12 +263,25 @@ export const REAL_SPAN_METRES = 50;
  * would simply vanish at every zoom traffic is actually watched from. The
  * floor holds it at a readable size until true scale overtakes it, which
  * happens around z16 — from there in, the model is the size the aircraft is.
+ *
+ * **The floor is scaled per aircraft too.** Left as a flat pixel count, every
+ * selected aircraft would be drawn identically at every zoom below z16 — which
+ * is every zoom traffic is actually watched from — and the 3D model would be
+ * the one thing on the map that had not noticed a Cessna is not an A380. So
+ * the caller passes the same compressed factor the map symbols use, and the
+ * difference is visible immediately while true scale still takes over on
+ * approach.
  */
 export const MODEL_MIN_PX = 30;
 
 /** What one model unit is worth in metres, at this zoom and latitude. */
-export function modelSpanMetres(zoom: number, latDeg: number): number {
-  return Math.max(REAL_SPAN_METRES, MODEL_MIN_PX * metresPerPixel(zoom, latDeg));
+export function modelSpanMetres(
+  zoom: number,
+  latDeg: number,
+  spanMetres: number = REAL_SPAN_METRES,
+  floorScale = 1,
+): number {
+  return Math.max(spanMetres, MODEL_MIN_PX * floorScale * metresPerPixel(zoom, latDeg));
 }
 
 /**

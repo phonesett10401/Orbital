@@ -421,7 +421,7 @@ describe('the layer', () => {
   });
 
   it('draws the selection through the globe matrix', () => {
-    const target = { lon: 0, lat: 0, heading: 90, altitude: 3000 };
+    const target = { lon: 0, lat: 0, heading: 90, altitude: 3000, model: null };
     const { layer, renderer } = harness(target);
     layer.render({} as WebGL2RenderingContext, args());
     expect(renderer.render).toHaveBeenCalledTimes(1);
@@ -439,7 +439,7 @@ describe('the layer', () => {
   });
 
   it('switches to the fallback matrix once the map is mercator', () => {
-    const target = { lon: 0, lat: 0, heading: 0, altitude: null };
+    const target = { lon: 0, lat: 0, heading: 0, altitude: null, model: null };
     const { layer, renderer } = harness(target, 14);
     layer.render({} as WebGL2RenderingContext, args({ projectionTransition: 0 }));
     expect(renderer.render).toHaveBeenCalledTimes(1);
@@ -456,7 +456,7 @@ describe('the layer', () => {
   it('draws nothing for an aircraft over the horizon', () => {
     // On the far side of the planet MapLibre draws no terrain to hide it, so
     // an unclipped model would be visible *through* the Earth.
-    const { layer, renderer } = harness({ lon: 180, lat: 0, heading: 0, altitude: null });
+    const { layer, renderer } = harness({ lon: 180, lat: 0, heading: 0, altitude: null, model: null });
     layer.render({} as WebGL2RenderingContext, args());
     expect(renderer.render).not.toHaveBeenCalled();
     expect(layer.drewLastFrame()).toBe(false);
@@ -465,7 +465,7 @@ describe('the layer', () => {
   it('does not clip against the horizon under mercator', () => {
     // The clipping plane is globe-only; applying it in mercator would blank
     // the model for half the world.
-    const { layer, renderer } = harness({ lon: 180, lat: 0, heading: 0, altitude: null }, 14);
+    const { layer, renderer } = harness({ lon: 180, lat: 0, heading: 0, altitude: null, model: null }, 14);
     layer.render({} as WebGL2RenderingContext, args({ projectionTransition: 0 }));
     expect(renderer.render).toHaveBeenCalledTimes(1);
   });
@@ -478,11 +478,11 @@ describe('the layer', () => {
     idle.render({} as WebGL2RenderingContext, args());
     expect(idle.describe()).toMatch(/nothing selected/);
 
-    const horizon = harness({ lon: 180, lat: 0, heading: 0, altitude: null }).layer;
+    const horizon = harness({ lon: 180, lat: 0, heading: 0, altitude: null, model: null }).layer;
     horizon.render({} as WebGL2RenderingContext, args());
     expect(horizon.describe()).toMatch(/over the horizon/);
 
-    const drawing = harness({ lon: 0, lat: 0, heading: 0, altitude: null }).layer;
+    const drawing = harness({ lon: 0, lat: 0, heading: 0, altitude: null, model: null }).layer;
     drawing.render({} as WebGL2RenderingContext, args());
     expect(drawing.describe()).toMatch(/drawing .* globe frame/);
     drawing.render({} as WebGL2RenderingContext, args({ projectionTransition: 0 }));
@@ -502,9 +502,57 @@ describe('the layer', () => {
   it('resets the GL state before drawing, every frame', () => {
     // MapLibre and three.js both cache what they think the context is set to,
     // and only one of them can be right.
-    const { layer, renderer } = harness({ lon: 0, lat: 0, heading: 0, altitude: null });
+    const { layer, renderer } = harness({ lon: 0, lat: 0, heading: 0, altitude: null, model: null });
     layer.render({} as WebGL2RenderingContext, args());
     layer.render({} as WebGL2RenderingContext, args());
     expect(renderer.resetState).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the model is the size the aircraft is', () => {
+  // The map symbols learned to differ by airframe and the 3D model did not, so
+  // selecting a Cessna and selecting an A380 drew the same aeroplane. The
+  // model's span was one generic 50 m for every aircraft in the sky.
+
+  const Z = 8;
+  const LAT = 40;
+
+  it('draws a widebody larger than a narrowbody', () => {
+    const a350 = modelSpanMetres(Z, LAT, 64.8, 1.345);
+    const a320 = modelSpanMetres(Z, LAT, 35.8, 1);
+    expect(a350).toBeGreaterThan(a320);
+  });
+
+  it('draws a light aircraft smaller than an airliner', () => {
+    expect(modelSpanMetres(Z, LAT, 11, 0.7)).toBeLessThan(modelSpanMetres(Z, LAT, 35.8, 1));
+  });
+
+  it('still differs by type below z16, where the pixel floor rules', () => {
+    // The floor is what is actually in force at every zoom traffic is watched
+    // from. Left flat, every selected aircraft would be identical there and
+    // the whole change would be invisible in practice.
+    const zoomedOut = 5;
+    const big = modelSpanMetres(zoomedOut, LAT, 79.8, 1.45);
+    const small = modelSpanMetres(zoomedOut, LAT, 11, 0.7);
+    expect(big).toBeGreaterThan(small);
+  });
+
+  it('falls back to a generic airliner when the type is unknown', () => {
+    // A quarter of a live map has no type. Drawing it at the sprite reference
+    // of 35.8 would imply we measured it and found it small.
+    expect(modelSpanMetres(Z, LAT)).toBe(modelSpanMetres(Z, LAT, REAL_SPAN_METRES, 1));
+  });
+
+  it('never lets the model shrink below the readable floor', () => {
+    // True scale at low zoom is half a pixel; the floor is why the selected
+    // aircraft does not vanish.
+    const farOut = modelSpanMetres(3, LAT, 11, 0.7);
+    expect(farOut).toBeGreaterThan(11);
+  });
+
+  it('is true to scale once zoom overtakes the floor', () => {
+    // From about z16 in, the model is the aircraft's actual wingspan.
+    expect(modelSpanMetres(18, LAT, 64.8, 1.345)).toBe(64.8);
+    expect(modelSpanMetres(18, LAT, 11, 0.7)).toBe(11);
   });
 });

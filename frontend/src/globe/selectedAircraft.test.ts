@@ -638,3 +638,30 @@ describe('the airframe is shaped the way an airframe is', () => {
     expect(chordAt(0.45, 0.5)).toBeLessThan(chordAt(0, 0.05) * 0.6);
   });
 });
+
+describe('the globe model sizes by airframe too', () => {
+  // The planet view's model and the globe's are separate implementations, so
+  // teaching one about wingspan and not the other would leave the two views
+  // disagreeing about how big a 787 is.
+
+  const ARGS = [120, 100, 45, 900] as const;
+
+  it('draws a widebody larger than a narrowbody', () => {
+    const wide = modelSpanWorld(...ARGS, { airframeScale: 1.345 });
+    const narrow = modelSpanWorld(...ARGS, { airframeScale: 1 });
+    expect(wide).toBeGreaterThan(narrow);
+  });
+
+  it('defaults to the size it always was', () => {
+    // An unknown type must not change what the globe used to draw.
+    expect(modelSpanWorld(...ARGS)).toBe(modelSpanWorld(...ARGS, { airframeScale: 1 }));
+  });
+
+  it('still honours the ceiling that stops a close approach filling the screen', () => {
+    // The factor goes in before the clamp, as it does in the sprite shader.
+    // After it, a widebody would sail past the ceiling D43 exists to enforce.
+    const close = modelSpanWorld(0.3, 100, 45, 900, { airframeScale: 1.45 });
+    const clamped = modelSpanWorld(0.3, 100, 45, 900, { airframeScale: 1 });
+    expect(close).toBe(clamped);
+  });
+});

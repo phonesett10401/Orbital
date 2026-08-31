@@ -30,8 +30,10 @@ import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap 
 import { createAircraftGeometry } from '../airframe';
 import { altitudeColor } from '../globe/markers';
 import type { RenderableObject } from '../types';
+import { scaleFor, wingspanFor } from '../wingspan';
 import {
   MODEL_LIFT_SPANS,
+  REAL_SPAN_METRES,
   globeAxes,
   globeModelMatrix,
   isOnNearSide,
@@ -57,6 +59,8 @@ export interface ModelTarget {
   lat: number;
   heading: number;
   altitude: number | null;
+  /** ICAO type designator, or null. Sets how large the airframe is drawn. */
+  model: string | null;
 }
 
 /**
@@ -73,6 +77,7 @@ export function modelTarget(object: RenderableObject | null | undefined): ModelT
     lat: object.renderLat,
     heading: object.heading,
     altitude: object.altitude,
+    model: object.model,
   };
 }
 
@@ -212,7 +217,16 @@ export function createModelLayer(
       // the aircraft's own latitude is the right one; under globe the sphere
       // has a single scale, set at the map's centre.
       const scaleLat = globe ? map.getCenter().lat : target.lat;
-      const span = modelSpanMetres(map.getZoom(), scaleLat);
+      // The aircraft's own wingspan where the feed named a type, and the same
+      // compressed factor the symbols use for the pixel floor - so the model
+      // differs by type at every zoom, not only past z16 where true scale
+      // takes over.
+      const span = modelSpanMetres(
+        map.getZoom(),
+        scaleLat,
+        wingspanFor(target.model) ?? REAL_SPAN_METRES,
+        scaleFor(target.model),
+      );
       const lift = span * MODEL_LIFT_SPANS;
 
       let model: number[];
