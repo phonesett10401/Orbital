@@ -21,6 +21,7 @@ Returned by `GET /api/aircraft`. Serialized as camelCase JSON.
 | `velocity` | number | **metres per second**, `>= 0` | **yes** | Ground speed, not airspeed. `null` means unknown. |
 | `heading` | number | degrees, `[0, 360)` | **yes** | Clockwise from **true** north, not magnetic. Direction of travel over the ground. |
 | `label` | string | — | no | Short display name. For aircraft, the callsign, trimmed. Falls back to `id` when upstream has no callsign. |
+| `model` | string | ICAO type designator | **yes** | What the source says this object *is*, in its own vocabulary — for an aircraft, `B789`. `null` where the source does not say, which is about a quarter of a live map because OpenSky's `/states/all` carries no type. The frontend reads it to size a marker by wingspan; that reading is the frontend's, and this contract promises only the designator. |
 | `lastSeen` | string | RFC 3339, UTC, `Z` suffix | no | When the **upstream source** last observed the object — not when we polled. |
 | `type` | string | `"aircraft"` | no | Which layer the object belongs to. |
 

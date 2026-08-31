@@ -37,6 +37,7 @@ function base(overrides: Partial<TrackedObject> = {}): TrackedObject {
     velocity: 250,
     heading: 90,
     label: 'TEST1',
+    model: null,
     lastSeen: new Date(NOW).toISOString(),
     type: 'aircraft',
     ...overrides,

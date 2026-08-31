@@ -30,6 +30,7 @@ import { STALE_AFTER_SECONDS } from '../globe/interpolate';
 
 import { useAirline } from '../airlines';
 import type { Airport } from '../types';
+import { wingspanFor } from '../wingspan';
 import { generalMetaRows } from './panelFields';
 import { legLabel, summariseRoute } from './routeSummary';
 import { useOrbitalStore } from '../state/store';
@@ -163,6 +164,25 @@ export function DetailPanel() {
               {detail.meta.aircraftDescription && (
                 <span className="panel__unit">{detail.meta.aircraftType}</span>
               )}
+            </dd>
+          </div>
+        )}
+        {/*
+          The number the marker's size comes from, so a big aircraft on the map
+          is explainable rather than mysterious.
+
+          **Typical for the type, not measured.** No feed reports a wingspan;
+          this is a table lookup on the type designator, and a designator covers
+          variants that differ by a metre or two. "typical" is doing real work
+          in that label - without it this would read as a measurement of this
+          particular airframe, which it is not.
+        */}
+        {wingspanFor(detail.model) !== null && (
+          <div>
+            <dt>Wingspan</dt>
+            <dd>
+              {wingspanFor(detail.model)} m{' '}
+              <span className="panel__unit">typical for the type</span>
             </dd>
           </div>
         )}

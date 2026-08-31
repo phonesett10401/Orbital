@@ -22,6 +22,7 @@ import type { RenderableObject } from '../types';
 import { ATLAS_CELLS, SPRITE_AIRCRAFT, SPRITE_UNKNOWN, createMarkerAtlas } from './aircraftSprite';
 import { STALE_AFTER_SECONDS, ageSeconds, positionAt } from './interpolate';
 import { latLonToVector3 } from './earth';
+import { scaleFor } from '../wingspan';
 
 /** Objects older than this are drawn muted, with their age shown on selection. */
 export { STALE_AFTER_SECONDS };
@@ -468,7 +469,10 @@ export function createMarkerLayer(globeRadius: number, capacity = 4096): MarkerL
         headings[drawn] = object.heading === null ? 0 : object.heading * DEG_TO_RAD;
         sprites[drawn] = object.heading === null ? SPRITE_UNKNOWN : SPRITE_AIRCRAFT;
 
-        sizes[drawn] = selected ? SELECTED_SIZE_MULTIPLIER : 1;
+        // Selection still overrides everything: which aircraft is selected
+        // matters more than what kind it is. Otherwise the size comes from
+        // the airframe, so the two views agree about how big a 787 is.
+        sizes[drawn] = selected ? SELECTED_SIZE_MULTIPLIER : scaleFor(object.model);
         // Stale objects keep their marker rather than disappearing — an aircraft
         // that stopped reporting has not stopped existing — but they are muted
         // so they cannot be mistaken for live traffic.

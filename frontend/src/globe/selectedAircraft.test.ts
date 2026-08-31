@@ -45,6 +45,7 @@ function object(overrides: Partial<RenderableObject> = {}): RenderableObject {
     velocity: null,
     heading: 90,
     label: 'THA600',
+    model: null,
     lastSeen: '2026-08-27T00:00:00Z',
     type: 'aircraft',
     renderLat: 10,

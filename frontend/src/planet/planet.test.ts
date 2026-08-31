@@ -82,6 +82,7 @@ function object(overrides: Partial<RenderableObject> = {}): RenderableObject {
     velocity: 240,
     heading: 90,
     label: 'THA932',
+    model: null,
     lastSeen: new Date(NOW).toISOString(),
     type: 'aircraft',
     renderLat: 13.8,

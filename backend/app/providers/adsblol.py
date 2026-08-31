@@ -345,6 +345,12 @@ class AdsbLolProvider(Provider):
             label=str(callsign).strip() if callsign else "",
             last_seen=now - timedelta(seconds=max(0.0, age)),
             type=self.object_type,
+            # Also in `meta` as aircraftType, and deliberately so: the panel
+            # reads meta generically (D4), while the list projects meta away to
+            # keep a 2000-object response small. The renderer needs the type
+            # for *every* aircraft, not just the selected one, so it has to be
+            # on the core shape.
+            model=_text(entry.get("t")),
             meta=_meta(entry),
         )
 
@@ -421,3 +427,15 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     d_lambda = math.radians(lon2 - lon1)
     a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
     return 2 * EARTH_RADIUS_KM * math.asin(min(1.0, math.sqrt(a)))
+
+
+def _text(value: object) -> str | None:
+    """A non-empty trimmed string, or None.
+
+    The feed omits fields rather than sending null, but it does send empty
+    strings, and an empty type designator is not a type.
+    """
+    if not isinstance(value, str):
+        return None
+    trimmed = value.strip()
+    return trimmed or None

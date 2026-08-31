@@ -22,6 +22,7 @@ function object(id: string, overrides: Partial<TrackedObject> = {}): TrackedObje
     velocity: 240,
     heading: 90,
     label: id.toUpperCase(),
+    model: null,
     lastSeen: new Date(NOW).toISOString(),
     type: 'aircraft',
     ...overrides,

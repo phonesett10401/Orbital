@@ -66,7 +66,7 @@ describe('remember', () => {
 
 describe('what gets remembered', () => {
   it('labels an aircraft by its callsign, falling back to its address', () => {
-    const base = { lat: 1, lon: 2, altitude: null, velocity: null, heading: null, lastSeen: '', type: 'aircraft' as const };
+    const base = { lat: 1, lon: 2, altitude: null, velocity: null, heading: null, model: null, lastSeen: '', type: 'aircraft' as const };
     expect(aircraftEntry({ ...base, id: 'abc123', label: 'UAL1' }).label).toBe('UAL1');
     expect(aircraftEntry({ ...base, id: 'abc123', label: '' }).label).toBe('ABC123');
   });

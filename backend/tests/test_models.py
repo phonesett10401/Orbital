@@ -46,10 +46,12 @@ class TestTrackedObject:
         payload = make_object().model_dump(by_alias=True, mode="json")
         assert "lastSeen" in payload
         assert "last_seen" not in payload
-        # The contract is exactly these nine fields, nothing more.
+        # The contract is exactly these ten fields, nothing more. `model` was
+        # the tenth, added so the renderer can size an aircraft by what it
+        # actually is; everything aircraft-specific still lives in meta.
         assert set(payload) == {
             "id", "lat", "lon", "altitude", "velocity",
-            "heading", "label", "lastSeen", "type",
+            "heading", "label", "model", "lastSeen", "type",
         }
 
     def test_accepts_either_spelling_on_input(self):

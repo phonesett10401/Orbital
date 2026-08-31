@@ -3,7 +3,7 @@
  *
  * This file must be updated in the same commit as `backend/app/models.py`.
  * The mirror is maintained by hand rather than generated from the OpenAPI
- * schema: the contract is nine fields and changes rarely, and a codegen step
+ * schema: the contract is ten fields and changes rarely, and a codegen step
  * is another build stage that can break for a three-person team on a deadline
  * (D18).
  *
@@ -35,6 +35,12 @@ export interface TrackedObject {
   heading: number | null;
   /** Short display name. For aircraft, the callsign; falls back to `id`. */
   label: string;
+  /**
+   * What the source says this is, in its own words. For aircraft, the ICAO
+   * type designator such as `B789`. `null` for about a quarter of a live map,
+   * because OpenSky's `/states/all` carries no type at all.
+   */
+  model: string | null;
   /** RFC 3339 UTC. When the SOURCE last observed it, not when we polled. */
   lastSeen: string;
   type: ObjectType;

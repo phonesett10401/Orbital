@@ -26,6 +26,7 @@ import type { LayerSpecification } from 'maplibre-gl';
 import { altitudeColor } from '../globe/markers';
 import { STALE_AFTER_SECONDS } from '../globe/interpolate';
 import type { RenderableObject } from '../types';
+import { scaleFor } from '../wingspan';
 
 /** Layer and source ids, exported so the view can hit-test against them. */
 export const AIRCRAFT_SOURCE = 'orbital-aircraft';
@@ -100,6 +101,9 @@ export function aircraftFeatures(
           heading: object.heading ?? 0,
           hasHeading: object.heading !== null,
           colour: colourFor(object.altitude),
+          // Size from what the aircraft actually is. 1 where the feed did not
+          // say, which is the size everything used to be.
+          scale: scaleFor(object.model),
           stale: ageSeconds > STALE_AFTER_SECONDS,
           modelled: object.id === modelledId && object.heading !== null,
         },
@@ -187,8 +191,15 @@ export function aircraftLayers(): LayerSpecification[] {
       layout: {
         'icon-image': ['case', ['get', 'hasHeading'], ICON_AIRCRAFT, ICON_UNKNOWN],
         // Grows with zoom, but nothing like linearly: an aircraft is a symbol
-        // on a map, not a scale model of an aeroplane.
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.14, 8, 0.22, 14, 0.34],
+        // on a map, not a scale model of an aeroplane. The per-feature factor
+        // multiplies that curve rather than replacing it, so the zoom
+        // behaviour that was tuned stays exactly as it was and only the
+        // relative sizes of aircraft change.
+        'icon-size': [
+          '*',
+          ['interpolate', ['linear'], ['zoom'], 2, 0.14, 8, 0.22, 14, 0.34],
+          ['get', 'scale'],
+        ],
         'icon-rotate': ['get', 'heading'],
         // Rotation is relative to the map's north, which is what a heading is.
         'icon-rotation-alignment': 'map',

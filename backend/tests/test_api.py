@@ -106,7 +106,7 @@ class TestListAircraft:
         obj = client.get("/api/aircraft").json()["objects"][0]
         assert set(obj) == {
             "id", "lat", "lon", "altitude", "velocity",
-            "heading", "label", "lastSeen", "type",
+            "heading", "label", "model", "lastSeen", "type",
         }
 
     def test_meta_is_projected_away_from_list_responses(self, client):

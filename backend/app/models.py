@@ -64,6 +64,14 @@ class TrackedObject(OrbitalModel):
     Anything that only makes sense for one kind of object lives in
     ``TrackedObjectRecord.meta``. That is what makes a new data source a
     drop-in rather than a schema change.
+
+    ``model`` is the one field that looks like an exception and is not. "What
+    kind of thing is this" is a question any moving object can answer, and the
+    renderer needs it for every object in the list rather than only the
+    selected one - it is what makes a Cessna smaller than an A380 on the map.
+    The aircraft-specific *reading* of it, that B789 means a 60 m wingspan,
+    lives in the frontend; the contract here promises only a designator the
+    source chose.
     """
 
     id: str = Field(description="Stable identifier, unique within a provider.")
@@ -80,6 +88,14 @@ class TrackedObject(OrbitalModel):
         description="Direction of travel in degrees clockwise from true north, [0, 360).",
     )
     label: str = Field(description="Short human-readable name, e.g. a callsign.")
+    model: str | None = Field(
+        default=None,
+        description=(
+            "What the source says this object *is*, in its own vocabulary - for "
+            "an aircraft, the ICAO type designator such as B789. None where the "
+            "source does not say, which is most of them."
+        ),
+    )
     last_seen: datetime = Field(
         description="When the upstream source last observed this object (UTC)."
     )
