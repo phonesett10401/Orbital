@@ -118,6 +118,15 @@ DAILY_ALLOWANCES: dict[str, int] = {
     "anonymous": ANONYMOUS_DAILY_CREDITS,
     "authenticated": AUTHENTICATED_DAILY_CREDITS,
     "contributor": CONTRIBUTOR_DAILY_CREDITS,
+    # 'union' is not a fourth account tier: it is an authenticated OpenSky
+    # account used sparingly alongside a free feed (D83), so it is budgeted
+    # against the same 4000. Listed explicitly because it was previously
+    # reaching this number by falling through daily_allowance's default, which
+    # is the same answer arrived at by accident. Running union WITHOUT OpenSky
+    # credentials leaves the supplement anonymous at 400/day, and the 2,880 the
+    # preset projects would overspend it -- set ORBITAL_DAILY_CREDIT_BUDGET=400
+    # and the startup check will say so.
+    "union": AUTHENTICATED_DAILY_CREDITS,
 }
 
 
@@ -176,7 +185,13 @@ class Settings(BaseSettings):
     # ---- quota -------------------------------------------------------------
     quota_preset: str = Field(
         default="authenticated",
-        description="Which polling preset to run: anonymous, authenticated, contributor.",
+        description=(
+            "Which polling preset to run: anonymous, authenticated, contributor, "
+            "or union. The first three are OpenSky account tiers and their "
+            "intervals follow from the credits each one allows (D21). 'union' is "
+            "paced by adsb.lol's rate limit instead, and is the one to use with "
+            "ORBITAL_PROVIDER=union (D83)."
+        ),
     )
     daily_credit_budget: int | None = Field(
         default=None,

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.config import PRESETS, Settings
+from app.config import DAILY_ALLOWANCES, PRESETS, Settings
 from app.models import BBox
 from app.quota import (
     AUTHENTICATED_DAILY_CREDITS,
@@ -128,6 +128,19 @@ class TestConfiguredPresetsFitTheirBudget:
         # preset spent for a fifth of the refresh rate.
         assert union.projected_daily_credits() == 2880
         assert union.projected_daily_credits() < authenticated.projected_daily_credits()
+
+    @pytest.mark.parametrize("preset", sorted(PRESETS))
+    def test_every_preset_names_its_own_allowance(self, preset):
+        # daily_allowance falls back to the authenticated 4,000 for a preset it
+        # does not recognise, so a preset missing from DAILY_ALLOWANCES is
+        # budgeted against a number nobody chose for it - and the ceiling check
+        # above still passes, because 4,000 happens to be generous. 'union' sat
+        # in exactly that position. This asserts the table, not the fallback.
+        assert preset in DAILY_ALLOWANCES
+
+    def test_the_union_preset_is_budgeted_as_an_authenticated_account(self):
+        # Not a fourth account tier: the same OpenSky account, called rarely.
+        assert Settings(quota_preset="union", provider="union").daily_allowance == 4000
 
     def test_authenticated_preset_projects_the_documented_figure(self):
         assert Settings(quota_preset="authenticated").projected_daily_credits() == 3072
