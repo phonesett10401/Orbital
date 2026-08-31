@@ -90,44 +90,66 @@ describe('the geometry built from a shape', () => {
   });
 });
 
-describe('proportions are tempered before they are drawn', () => {
-  /** Widest extent across the fuselage, at the centreline. */
-  function bodyWidth(geometry: ReturnType<typeof aircraftGeometryFor>): number {
+describe('how fat the body is drawn', () => {
+  /**
+   * Half-width of the fuselage.
+   *
+   * Measured **ahead of the wing** rather than by an x window. The wing panels
+   * run from the centreline outward, so no threshold on x can separate tube
+   * from wing root - and a window tight enough to try clipped the very widths
+   * this is here to measure once the body got fatter. The wing occupies z from
+   * about +0.1 aft; forward of z 0.3 there is nothing but fuselage and nose.
+   */
+  function bodyHalfWidth(geometry: ReturnType<typeof aircraftGeometryFor>): number {
     const position = geometry.attributes.position.array as Float32Array;
     let max = 0;
     for (let i = 0; i < position.length; i += 3) {
-      // Only the tube: ignore anything out on the wings.
-      if (Math.abs(position[i]) < 0.1) max = Math.max(max, Math.abs(position[i]));
+      if (position[i + 2] > 0.3) max = Math.max(max, Math.abs(position[i]));
     }
     return max;
   }
 
-  it('never draws a big aircraft with a spindly body', () => {
-    // The table is right and a literal reading of it is wrong: an A380's tube
-    // really is 0.089 of its span against an A320's 0.110, so applying the
-    // ratio faithfully drew the biggest aircraft with the thinnest body. This
-    // model is a silhouette a few dozen pixels across whose baseline tube is
-    // already exaggerated for legibility, and multiplying an exaggeration by a
-    // true ratio gives neither.
-    const generic = bodyWidth(aircraftGeometryFor(null));
-    for (const code of ['A388', 'B744', 'A333', 'B789', 'A359']) {
-      expect(bodyWidth(aircraftGeometryFor(code))).toBeGreaterThan(generic * 0.9);
+  const width = (code: string | null) => bodyHalfWidth(aircraftGeometryFor(code)) * 2;
+
+  it('draws a widebody two to three times fatter than a light aircraft', () => {
+    // Asked for directly, after "big planes are still thin" twice. It is a
+    // drawing decision and not a proportion: the true figures say the largest
+    // aircraft have the THINNEST tubes for their span, which is what made them
+    // look frail in the first place.
+    const ratio = width('A388') / width('C172');
+    expect(ratio).toBeGreaterThan(2);
+    expect(ratio).toBeLessThan(3);
+  });
+
+  it('grows the body with size, without a step between classes', () => {
+    // A 757 has to sit between a narrowbody and a widebody rather than
+    // snapping to one of them.
+    const order = ['C172', 'CRJ7', 'A320', 'B752', 'B763', 'B789'];
+    const widths = order.map(width);
+    for (let i = 1; i < widths.length; i += 1) {
+      expect(widths[i]).toBeGreaterThan(widths[i - 1]);
     }
   });
 
-  it('keeps which aircraft is longer, which is the recognisable part', () => {
-    // Tempering pulls magnitudes toward the baseline; it must not flatten the
-    // ordering, or the whole exercise is decoration.
-    const regional = extent(aircraftGeometryFor('CRJ7'), 2);
-    const jumbo = extent(aircraftGeometryFor('A388'), 2);
-    const light = extent(aircraftGeometryFor('C172'), 2);
-    expect(regional).toBeGreaterThan(jumbo);
-    expect(jumbo).toBeGreaterThan(light);
+  it('is never thinner than the sprite it replaces', () => {
+    // Selecting an aircraft swaps a sprite for this mesh, and D67 requires the
+    // swap to change the shape and nothing else. The model was 0.084 body
+    // widths per span against the sprite's 0.146 and visibly slimmed on
+    // selection. The sprite's white FILL is 0.083 - the same aeroplane - so
+    // the entire difference was its dark outline, which a mesh has no
+    // equivalent of.
+    const SPRITE_FILL = 0.083;
+    for (const code of [null, 'C172', 'A320', 'A388']) {
+      expect(width(code)).toBeGreaterThan(SPRITE_FILL * 1.15);
+    }
   });
 
-  it('leaves engine count and sweep alone', () => {
-    // Those are recognisable rather than proportional, and neither fights
-    // legibility, so neither is tempered.
+  it('keeps length and sweep doing their own jobs', () => {
+    // Body weight is size-driven; length and sweep still come from the table,
+    // and tempering must not have flattened them.
+    expect(extent(aircraftGeometryFor('CRJ7'), 2)).toBeGreaterThan(
+      extent(aircraftGeometryFor('A388'), 2),
+    );
     expect(shapeFor('A388').engines).toBe(4);
     expect(shapeFor('C172').sweep).toBe(0);
   });

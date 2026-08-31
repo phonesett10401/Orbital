@@ -43,6 +43,21 @@ export interface AirframeShape {
   /** 2 or 4. Nothing in this table has one, three, or more than four. */
   engines: number;
   /**
+   * How fat to draw the body, against the airframe's authored baseline.
+   *
+   * **Not the true proportion, and deliberately not it.** `fuselageRatio`
+   * above is the real figure and it says the largest aircraft have the
+   * *thinnest* tubes for their span - an A380 is 0.089 against an A320's
+   * 0.110. Drawn faithfully that reads as spindly, twice reported, because a
+   * silhouette a few dozen pixels across is not a scale drawing and a widebody
+   * is expected to look substantial.
+   *
+   * So this is a size-driven weight, not a measurement: a light aircraft stays
+   * near the baseline and a widebody is drawn roughly two and a half times
+   * fatter. The table keeps the truth; this decides the drawing.
+   */
+  bodyScale: number;
+  /**
    * 0 for a straight wing, 1 for a fully swept one.
    *
    * A light aircraft's wing is straight and high-aspect; a jet's is swept.
@@ -80,6 +95,36 @@ const DIMENSIONS: Record<string, [length: number, diameter: number, engines: num
   BE20: [13.3, 1.4, 2], C56X: [14.9, 1.7, 2], GLF6: [30.4, 2.6, 2], CL60: [20.9, 2.7, 2],
 };
 
+/**
+ * How fat the body is drawn, by size class, against the airframe's baseline.
+ *
+ * Interpolated on wingspan between these three, so a 757 sits between a
+ * narrowbody and a widebody rather than jumping. The widebody figure is about
+ * two and a half times the light-aircraft one, which is the separation asked
+ * for: a selected A380 should look substantial next to a selected Cessna, and
+ * proportional truth does the opposite.
+ */
+const BODY_SCALE_LIGHT = 1.1;
+export const BODY_SCALE_NARROW = 1.25;
+const BODY_SCALE_WIDE = 2.5;
+
+const SPAN_LIGHT = 15;
+const SPAN_NARROW = 35.8;
+const SPAN_WIDE = 60;
+
+/** The drawn body weight for a wingspan, in metres. */
+export function bodyScaleForSpan(span: number | null): number {
+  if (span === null) return BODY_SCALE_NARROW;
+  if (span <= SPAN_LIGHT) return BODY_SCALE_LIGHT;
+  if (span >= SPAN_WIDE) return BODY_SCALE_WIDE;
+  if (span <= SPAN_NARROW) {
+    const t = (span - SPAN_LIGHT) / (SPAN_NARROW - SPAN_LIGHT);
+    return BODY_SCALE_LIGHT + (BODY_SCALE_NARROW - BODY_SCALE_LIGHT) * t;
+  }
+  const t = (span - SPAN_NARROW) / (SPAN_WIDE - SPAN_NARROW);
+  return BODY_SCALE_NARROW + (BODY_SCALE_WIDE - BODY_SCALE_NARROW) * t;
+}
+
 /** Types whose wing is essentially straight rather than swept. */
 const STRAIGHT_WING = /^(C1|C2|PA|SR|DA|BE|AT|DH|P1|PC)/;
 
@@ -87,6 +132,7 @@ const STRAIGHT_WING = /^(C1|C2|PA|SR|DA|BE|AT|DH|P1|PC)/;
 export const DEFAULT_SHAPE: AirframeShape = {
   lengthRatio: 1.05,
   fuselageRatio: 0.105,
+  bodyScale: BODY_SCALE_NARROW,
   engines: 2,
   sweep: 1,
 };
@@ -104,15 +150,15 @@ export function shapeFor(model: string | null | undefined): AirframeShape {
   const dimensions = DIMENSIONS[code];
   const span = wingspanFor(code);
   if (!dimensions || span === null) {
-    return code && STRAIGHT_WING.test(code)
-      ? { ...DEFAULT_SHAPE, sweep: 0 }
-      : DEFAULT_SHAPE;
+    const partial = { ...DEFAULT_SHAPE, bodyScale: bodyScaleForSpan(span) };
+    return code && STRAIGHT_WING.test(code) ? { ...partial, sweep: 0 } : partial;
   }
 
   const [length, diameter, engines] = dimensions;
   return {
     lengthRatio: Number((length / span).toFixed(3)),
     fuselageRatio: Number((diameter / span).toFixed(4)),
+    bodyScale: Number(bodyScaleForSpan(span).toFixed(3)),
     engines,
     sweep: STRAIGHT_WING.test(code) ? 0 : 1,
   };

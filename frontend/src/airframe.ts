@@ -142,6 +142,24 @@ function panel(
 export function createAircraftGeometry(
   shape: AirframeShape = DEFAULT_SHAPE,
 ): THREE.BufferGeometry {
+  // **The body is drawn fatter than an aeroplane's really is, and much fatter
+  // on the large ones.** Two things forced this, and both are about drawing
+  // rather than about aeroplanes.
+  //
+  // First, the model replaces a sprite, and the sprite is 0.146 body widths
+  // per span against this model's original 0.084 - 42% thinner - so a selected
+  // aircraft visibly slimmed at the moment of selection, which is exactly what
+  // D67 says the swap must not do. The sprite's white *fill* is 0.083, the
+  // same aeroplane; the whole difference is its 7 px dark outline, which a 3D
+  // mesh has no equivalent of.
+  //
+  // Second, `fuselageRatio` is true and reads as spindly. The real figures say
+  // the largest aircraft have the thinnest tubes for their span, so drawing
+  // them faithfully makes an A380 look frail - reported twice. `bodyScale`
+  // therefore comes from size class rather than from measurement: a light
+  // aircraft near the baseline, a widebody about two and a half times fatter.
+  // The table keeps the truth and this decides the drawing.
+  //
   // Everything below is authored for DEFAULT_SHAPE and then adjusted, so the
   // generic airframe is still exactly the aeroplane it always was and only a
   // typed one differs. `stretch` and `girth` are ratios against that baseline
@@ -165,18 +183,18 @@ export function createAircraftGeometry(
   // sweep are untouched, because those are recognisable rather than
   // proportional and nothing about them fights legibility.
   const stretch = temper(shape.lengthRatio / DEFAULT_SHAPE.lengthRatio, 0.6, 0.86, 1.24);
-  const girth = temper(shape.fuselageRatio / DEFAULT_SHAPE.fuselageRatio, 0.3, 0.97, 1.1);
+  const girth = shape.bodyScale / DEFAULT_SHAPE.bodyScale;
   const r = (radius: number) => radius * girth;
 
   // Every cylinder below reads (forwardRadius, aftRadius, length) -- see `at`.
   const parts: THREE.BufferGeometry[] = [
     // Fuselage: widest at the front, tapering gently aft.
-    bake(new THREE.CylinderGeometry(r(0.042), r(0.036), 0.98 * stretch, 8, 1), at(0, 0, 0, true)),
+    bake(new THREE.CylinderGeometry(r(0.057), r(0.049), 0.98 * stretch, 8, 1), at(0, 0, 0, true)),
     // Nose cone: a point at the front, full fuselage width where it joins.
-    bake(new THREE.CylinderGeometry(0.004, r(0.042), 0.14 * stretch, 8, 1), at(0, 0, 0.56 * stretch, true)),
+    bake(new THREE.CylinderGeometry(0.006, r(0.057), 0.14 * stretch, 8, 1), at(0, 0, 0.56 * stretch, true)),
     // Tail cone: fuselage width at the front, tapering to the tail, and lifted
     // slightly so it runs up into the fin root the way an airliner's does.
-    bake(new THREE.CylinderGeometry(r(0.036), r(0.012), 0.12 * stretch, 8, 1), at(0, 0.012, -0.55 * stretch, true)),
+    bake(new THREE.CylinderGeometry(r(0.049), r(0.016), 0.12 * stretch, 8, 1), at(0, 0.012, -0.55 * stretch, true)),
     // Wings, one panel per side, rooted at the centreline so they meet inside
     // the fuselage and there is no seam to line up. Swept back and tapered:
     // root chord 0.24, tip chord 0.09, tip trailing edge 0.16 aft of the root's.
@@ -242,8 +260,8 @@ export function createAircraftGeometry(
       at(0, 0, 0),
     ),
     // Engines, slung under and ahead of the wing as they are on a real one.
-    bake(new THREE.CylinderGeometry(0.036, 0.032, 0.17, 8, 1), at(-0.2, -0.05, 0.04, true)),
-    bake(new THREE.CylinderGeometry(0.036, 0.032, 0.17, 8, 1), at(0.2, -0.05, 0.04, true)),
+    bake(new THREE.CylinderGeometry(0.040, 0.036, 0.17, 8, 1), at(-0.2, -0.055, 0.04, true)),
+    bake(new THREE.CylinderGeometry(0.040, 0.036, 0.17, 8, 1), at(0.2, -0.055, 0.04, true)),
   ];
 
   // **Four engines, where there are four.** From above this is the most
