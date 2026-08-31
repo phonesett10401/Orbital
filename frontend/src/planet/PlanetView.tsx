@@ -41,7 +41,15 @@ import {
   loadPlanetStyle,
 } from './basemap';
 import { createBasemapControl } from './basemapControl';
-import { COVERAGE_SOURCE, coverageFeatures, coverageLayers } from './coverageLayer';
+import {
+  COVERAGE_HATCH_IMAGE,
+  COVERAGE_LABEL_SOURCE,
+  COVERAGE_SOURCE,
+  coverageFeatures,
+  coverageLabelFeatures,
+  coverageLayers,
+  createHatchImage,
+} from './coverageLayer';
 import { createModelLayer, modelTarget } from './modelLayer';
 import { createTerminatorControl } from './terminatorControl';
 import { createTerminatorLayer } from './terminatorLayer';
@@ -260,7 +268,16 @@ export function PlanetView() {
           // an annotation about the basemap and has to stay legible over the
           // dimmed version of it. Still below the aircraft, which nothing may
           // compete with.
+          const hatch = createHatchImage();
+          if (hatch && !map.hasImage(COVERAGE_HATCH_IMAGE)) {
+            // Not SDF: this one is drawn in its own colour rather than tinted.
+            map.addImage(COVERAGE_HATCH_IMAGE, hatch);
+          }
           map.addSource(COVERAGE_SOURCE, { type: 'geojson', data: coverageFeatures() });
+          map.addSource(COVERAGE_LABEL_SOURCE, {
+            type: 'geojson',
+            data: coverageLabelFeatures(),
+          });
           for (const layer of coverageLayers()) map.addLayer(layer);
 
           map.addSource(AIRCRAFT_SOURCE, {

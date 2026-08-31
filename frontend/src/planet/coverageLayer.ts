@@ -51,8 +51,11 @@ import type { LayerSpecification } from 'maplibre-gl';
 import { whenFlat } from './basemap';
 
 export const COVERAGE_SOURCE = 'orbital-coverage';
+export const COVERAGE_LABEL_SOURCE = 'orbital-coverage-labels';
 export const COVERAGE_FILL_LAYER = 'orbital-coverage-fill';
 export const COVERAGE_LINE_LAYER = 'orbital-coverage-line';
+export const COVERAGE_HATCH_LAYER = 'orbital-coverage-hatch';
+export const COVERAGE_HATCH_IMAGE = 'orbital-coverage-hatch-image';
 export const COVERAGE_LABEL_LAYER = 'orbital-coverage-label';
 
 /**
@@ -68,12 +71,24 @@ export interface CoverageRegion {
   /** Aircraft per 100 square degrees when this was measured, for the record. */
   density: number;
   ring: [number, number][];
+  /**
+   * Where the one label goes.
+   *
+   * Given explicitly rather than left to a centroid, for two reasons. A
+   * polygon's centroid can land outside a concave shape, and - the reason this
+   * exists - MapLibre labels a polygon **once per tile it covers**, so a
+   * region spanning a tile boundary was drawing "NO RECEIVER COVERAGE" twice a
+   * few hundred kilometres apart, which reads as two separate claims. One
+   * point in one feature can only be labelled once.
+   */
+  anchor: [number, number];
 }
 
 /** Coarse outlines of the land where the receiver networks do not reach. */
 export const COVERAGE_GAPS: CoverageRegion[] = [
   {
     name: 'Western China',
+    anchor: [88, 36.5],
     density: 0.27,
     ring: [
       [76.5, 39.5], [80, 43.5], [88, 45], [96, 43.5], [103, 39],
@@ -82,6 +97,7 @@ export const COVERAGE_GAPS: CoverageRegion[] = [
   },
   {
     name: 'Central Siberia',
+    anchor: [105, 63],
     density: 0.24,
     ring: [
       [82, 56], [95, 54.5], [112, 55], [128, 58], [130, 66],
@@ -90,6 +106,7 @@ export const COVERAGE_GAPS: CoverageRegion[] = [
   },
   {
     name: 'The Sahara',
+    anchor: [14, 23.5],
     density: 0.0,
     ring: [
       [1, 20], [10, 17.5], [20, 17], [26, 20], [27, 27],
@@ -98,6 +115,7 @@ export const COVERAGE_GAPS: CoverageRegion[] = [
   },
   {
     name: 'Congo basin',
+    anchor: [24, -1],
     density: 0.0,
     ring: [
       [15, 3], [22, 6], [30, 7], [33, 2], [32, -6],
@@ -106,6 +124,7 @@ export const COVERAGE_GAPS: CoverageRegion[] = [
   },
   {
     name: 'Amazon basin',
+    anchor: [-62, -5.5],
     density: 0.36,
     ring: [
       [-72, -4], [-64, -1], [-56, 0], [-51, -3], [-52, -9],
@@ -126,16 +145,82 @@ export function coverageFeatures() {
 }
 
 /**
- * Three layers: a wash, its edge, and one line of type.
+ * One point per region, for the label.
  *
- * **Quiet on purpose.** This is an annotation about the map, not a thing on
- * the map, and it must never compete with an aircraft. The fill is a few
- * percent, the edge is dashed because a hard boundary would claim a precision
- * these shapes do not have, and the label is small and letter-spaced the way a
- * chart annotation is rather than the way a place name is.
+ * Separate from the polygons because MapLibre labels a polygon once per tile
+ * it covers, and these regions are large enough to span several - which drew
+ * the same annotation two or three times over one shape.
+ */
+export function coverageLabelFeatures() {
+  return {
+    type: 'FeatureCollection' as const,
+    features: COVERAGE_GAPS.map((region) => ({
+      type: 'Feature' as const,
+      properties: { name: region.name },
+      geometry: { type: 'Point' as const, coordinates: region.anchor },
+    })),
+  };
+}
+
+/**
+ * A diagonal hatch, drawn once into a small tile.
  *
- * All three fade out by `COVERAGE_MAX_ZOOM` rather than switching off, so the
- * shapes do not blink out of existence mid-gesture.
+ * Hatching is how a printed chart has always marked "this area is excluded",
+ * and it survives being laid over satellite imagery in a way a flat wash does
+ * not: the eye reads regular diagonals as an overlay and irregular ground
+ * texture as terrain, so the region stops looking like an unusually pale
+ * desert and starts looking annotated.
+ *
+ * **Deliberately sparse.** Two thin strokes per tile, not a fill. The point is
+ * to be legible at a glance and ignorable while looking at aircraft, and a
+ * dense hatch would be neither.
+ *
+ * Returned as ImageData rather than a URL: the same reasoning as the sprite
+ * atlas (D30), which is that a generated asset stays adjustable in source
+ * instead of becoming an opaque binary in git.
+ */
+export function createHatchImage(size = 8): ImageData | null {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+
+  context.clearRect(0, 0, size, size);
+  context.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  context.lineWidth = 1;
+  // Two strokes, offset by the tile so the diagonal continues across the seam
+  // instead of breaking into dashes at every tile edge.
+  for (const offset of [0, size]) {
+    context.beginPath();
+    context.moveTo(-1 + offset, size + 1);
+    context.lineTo(size + 1 + offset, -1);
+    context.stroke();
+  }
+  return context.getImageData(0, 0, size, size);
+}
+
+/**
+ * Four layers: a wash, a hatch, a firm edge, and one line of type.
+ *
+ * **Quiet, but not invisible.** The first version was a 10% wash with a thin
+ * dashed edge, and over satellite imagery it read as nothing at all - the
+ * boundary was invisible and the region just looked like pale desert, which is
+ * exactly what it is a photograph of. An annotation that cannot be
+ * distinguished from the ground it annotates has failed.
+ *
+ * So: the edge is solid, brighter and twice the width, with a soft blur under
+ * it to lift it off busy terrain; and the fill is hatched. Diagonals are what
+ * makes it read as *drawn on* rather than *photographed* - the eye takes
+ * regular lines as an overlay and irregular texture as landscape. The hatch is
+ * two thin strokes per eight-pixel tile, which is enough to register and
+ * little enough to look through.
+ *
+ * It must still never compete with an aircraft. Everything here is white at
+ * low opacity over a dark photograph; the aircraft are saturated colour.
+ *
+ * All of it fades out by `COVERAGE_MAX_ZOOM` rather than switching off, so the
+ * shapes do not blink out mid-gesture.
  */
 export function coverageLayers(): LayerSpecification[] {
   const fadeOut = (peak: number): unknown => [
@@ -155,10 +240,21 @@ export function coverageLayers(): LayerSpecification[] {
       source: COVERAGE_SOURCE,
       maxzoom: COVERAGE_MAX_ZOOM,
       paint: {
-        // Slightly warm grey over imagery, slightly cool over the flat map:
-        // each is what reads as "hatched out" against its own ground.
-        'fill-color': whenFlat('#8aa0bd', '#cfd8e6'),
-        'fill-opacity': fadeOut(0.1) as never,
+        'fill-color': whenFlat('#7f97b8', '#e8eef8'),
+        'fill-opacity': fadeOut(0.09) as never,
+      },
+    } as LayerSpecification,
+    {
+      // The hatch is its own layer because a fill may have a colour or a
+      // pattern, not both, and the wash underneath is what keeps the hatch
+      // from reading as loose lines lying on open ground.
+      id: COVERAGE_HATCH_LAYER,
+      type: 'fill',
+      source: COVERAGE_SOURCE,
+      maxzoom: COVERAGE_MAX_ZOOM,
+      paint: {
+        'fill-pattern': COVERAGE_HATCH_IMAGE,
+        'fill-opacity': fadeOut(0.5) as never,
       },
     } as LayerSpecification,
     {
@@ -166,37 +262,37 @@ export function coverageLayers(): LayerSpecification[] {
       type: 'line',
       source: COVERAGE_SOURCE,
       maxzoom: COVERAGE_MAX_ZOOM,
+      layout: { 'line-join': 'round' },
       paint: {
-        'line-color': whenFlat('#6d84a3', '#dfe7f2'),
-        'line-width': 1,
-        // Dashed, because these boundaries are approximate and a solid line
-        // would claim otherwise.
-        'line-dasharray': [3, 3],
-        'line-opacity': fadeOut(0.45) as never,
+        'line-color': whenFlat('#3f5470', '#ffffff'),
+        'line-width': 2,
+        // A soft edge under the stroke, so the boundary survives being drawn
+        // over mountain shadow and cloud without needing to be loud.
+        'line-blur': 0.6,
+        'line-opacity': fadeOut(0.8) as never,
       },
     } as LayerSpecification,
     {
       id: COVERAGE_LABEL_LAYER,
       type: 'symbol',
-      source: COVERAGE_SOURCE,
+      // The point source, not the polygons: see coverageLabelFeatures.
+      source: COVERAGE_LABEL_SOURCE,
       maxzoom: COVERAGE_MAX_ZOOM,
       minzoom: 2.5,
       layout: {
         'text-field': 'NO RECEIVER COVERAGE',
         'text-font': ['Noto Sans Regular'],
-        'text-size': 10,
-        'text-letter-spacing': 0.18,
-        'text-max-width': 12,
+        'text-size': 10.5,
+        'text-letter-spacing': 0.2,
+        'text-max-width': 9,
         'text-allow-overlap': false,
-        // If it will not fit, drop it. A truncated or colliding annotation is
-        // worse than none, and the shape carries the meaning on its own.
         'text-optional': true,
       },
       paint: {
-        'text-color': whenFlat('#4a5a72', '#e8eef8'),
-        'text-halo-color': whenFlat('rgba(255,255,255,0.75)', 'rgba(0,0,0,0.6)'),
-        'text-halo-width': 1.1,
-        'text-opacity': fadeOut(0.75) as never,
+        'text-color': whenFlat('#33445c', '#ffffff'),
+        'text-halo-color': whenFlat('rgba(255,255,255,0.8)', 'rgba(0,0,0,0.72)'),
+        'text-halo-width': 1.4,
+        'text-opacity': fadeOut(0.9) as never,
       },
     } as LayerSpecification,
   ];

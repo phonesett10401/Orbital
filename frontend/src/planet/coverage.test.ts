@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   COVERAGE_GAPS,
+  COVERAGE_LABEL_SOURCE,
   COVERAGE_MAX_ZOOM,
   COVERAGE_SOURCE,
   coverageFeatures,
+  coverageLabelFeatures,
   coverageLayers,
+  createHatchImage,
 } from './coverageLayer';
 
 /** The densities that justified each shape, and the controls they beat. */
@@ -61,7 +64,10 @@ describe('the layers', () => {
     const { validateStyleMin } = await import('@maplibre/maplibre-gl-style-spec');
     const style = {
       version: 8 as const,
-      sources: { [COVERAGE_SOURCE]: { type: 'geojson', data: coverageFeatures() } },
+      sources: {
+        [COVERAGE_SOURCE]: { type: 'geojson', data: coverageFeatures() },
+        [COVERAGE_LABEL_SOURCE]: { type: 'geojson', data: coverageLabelFeatures() },
+      },
       layers: coverageLayers(),
       glyphs: 'https://example.invalid/{fontstack}/{range}.pbf',
     };
@@ -88,5 +94,51 @@ describe('the layers', () => {
     const features = coverageFeatures().features;
     expect(features).toHaveLength(COVERAGE_GAPS.length);
     expect(features.map((f) => f.properties.name)).toEqual(COVERAGE_GAPS.map((r) => r.name));
+  });
+});
+
+describe('one label per region', () => {
+  it('labels from points, not polygons', () => {
+    // MapLibre labels a polygon once per tile it covers, and these regions
+    // span several - "NO RECEIVER COVERAGE" was appearing twice over western
+    // China, a few hundred kilometres apart, which reads as two claims.
+    const points = coverageLabelFeatures().features;
+    expect(points).toHaveLength(COVERAGE_GAPS.length);
+    for (const point of points) expect(point.geometry.type).toBe('Point');
+  });
+
+  it('puts each anchor inside its own region', () => {
+    // A centroid can fall outside a concave shape; these are placed by hand,
+    // so the thing worth checking is that they landed in the right place.
+    for (const region of COVERAGE_GAPS) {
+      const lons = region.ring.map(([lon]) => lon);
+      const lats = region.ring.map(([, lat]) => lat);
+      const [lon, lat] = region.anchor;
+      expect(lon).toBeGreaterThanOrEqual(Math.min(...lons));
+      expect(lon).toBeLessThanOrEqual(Math.max(...lons));
+      expect(lat).toBeGreaterThanOrEqual(Math.min(...lats));
+      expect(lat).toBeLessThanOrEqual(Math.max(...lats));
+    }
+  });
+
+  it('the label layer reads from the point source', () => {
+    const label = coverageLayers().find((l) => l.type === 'symbol');
+    expect(label && 'source' in label && label.source).toBe(COVERAGE_LABEL_SOURCE);
+  });
+});
+
+describe('the hatch', () => {
+  it('never throws where there is no canvas', () => {
+    // jsdom has no 2d context unless the native canvas package is installed,
+    // and a browser can refuse one too. The map must still come up: the
+    // pattern is an annotation, and losing it is not losing the map.
+    expect(() => createHatchImage()).not.toThrow();
+  });
+
+  it('returns either an image or nothing, never a broken one', () => {
+    const image = createHatchImage();
+    if (image === null) return;
+    expect(image.width).toBeGreaterThan(0);
+    expect(image.height).toBe(image.width);
   });
 });
