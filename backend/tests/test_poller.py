@@ -18,6 +18,7 @@ from app.ingestion.poller import MAX_BACKOFF_SECONDS, Poller
 from app.ingestion.store import ObjectStore
 from app.models import BBox, ObjectType, TrackedObjectRecord, utcnow
 from app.providers.base import Provider, ProviderRateLimited, ProviderUnavailable
+from app.providers.union import UnionProvider
 from app.quota import ThrottleLevel, credits_for_area, credits_for_bbox
 
 # Anchored to the real clock rather than a literal date: eviction compares
@@ -538,3 +539,53 @@ class TestLifecycle:
         assert status.successful_polls >= 2
         assert status.failed_polls >= 1
         assert store.object_count == 1
+
+
+class TestTheUnionsBalanceReachesTheLadder:
+    """Defect #34, and why every test above missed it.
+
+    ``FakeProvider`` sets ``remaining_credits`` on itself, so the throttling
+    tests exercise a provider that is *more* capable than the real union one,
+    which had no such attribute at all. The poller read it through a
+    ``getattr`` default, so the union reported no balance, and
+    ``throttle_for(None, ...)`` is NORMAL by design. The ladder was therefore
+    dead in the only configuration that spends credits, and every test passed.
+
+    These go through ``UnionProvider`` for that reason. A fake standing in for
+    it would reintroduce exactly the gap that hid the defect.
+    """
+
+    @pytest.fixture
+    def metered(self) -> FakeProvider:
+        return FakeProvider()
+
+    @pytest.fixture
+    def union_poller(self, metered, store, settings) -> Poller:
+        return Poller(UnionProvider(FakeProvider(), metered), store, settings)
+
+    def test_the_metered_feed_s_balance_is_the_union_s(self, union_poller, metered):
+        metered.remaining_credits = 3350
+        assert union_poller.remaining_credits == 3350
+        assert union_poller.status().remaining_credits == 3350
+
+    def test_a_draining_balance_now_steps_the_ladder_down(self, union_poller, metered):
+        metered.remaining_credits = 1000  # 25% of 4000
+        assert union_poller.throttle is ThrottleLevel.REDUCED
+
+    @pytest.mark.anyio
+    async def test_an_exhausted_supplement_stops_the_union_polling(
+        self, union_poller, metered
+    ):
+        # The free primary is still willing, but the poll is a single call to
+        # the union and there is no way to buy half of it.
+        metered.remaining_credits = 0
+        await tick(union_poller, "global")
+        assert status_of(union_poller, "global").skipped_polls == 1
+
+    def test_a_free_pairing_reports_no_balance_rather_than_zero(
+        self, union_poller
+    ):
+        # Nothing has been polled yet. None means "we do not know", which the
+        # ladder reads as normal; zero would mean exhausted and refuse to start.
+        assert union_poller.remaining_credits is None
+        assert union_poller.throttle is ThrottleLevel.NORMAL

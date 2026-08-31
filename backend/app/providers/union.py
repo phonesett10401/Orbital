@@ -79,6 +79,22 @@ class UnionProvider(Provider):
         self._supplement_cache: list[TrackedObjectRecord] = []
         self._supplement_at: float | None = None
 
+    @property
+    def remaining_credits(self) -> int | None:
+        """The metered feed's balance, which is the union's balance.
+
+        The primary is free by construction -- that is the whole point of the
+        pairing -- so whatever the supplement has left is what we have left.
+
+        Without this the poller sees no balance at all and its throttle ladder
+        can never step down, in the one configuration where stepping down
+        matters (defect #34). The projected 2,880/day fits inside 4,000, so the
+        ladder is a safety net rather than a brake; but a net that is not
+        attached to anything is worse than no net, because it reads as
+        protection on the health endpoint.
+        """
+        return self.supplement.remaining_credits
+
     async def fetch(self, bbox: BBox | None = None) -> list[TrackedObjectRecord]:
         primary_task = asyncio.create_task(self.primary.fetch(bbox))
         supplement_task = asyncio.create_task(self._supplement_records(bbox))

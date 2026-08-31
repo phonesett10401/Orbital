@@ -227,6 +227,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 34 | **The throttle ladder was dead in the only configuration that spends credits** - `Poller.remaining_credits` read the balance through a `getattr` default, `UnionProvider` had no such attribute, and `throttle_for(None, ...)` is NORMAL by design, so the union reported no balance and could never step down | Medium | Reading `/api/health` during a live union run, against the credit balances the OpenSky provider was logging beside it (19.40) | Fixed |
 | 33 | **The panel said the same thing twice** - registration and aircraft type had labelled rows of their own *and* came back four rows later from the generic `meta` renderer, so one fact read as two | Low, visual | Reading the live panel while verifying the scheduled route (§19.38) | Fixed |
 | 32 | **Two of every five aircraft drawn were ghosts** — the 30-minute eviction window was set for a 300-second poll; with two feeds sweeping every 60 s it kept aircraft nobody had reported for half an hour, drawn frozen and faded | Medium, visual | Phone: two crops of the same aircraft, one bright and one pale (D86, §19.36) | Fixed |
 | 31 | **A single global circle left a quarter of the world unswept** — 6,000 nm is about 100 degrees of arc, so Australia, New Zealand and the south Pacific were refreshed only when OpenSky carried them; their aircraft sat frozen and faded | **High** | Phone: "the planes are stuck for 2-3 minutes" (D85, §19.35) | Fixed |
@@ -2613,3 +2614,44 @@ exists. The list is allowed to name only keys the panel renders somewhere else.
 Found by reading the rendered panel in the live app, not by any assertion - the
 same way defects #22, #23, #26 and #28 were found. Nothing was wrong with the
 data, the types, or any test.
+
+### 19.40 The safety net was not attached to anything
+
+Found on 2026-08-31 while running the live union feed. `/api/health` reported
+`remainingCredits: null` while `app.providers.opensky` was logging real
+balances - 3362, 3320, 3316 - a few lines away in the same console.
+
+`Poller.remaining_credits` read `getattr(self.provider, "remaining_credits",
+None)`. Under `ORBITAL_PROVIDER=union` the provider is `UnionProvider`, which
+had no such attribute; the `getattr` default turned a missing attribute into
+None, and `throttle_for` maps None to NORMAL deliberately, for the case where
+we have not polled yet. Both halves are individually reasonable and together
+they meant **the ladder could never step down in production**.
+
+Not an overspend: the projected 2,880/day fits inside 4,000, so the ladder is
+a net rather than a brake. But a net that is not attached reads as protection
+on the health endpoint, and the case it exists for is the one a public
+deployment creates - every aircraft a visitor selects buys a 4-credit track,
+and those are per aircraft, not per user.
+
+**Why 431 passing tests missed it.** `FakeProvider` in `test_poller.py` sets
+`remaining_credits` on itself, so every test in `TestThrottling` exercised a
+provider *more* capable than the real union one. The fake had the attribute the
+production object lacked, which is the precise shape of a fake that has drifted
+from the thing it stands for.
+
+The fix is three small changes, and only the third is the actual repair:
+
+- `Provider` now declares `remaining_credits: int | None = None`, so "this
+  source is free" is a decision the interface states rather than an attribute
+  lookup that happens to miss.
+- `UnionProvider.remaining_credits` delegates to the supplement, which is the
+  metered half by construction.
+- The poller reads `self.provider.remaining_credits` directly. The `getattr`
+  default was what made the defect invisible, so removing it matters as much as
+  adding the property.
+
+Seven tests were added, four of them through a real `UnionProvider` rather than
+a fake, for the reason above. Verified live: after the change `/api/health`
+reported `remainingCredits: 3342` on the same running configuration that had
+reported `null`.

@@ -258,3 +258,23 @@ class TestTracks:
     async def test_no_track_anywhere_is_None_rather_than_an_error(self) -> None:
         union = UnionProvider(Fake("a", [], track=None), Fake("b", [], track=None))
         assert await union.fetch_track("aaa111") is None
+
+
+class TestCredits:
+    def test_the_balance_is_whatever_the_metered_feed_has_left(self) -> None:
+        # The primary is free by construction, so the supplement's balance is
+        # the pair's balance (defect #34).
+        supplement = Fake("opensky", [])
+        supplement.remaining_credits = 3350
+        assert UnionProvider(Fake("adsblol", []), supplement).remaining_credits == 3350
+
+    def test_before_the_first_poll_there_is_no_balance_to_report(self) -> None:
+        union = UnionProvider(Fake("adsblol", []), Fake("opensky", []))
+        assert union.remaining_credits is None
+
+    def test_the_free_feed_s_own_balance_is_not_consulted(self) -> None:
+        # If adsb.lol ever grew a credit counter it would not be the one that
+        # decides whether we can afford to poll.
+        primary = Fake("adsblol", [])
+        primary.remaining_credits = 12
+        assert UnionProvider(primary, Fake("opensky", [])).remaining_credits is None

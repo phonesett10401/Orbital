@@ -55,6 +55,17 @@ class Provider(ABC):
     #: Which layer this provider populates.
     object_type: ObjectType
 
+    #: Credits left on a metered upstream, or None when the source is free or
+    #: has not been polled yet. The poller reads this to pick a throttle level
+    #: (D23), so it is declared here rather than only on the metered providers:
+    #: a provider that forgets it should read as "free", and that has to be a
+    #: decision the interface makes, not an attribute lookup that happens to
+    #: miss. Defect #34 was exactly that miss -- ``UnionProvider`` had no such
+    #: attribute, a ``getattr`` default in the poller turned it into None, and
+    #: the throttle ladder sat permanently at NORMAL in the one configuration
+    #: that actually spends money.
+    remaining_credits: int | None = None
+
     async def fetch_track(self, object_id: str) -> tuple[TrackPoint, ...] | None:
         """The path of the object's current flight, oldest first, or None.
 

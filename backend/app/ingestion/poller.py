@@ -248,7 +248,15 @@ class Poller:
 
     @property
     def remaining_credits(self) -> int | None:
-        return getattr(self.provider, "remaining_credits", None)
+        """What the source says it has left, or None when it is free.
+
+        Read straight off the interface rather than through ``getattr``. The
+        defaulting form hid defect #34 for the entire life of the union
+        provider: a provider missing the attribute was indistinguishable from
+        one that had not been polled yet, and both read as "no throttling
+        needed".
+        """
+        return self.provider.remaining_credits
 
     @property
     def throttle(self) -> ThrottleLevel:
