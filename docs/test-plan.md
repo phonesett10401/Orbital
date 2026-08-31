@@ -227,7 +227,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
-| 35 | **The last circle of every global sweep was refused and thrown away** - a 2 s pause was under adsb.lol's rate limit, so the fourth request 429'd on every poll; a partial sweep is tolerated by design, so it logged a warning and carried on without the Americas | Medium | Reading the server log during a live union run, then reversing the sweep order to prove it followed position not region (19.41) | Fixed |
+| 35 | **The last circle of every global sweep was refused and thrown away** - a 2 s pause was under adsb.lol's rate limit, so the fourth request 429'd on every poll; a partial sweep is tolerated by design, so it logged a warning and carried on without the Americas | Medium | Reading the server log during a live union run, then reversing the sweep order to prove it followed position not region (19.41) | **Improved, not closed** - see 19.43 |
 | 34 | **The throttle ladder was dead in the only configuration that spends credits** - `Poller.remaining_credits` read the balance through a `getattr` default, `UnionProvider` had no such attribute, and `throttle_for(None, ...)` is NORMAL by design, so the union reported no balance and could never step down | Medium | Reading `/api/health` during a live union run, against the credit balances the OpenSky provider was logging beside it (19.40) | Fixed |
 | 33 | **The panel said the same thing twice** - registration and aircraft type had labelled rows of their own *and* came back four rows later from the generic `meta` renderer, so one fact read as two | Low, visual | Reading the live panel while verifying the scheduled route (§19.38) | Fixed |
 | 32 | **Two of every five aircraft drawn were ghosts** — the 30-minute eviction window was set for a 300-second poll; with two feeds sweeping every 60 s it kept aircraft nobody had reported for half an hour, drawn frozen and faded | Medium, visual | Phone: two crops of the same aircraft, one bright and one pale (D86, §19.36) | Fixed |
@@ -2738,3 +2738,50 @@ than "no planes here" - is consistent with how the rest of the app treats
 provenance. Coasting aircraft across the gap on their last heading was
 considered and argued against: it means drawing aircraft nobody has seen, which
 is defect #32. Neither has been built; both are product decisions for Phone.
+
+### 19.43 The gate helped and did not fix it
+
+**Correcting 19.41, which claimed this closed.** That claim rested on three
+clean polls in a five-minute window, which was too small a sample, and on a
+second reading - "the only failures are cold starts" - drawn from two polls.
+Both were wrong.
+
+Thirteen uninterrupted polls under the provider-wide gate:
+
+| | |
+|---|---|
+| polls | 13 |
+| polls losing a circle | **5** |
+| of those, at cold start | 1 |
+| steady state | 10:32:30, 10:33:56, 10:36:39, 10:37:57 |
+
+So it is **38%, not cold-start-only**. What did change is the character: it was
+100% of polls losing the *same* circle permanently, and it is now an
+intermittent loss of a varying circle that the next poll recovers. The map is
+missing a region occasionally rather than a continent always. That is a real
+improvement and it is not a fix.
+
+**The likely reason the measurement misled, twice.** The interval was chosen by
+sending bursts of four requests with 45 s between bursts, and production sends
+**8 requests a minute, sustained** - four from the sweep and four from the
+viewport job. If adsb.lol limits a sustained rate rather than a gap between
+requests, which is how nginx normally does it, then a 4 s spacing satisfies the
+rule that was measured and still overdraws the budget that actually exists. The
+gate would then be working exactly as designed while the design tests the wrong
+property.
+
+**Unverified.** The distinguishing experiment is to send at a steady interval
+with the server stopped and see whether refusals begin after N requests rather
+than immediately: a rate cap shows as "fine for the first few, then refused",
+a spacing rule does not. It has not been run - it needs the backend down for
+several minutes, which is Phone's call.
+
+If it is a rate cap, a longer gate is the wrong fix and fewer requests is the
+right one - a longer viewport interval costs the 2 s median freshness D87
+measured, a longer gate delays viewport polls. Both are trade-offs, neither is
+obviously correct, and the choice is Phone's.
+
+**Three wrong readings in a row on one defect**, each from a sample small
+enough to look clean. The pattern is in this document twice already
+(19.40, and "Three defects in a row came from my own measurements" in the
+handoff). Watch longer before calling a rate limit fixed.
