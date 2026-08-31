@@ -192,13 +192,23 @@ export function aircraftLayers(): LayerSpecification[] {
         'icon-image': ['case', ['get', 'hasHeading'], ICON_AIRCRAFT, ICON_UNKNOWN],
         // Grows with zoom, but nothing like linearly: an aircraft is a symbol
         // on a map, not a scale model of an aeroplane. The per-feature factor
-        // multiplies that curve rather than replacing it, so the zoom
-        // behaviour that was tuned stays exactly as it was and only the
-        // relative sizes of aircraft change.
+        // multiplies each stop rather than the curve, so the zoom behaviour
+        // that was tuned stays exactly as it was and only the relative sizes
+        // of aircraft change.
+        //
+        // **The multiply has to be inside the interpolate, not outside it.**
+        // MapLibre allows a `zoom` expression only as the direct input of a
+        // top-level `step` or `interpolate`; wrapping the curve in a `*` makes
+        // the whole layer invalid, and an invalid layer is dropped silently -
+        // every aircraft icon disappeared while the callsigns, being a
+        // separate layer, stayed exactly where they were.
         'icon-size': [
-          '*',
-          ['interpolate', ['linear'], ['zoom'], 2, 0.14, 8, 0.22, 14, 0.34],
-          ['get', 'scale'],
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          2, ['*', 0.14, ['get', 'scale']],
+          8, ['*', 0.22, ['get', 'scale']],
+          14, ['*', 0.34, ['get', 'scale']],
         ],
         'icon-rotate': ['get', 'heading'],
         // Rotation is relative to the map's north, which is what a heading is.

@@ -994,3 +994,60 @@ describe('basemapDimLayer', () => {
     expect(basemapDimLayer(0.2).type).toBe('background');
   });
 });
+
+describe('our own layers pass the validator too', () => {
+  // **Defect #25 happened a second time, in a different layer.** The guard
+  // above was added after wrapping a zoom crossfade in a multiplication broke
+  // the basemap style - and then `icon-size` was written as
+  // `['*', ['interpolate', ['zoom'], ...], ['get', 'scale']]`, which is the
+  // same mistake with the same cause: MapLibre allows a `zoom` expression only
+  // as the direct input of a top-level `step` or `interpolate`.
+  //
+  // It was invisible in exactly the way the first one was. The aircraft icon
+  // layer was rejected and dropped while the callsign layer, being separate,
+  // carried on drawing - so the map showed labels floating over an empty sea
+  // and 543 tests stayed green. The fix is to multiply each *stop* instead of
+  // the curve.
+  //
+  // The lesson the first guard half-learned: validate everything handed to
+  // MapLibre, not just the part that broke last time.
+
+  it('validates the aircraft layers against the style spec', async () => {
+    const { validateStyleMin } = await import('@maplibre/maplibre-gl-style-spec');
+    const style = {
+      ...bareStyle,
+      sources: {
+        ...bareStyle.sources,
+        [AIRCRAFT_SOURCE]: { type: 'geojson', data: aircraftFeatures([], NOW) },
+      },
+      layers: [...bareStyle.layers, ...aircraftLayers()],
+    };
+    const errors = validateStyleMin(style as never);
+    expect(errors.map((e) => `${e.message}`)).toEqual([]);
+  });
+
+  it('validates the basemap dim layer', async () => {
+    const { validateStyleMin } = await import('@maplibre/maplibre-gl-style-spec');
+    const style = {
+      ...bareStyle,
+      layers: [...bareStyle.layers, basemapDimLayer(0.32)],
+    };
+    const errors = validateStyleMin(style as never);
+    expect(errors.map((e) => `${e.message}`)).toEqual([]);
+  });
+
+  it('still scales an aircraft by its airframe after the fix', async () => {
+    // The fix must keep the behaviour, not just the validity: a widebody is
+    // still drawn larger than a narrowbody at every zoom stop.
+    const [icons] = aircraftLayers();
+    const size = (icons.layout as Record<string, unknown>)['icon-size'];
+    expect(Array.isArray(size) && size[0]).toBe('interpolate');
+    // Every stop output multiplies the per-feature scale.
+    const stops = (size as unknown[]).slice(3);
+    const outputs = stops.filter((_, i) => i % 2 === 1);
+    expect(outputs).toHaveLength(3);
+    for (const output of outputs) {
+      expect(Array.isArray(output) && output[0]).toBe('*');
+    }
+  });
+});
