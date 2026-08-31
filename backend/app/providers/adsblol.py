@@ -84,9 +84,25 @@ GLOBAL_RADIUS_NM = 6000
 #: Seconds between the sweep's requests.
 #:
 #: The service throttles a burst with HTTP 420 and stays cross for about a
-#: minute afterwards, which costs far more than the pause does. Four circles
-#: two seconds apart is about eight seconds of a sixty-second poll.
-SWEEP_PAUSE_SECONDS = 2.0
+#: minute afterwards, which costs far more than the pause does.
+#:
+#: **Two seconds was not enough, and the shortfall was invisible.** The fourth
+#: circle of every global sweep came back 429, every poll, for the life of the
+#: provider - and because a partial sweep is deliberately tolerated below, it
+#: logged a warning and carried on. The circle that happened to be fourth is
+#: the Americas, so the entire continent was served by the OpenSky supplement
+#: alone (defect #35).
+#:
+#: Measured with the server stopped, so nothing else was competing for the
+#: limit: 2 s failed 1 of 4, 3 s passed, 4 s passed three times over. The
+#: threshold is between two and three seconds; 4 s is double the value that
+#: failed, and the margin is deliberate because in production the viewport job
+#: is also querying this API every 15 s from the same address, which the
+#: measurement above did not include.
+#:
+#: Four circles four seconds apart is about fifteen seconds of a sixty-second
+#: poll.
+SWEEP_PAUSE_SECONDS = 4.0
 
 #: The largest radius asked for a viewport, in nautical miles.
 #:
@@ -131,26 +147,62 @@ class AdsbLolProvider(Provider):
             return await self._fetch_circle(lat, lon, radius)
 
         merged: dict[str, TrackedObjectRecord] = {}
-        failures: list[BaseException] = []
-        for index, (lat, lon) in enumerate(GLOBAL_SWEEP):
+        failed: list[tuple[float, float]] = []
+        last_error: BaseException | None = None
+
+        for index, point in enumerate(GLOBAL_SWEEP):
             if index:
                 await asyncio.sleep(self._sweep_pause)
-            try:
-                for record in await self._fetch_circle(lat, lon, GLOBAL_RADIUS_NM):
-                    merged[record.id] = record
-            except ProviderError as exc:
+            error = await self._sweep_circle(point, merged)
+            if error is not None:
                 # One circle failing is a partial view, not no view: the sweep
                 # overlaps, and refusing the whole poll would throw away three
                 # quarters of the planet over one throttled request.
-                failures.append(exc)
+                failed.append(point)
+                last_error = error
 
-        if failures and not merged:
-            raise ProviderUnavailable(f"adsb.lol unreachable: {failures[0]}")
-        if failures:
+        # **Ask again for whatever was refused.** Tolerating a partial sweep is
+        # right, but on its own it is also silent, and defect #35 lived in that
+        # silence for the life of the provider: the same circle failed on every
+        # poll and the map was simply missing a continent. A retry costs one
+        # pause and only when something actually failed, and it turns a
+        # permanent hole into at worst a delayed one.
+        for point in list(failed):
+            await asyncio.sleep(self._sweep_pause)
+            error = await self._sweep_circle(point, merged)
+            if error is None:
+                failed.remove(point)
+            else:
+                last_error = error
+
+        if failed and not merged:
+            raise ProviderUnavailable(f"adsb.lol unreachable: {last_error}")
+        if failed:
             logger.warning(
-                "adsb.lol: %d of %d circles failed", len(failures), len(GLOBAL_SWEEP)
+                "adsb.lol: %d of %d circles failed twice: %s",
+                len(failed),
+                len(GLOBAL_SWEEP),
+                ", ".join(f"{lat},{lon}" for lat, lon in failed),
             )
         return list(merged.values())
+
+    async def _sweep_circle(
+        self,
+        point: tuple[float, float],
+        merged: dict[str, TrackedObjectRecord],
+    ) -> BaseException | None:
+        """Fetch one sweep circle into ``merged``; return the error, if any.
+
+        Returning the failure rather than raising keeps the sweep's control
+        flow in one place, so the retry below cannot drift from the first pass.
+        """
+        lat, lon = point
+        try:
+            for record in await self._fetch_circle(lat, lon, GLOBAL_RADIUS_NM):
+                merged[record.id] = record
+        except ProviderError as exc:
+            return exc
+        return None
 
     async def _fetch_circle(
         self, lat: float, lon: float, radius_nm: int

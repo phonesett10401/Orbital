@@ -227,6 +227,7 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 35 | **The last circle of every global sweep was refused and thrown away** - a 2 s pause was under adsb.lol's rate limit, so the fourth request 429'd on every poll; a partial sweep is tolerated by design, so it logged a warning and carried on without the Americas | Medium | Reading the server log during a live union run, then reversing the sweep order to prove it followed position not region (19.41) | Fixed |
 | 34 | **The throttle ladder was dead in the only configuration that spends credits** - `Poller.remaining_credits` read the balance through a `getattr` default, `UnionProvider` had no such attribute, and `throttle_for(None, ...)` is NORMAL by design, so the union reported no balance and could never step down | Medium | Reading `/api/health` during a live union run, against the credit balances the OpenSky provider was logging beside it (19.40) | Fixed |
 | 33 | **The panel said the same thing twice** - registration and aircraft type had labelled rows of their own *and* came back four rows later from the generic `meta` renderer, so one fact read as two | Low, visual | Reading the live panel while verifying the scheduled route (§19.38) | Fixed |
 | 32 | **Two of every five aircraft drawn were ghosts** — the 30-minute eviction window was set for a 300-second poll; with two feeds sweeping every 60 s it kept aircraft nobody had reported for half an hour, drawn frozen and faded | Medium, visual | Phone: two crops of the same aircraft, one bright and one pale (D86, §19.36) | Fixed |
@@ -2655,3 +2656,85 @@ Seven tests were added, four of them through a real `UnionProvider` rather than
 a fake, for the reason above. Verified live: after the change `/api/health`
 reported `remainingCredits: 3342` on the same running configuration that had
 reported `null`.
+
+### 19.41 The fourth circle, every time
+
+`adsb.lol: 1 of 4 circles failed` appeared on **every** global poll during the
+live union run on 2026-08-31. The obvious reading - that the Asian circle was
+failing, and that this explained the empty region over western China Phone had
+sketched - was wrong twice over.
+
+**Which circle.** Reversing the sweep order settled it:
+
+| order | region | forward | reversed |
+|---|---|---|---|
+| 1st | Europe / Americas | 200, 6,222 | 200, 4,898 |
+| 4th | Americas / Europe | **429** | **429** |
+
+The failure follows **position, not region**. Whichever circle went fourth was
+refused. In `GLOBAL_SWEEP` that is `(0.0, -80.0)`, so the Americas contributed
+nothing to any global poll and depended on the 120 s OpenSky supplement alone.
+
+**Not contention.** The running server also queries this API every 15 s for the
+viewport job, so the obvious suspect was our own traffic competing for the
+limit. Stopping the server and re-running the sweep still failed at 2 s, which
+ruled that out.
+
+**The threshold, measured with the server stopped:**
+
+| pause | result |
+|---|---|
+| 2 s | 1 of 4 refused |
+| 3 s | 4 of 4 |
+| 4 s | 4 of 4, three runs |
+
+`SWEEP_PAUSE_SECONDS` went to **4.0** - double the value that failed. The margin
+over the 3 s that passed is deliberate: the measurement had no viewport job
+running, and production does.
+
+**A pause alone was not the whole fix.** What let this survive the life of the
+provider is that a partial sweep is deliberately tolerated (D85) and therefore
+silent. Refused circles are now retried once after the sweep completes, which
+costs one pause and only when something failed. Three tests cover it: a refused
+circle is asked again, a circle failing twice is given up on rather than
+looped, and a clean sweep retries nothing.
+
+There is no `Retry-After` to honour - the 429 is a plain nginx error page with
+no rate-limit headers of any kind, which is why the interval had to be found by
+measurement.
+
+Verified live: three consecutive global polls after the change, zero circle
+failures, against four failures in four polls before it.
+
+### 19.42 What could cover the gap over western China
+
+Asked after 19.40 established the coverage hole is real. **Every free feed has
+the same hole**, because they are all the same volunteer-receiver model:
+
+| feed | Tarim basin (38N 88E) | central Tibet (32N 90E) | Delhi (control) |
+|---|---|---|---|
+| adsb.lol | **0** | **0** | 17 |
+| adsb.fi | **0** | **0** | 64 |
+
+The controls pass, so the queries are correct and the region is genuinely
+empty. airplanes.live returned 403 to a scripted request and was not measured;
+it uses the same receiver model. Note adsb.fi keys its aircraft array
+`aircraft`, not `ac` - reading it as `ac` gives a silent zero, which briefly
+produced a wrong control reading here.
+
+**Only space-based ADS-B covers it** - Aireon on the Iridium NEXT constellation,
+or Spire. None of it is reachable for this project:
+
+- **FlightAware AeroAPI** - Personal tier is a $5/month credit, but Aireon data
+  is **Premium only**, and Premium carries a **$1,000/month minimum**. It is
+  also flight- and airport-centric, with no bounding-box position endpoint,
+  which is the only query Orbital makes.
+- **Flightradar24 API** - enterprise, sales-gated, no self-serve tier.
+- **Spire Aviation** - enterprise.
+
+**Conclusion: the hole is not fillable, and should be shown rather than
+hidden.** Drawing the coverage gap honestly - "nobody is listening here" rather
+than "no planes here" - is consistent with how the rest of the app treats
+provenance. Coasting aircraft across the gap on their last heading was
+considered and argued against: it means drawing aircraft nobody has seen, which
+is defect #32. Neither has been built; both are product decisions for Phone.

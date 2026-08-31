@@ -228,6 +228,50 @@ class TestRequestShape:
         assert len(records) == 1
 
     @pytest.mark.anyio
+    async def test_a_refused_circle_is_asked_again(self) -> None:
+        # Defect #35: the fourth circle was refused on every poll, the partial
+        # sweep was tolerated by design, and a continent went missing quietly.
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] == 4:  # the last circle, as in production
+                return httpx.Response(429, text="no")
+            return httpx.Response(200, json={"ac": [LIVE_RECORD]})
+
+        records = await provider(handler).fetch(None)
+        assert calls["n"] == 5  # four circles, then the refused one again
+        assert len(records) == 1
+
+    @pytest.mark.anyio
+    async def test_a_circle_that_fails_twice_is_given_up_on(self) -> None:
+        # The retry is one attempt, not a loop: a source that is genuinely down
+        # must not hold the poll open indefinitely.
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] in (2, 5):
+                return httpx.Response(429, text="no")
+            return httpx.Response(200, json={"ac": [LIVE_RECORD]})
+
+        records = await provider(handler).fetch(None)
+        assert calls["n"] == 5
+        assert len(records) == 1  # the other three circles still counted
+
+    @pytest.mark.anyio
+    async def test_nothing_is_retried_when_the_sweep_is_clean(self) -> None:
+        # The retry must cost nothing on the common path.
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            return httpx.Response(200, json={"ac": [LIVE_RECORD]})
+
+        await provider(handler).fetch(None)
+        assert calls["n"] == len(GLOBAL_SWEEP)
+
+    @pytest.mark.anyio
     async def test_every_circle_failing_is_an_outage(self) -> None:
         # And must raise: an empty list would be applied to the store as a
         # successful poll (D10).
