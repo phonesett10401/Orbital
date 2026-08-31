@@ -379,6 +379,11 @@ to install, another build stage to run, and another thing that can break for a
 three-person team on a deadline. The discipline required instead — change both
 files together — is enforced by review.
 
+**Later note:** it is ten fields now, not nine - `model` was added for D90 -
+and the discipline held: both files changed in the same commit, as did
+data-contract.md. The prediction that the shape changes rarely has survived
+one change in eighty-odd decisions.
+
 **Revisit if:** the shape starts changing often, or drift between the two
 actually causes a bug.
 
@@ -4362,3 +4367,192 @@ enriches, so wiring this in silently added several real network calls per run -
 0.6 s each, flaky offline, and unkind to a service that charges nothing.
 `create_app` now takes an injectable lookup and the tests pass an offline one,
 the same way they already inject a fake provider.
+
+---
+
+## D89 - One search box, two lists, and arriving somewhere you can recognise
+
+**Decision:** `GET /api/search` answers a single query with **two separate
+lists**, aircraft and airports, and the panel draws them as two groups.
+Choosing an airport flies the camera to zoom 11 and **draws a marker on it**.
+
+### Why the backend refuses to rank them together
+
+An aircraft is a thing being watched right now; an airport is a place that is
+always there. There is no honest ordering between "the A320 currently over
+Bangkok" and "Suvarnabhumi Airport" - they are not more or less relevant to
+each other, they are different kinds of answer. A single ranked list would have
+to invent a comparison, and every invented comparison eventually puts the wrong
+thing first. Two lists cost one extra field in the response and remove the
+question entirely.
+
+### Ordering within a list
+
+Airports are matched in tiers - exact code, code prefix, word-prefix in the
+name or city, then substring - and **within a tier, airports with an IATA code
+come first**. The table holds 28,291 airports and most of them are farm strips.
+Someone typing "London" wants Heathrow, Gatwick and City; they do not want
+London Ontario's grass runway ahead of them because its name happens to sort
+earlier. Having an IATA code is the closest available proxy for "somewhere
+scheduled flights actually go".
+
+The word-prefix tier exists because "Don Mueang" and "Mueang" should both find
+DMK, but "ueang" should not. Matching on any substring makes every query return
+noise; matching only on the start of the name makes half of them return
+nothing.
+
+### Arriving is a rendering problem, not a search problem
+
+The first version flew the camera to the airport's coordinates and stopped.
+That is correct and useless: the globe rolls, settles over some ground, and
+nothing on screen says which patch of it is the airport. **A search result the
+user cannot recognise has not been delivered.**
+
+So the answer has two halves. Zoom 11, which is close enough that the runways
+are visible on the imagery underneath. And a marker - a halo, a ring and the
+airport's name - so the answer is pointed at rather than merely centred.
+
+The label sets `text-allow-overlap: true` and `text-ignore-placement: false`,
+which are not the same switch and were confused once. The first says *our*
+label draws whatever else is there, which is the point: this label is the
+answer to a question the user just asked, and it must never be dropped for lack
+of room. The second says whether *other* labels may draw over ours. Left true,
+the basemap printed its own place name through ours and produced
+"Don Mueang Internatio**DMK**rport".
+
+---
+
+## D90 - An aircraft is drawn the size that aircraft is
+
+**Decision:** every aircraft is drawn at a size derived from **its own
+wingspan**, looked up from the `model` designator in a committed table, in all
+three places something is drawn: the globe's sprites, the map's sprites, and
+the 3D model in both renderers.
+
+### What it replaces
+
+One size for everything. A Cessna 172 and an Airbus A380 were the same number
+of pixels, which is wrong by a factor of six in span and is the single most
+visible thing a viewer can check against their own knowledge.
+
+### The scale is compressed on purpose, and the table is not
+
+The drawn scale is `sqrt(span / 35.8)`, clamped to [0.7, 1.45]. 35.8 m is the
+A320's span - the most common airliner in the sky, so the most common aircraft
+is drawn at exactly 1.0 and everything else is relative to a familiar thing.
+
+The square root and the clamp are both deliberate distortions. True linear
+scale would draw the A380 at 2.2x the A320 and the C172 at 0.3x, and at that
+range the light aircraft is a dot too small to click and the A380 crowds its
+neighbours off the map. **Compressing the ratio keeps the ordering true while
+keeping every aircraft clickable**, which is the property the display is
+actually for. The wingspans in the table remain the real ones; the compression
+is applied at the point of drawing and nowhere else, so nothing downstream
+inherits a distorted number.
+
+### About a quarter of a live map has no type at all
+
+OpenSky's `/states/all` carries no aircraft type, so `model` is null for
+everything OpenSky contributes that adsb.lol has not also seen. Those fall back
+to the reference span, which draws them as an A320 - the most likely thing an
+unidentified airliner-shaped return actually is. There is no separate "unknown"
+size, because a distinct size for "we don't know" would be a claim about the
+aircraft, and it isn't one.
+
+---
+
+## D91 - A widebody has to look like a widebody, and the true ratio does not
+
+**Decision:** the 3D airframe's proportions - fuselage girth, length, nose,
+wings, tailplane, and the number of engines - come from the ICAO type. Body
+girth is set by **size class**, not by the type's true fuselage ratio.
+
+### The measurement that had to be overruled
+
+Real fuselage ratios say the largest aircraft have the *thinnest* tubes
+relative to their span: a 777 is longer and far wider-winged than a 737, and
+its diameter divided by its span is smaller. Drawn faithfully, a widebody came
+out looking spindly next to a narrowbody - which is exactly backwards from what
+anyone who has stood next to both would expect, and Phone reported it twice in
+the same session before it was believed.
+
+The error was not in the numbers. It was in assuming the ratio was the quantity
+a viewer perceives. At the size these are drawn, **what reads as "big aircraft"
+is a thick body**, and the true ratio actively works against that.
+
+So girth is interpolated across three size classes - light, narrowbody,
+widebody - anchored at spans of 15, 35.8 and 60 m. A widebody's drawn body is
+roughly 1.7x a narrowbody's and about 2x a light aircraft's. Length still
+tracks the type's real length ratio, but tempered toward 1 so a 747 does not
+become a pencil.
+
+### The parts have to meet
+
+Two follow-on defects came from changing girth without changing what attaches
+to it. The nose tip was pinned at a constant radius while the body grew, so a
+fat body ended in a 19:1 taper - a needle, and Phone described what it looked
+like instead. It is now a constant 2.9:1 ratio to the body, so the nose fattens
+with the fuselage. Wings, tailplane and engine nacelles are likewise placed
+from the body radius rather than from fixed coordinates.
+
+### The rule this is an instance of
+
+**The accurate number and the legible one are often different, and the drawing
+has to declare which one it is using.** The table of real dimensions is kept and
+remains the truth; the size class governs only what is drawn. Anyone reading the
+source finds the real figures and a comment saying why the drawing departs from
+them. See D92 for the same trade made again, days apart, in a completely
+different part of the view.
+
+---
+
+## D92 - Draw the holes in the map, and draw them as drawn-on
+
+**Decision:** the map draws five **measured** regions where no ground receiver
+reports, as hatched areas with a solid blurred edge and a label, hidden above
+zoom 5.5.
+
+### The problem is upstream and cannot be fixed here
+
+Phone sketched a grey area over western China and asked why aircraft there are
+missing and why aircraft flying into it disappear. They are missing because
+**nobody is listening**. Both free feeds are volunteer receiver networks, and
+that region has no volunteers.
+
+This was measured before it was drawn, not assumed: adsb.lol returned **0 of
+2,052** aircraft inside the band, OpenSky returned **1**, and adsb.fi returned
+**0** while a Delhi control in the same run returned normally - so the query was
+right and the sky was empty. 19.42 in the test plan covers the search for a
+source that does cover it; there is no free one.
+
+### Why it has to be drawn at all
+
+An empty region and a region nobody is watching look identical, and the first
+reading is the one a viewer reaches for: *the app is broken*. A limitation that
+is invisible is indistinguishable from a defect. Drawing it converts "this is
+broken" into "this is a known gap", which is the honest claim and also the more
+reassuring one.
+
+### The first version was invisible, and why
+
+A 10% wash with a thin dashed edge, over satellite imagery of a pale desert, is
+a photograph of a pale desert. **Subtle is a property of the composite, not of
+the layer** - the same wash that reads clearly over ocean vanishes over sand.
+
+The fix was to stop competing with the photograph and sit on top of it: a hatch
+pattern generated in code, a solid blurred boundary, and a text label. Hatching
+in particular reads as an *annotation* - a human drew this on afterwards -
+rather than as something photographed, which is precisely the claim being made.
+This is D91's trade in a different medium: accuracy is in the measured polygon,
+legibility is in how it is painted.
+
+### One label, not one per tile
+
+MapLibre labels a polygon **once per tile it touches**, so the first version
+printed "NO RECEIVER COVERAGE" twice across one region. The label now comes from
+a separate point source with one anchor per region, which is also the only way
+to control where it sits.
+
+The overlay hides above zoom 5.5. Its claim is about a continent-scale region,
+and a continent-scale claim drawn across a city is no longer about anything the
+viewer can see.

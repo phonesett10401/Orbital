@@ -264,7 +264,7 @@ and can tell the user they are seeing a sample.
 same commit as `models.py`.
 
 We considered generating the TypeScript from FastAPI's OpenAPI schema. We chose
-not to, for now: the contract is nine fields and changes rarely, and a codegen
+not to, for now: the contract is ten fields and changes rarely, and a codegen
 step is one more thing that can break for a three-person team on a deadline.
 This is recorded in [decisions.md](decisions.md) and is worth revisiting if the
 shape starts changing often.

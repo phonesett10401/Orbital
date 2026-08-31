@@ -227,6 +227,9 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 38 | **The basemap printed its own place name through the airport label** — `text-ignore-placement: true` was set alongside `text-allow-overlap: true` on the assumption they were the same switch; the first lets our label draw regardless, the second lets *other* labels draw over ours, and the result read "Don Mueang Internatio**DMK**rport" | Low, visual | Phone's screenshot after searching DMK (D89, §19.47) | Fixed |
+| 37 | **The coverage overlay was invisible over the region it described** — a 10% wash and a thin dashed edge, drawn over satellite imagery of a pale desert, is a photograph of a pale desert; it was present, correct and unreadable | Low, visual | Phone: "the no coverage display borderline are not obvious" (D92, §19.46) | Fixed on the **second** attempt, like defect #12 — the first was measured right and rejected on sight |
+| 36 | **Every aircraft disappeared from the map** — `icon-size` was written as `['*', ['interpolate', ['zoom'], ...], ['get','scale']]`, but a `zoom` expression may only be the direct input of a top-level `step`/`interpolate`; MapLibre dropped the layer **silently** while the label layer kept drawing, so the callsigns floated over nothing and the suite stayed green | **High** | Phone: "cant see the planes anymore" (D90, §19.45) | Fixed |
 | 35 | **The last circle of every global sweep was refused and thrown away** - a 2 s pause was under adsb.lol's rate limit, so the fourth request 429'd on every poll; a partial sweep is tolerated by design, so it logged a warning and carried on without the Americas | Medium | Reading the server log during a live union run, then reversing the sweep order to prove it followed position not region (19.41, 19.43, 19.44) | Fixed |
 | 34 | **The throttle ladder was dead in the only configuration that spends credits** - `Poller.remaining_credits` read the balance through a `getattr` default, `UnionProvider` had no such attribute, and `throttle_for(None, ...)` is NORMAL by design, so the union reported no balance and could never step down | Medium | Reading `/api/health` during a live union run, against the credit balances the OpenSky provider was logging beside it (19.40) | Fixed |
 | 33 | **The panel said the same thing twice** - registration and aircraft type had labelled rows of their own *and* came back four rows later from the generic `meta` renderer, so one fact read as two | Low, visual | Reading the live panel while verifying the scheduled route (§19.38) | Fixed |
@@ -237,7 +240,7 @@ itself a finding.
 | 28 | **The departure row ran its label into its value** — "DepartedDubai International Airport": the new row used class names that do not exist instead of the `dl` every other field uses | Low, visual | A screenshot from Phone (§19.29) | Fixed |
 | 27 | **Altitude was geometric where aviation is barometric** — Orbital showed 10,317 m for a flight Flightradar24 had at 37,000 ft; both real, one the wrong quantity, differing by a median of 290 m across 859 aircraft | Medium | Phone compared the two sites on UAE394 (D79, §19.29) | Fixed |
 | 26 | **The ocean turned grey under a second basemap** — keeping every layer promoted Liberty's own Natural Earth relief raster to drawing at 60% opacity over our satellite imagery | Medium, visual | A screenshot from Phone (D77, §19.27) | Fixed |
-| 25 | **The whole style failed to load** — the imagery crossfade was wrapped in a multiplication, which the spec forbids for `zoom` expressions; MapLibre rejects an invalid paint property by discarding the entire style, so the map went to 0 layers and black while seven new tests stayed green | **High** | The dev readout named it verbatim; Phone: "I cant see my earth anymore" (D76, §19.26) | Fixed |
+| 25 | **The whole style failed to load** — the imagery crossfade was wrapped in a multiplication, which the spec forbids for `zoom` expressions; MapLibre rejects an invalid paint property by discarding the entire style, so the map went to 0 layers and black while seven new tests stayed green | **High** | The dev readout named it verbatim; Phone: "I cant see my earth anymore" (D76, §19.26) | Fixed — **and recurred as defect #36**, because the validator added here guarded only the function that had failed (§19.45) |
 | 24 | **Night dimmed the place names with the ground** — the terminator went in above the whole basemap, so labels on the night side were washed out while the day side's stayed crisp | Low, visual | A screenshot from Phone (D74, §19.24) | Fixed |
 | 23 | **Night became a milky fog when zoomed in** — the lights texture is 9.8 km per texel, so at z10 one texel covered a sixth of the screen and was painted over the map at 0.85 opacity, washing out every label under it | Medium, visual | Two screenshots from Phone (D73, §19.23) | Fixed |
 | 22 | **The track never reached the aircraft** — the track ends at the last reported position and the marker is drawn at its interpolated one, so the two sat `age x speed` apart at every zoom, obvious from z9 | Low, visual | Phone: "when the plane moves on, the line end is left behind" (D72, §19.22) | Fixed |
@@ -2812,3 +2815,134 @@ burst is exactly what a token bucket is designed to allow. And a fix to an
 intermittent failure needs a sample long enough that the old failure rate would
 have shown itself - three polls against a 38% rate is not evidence, it is a
 coin landing heads twice.
+
+---
+
+### 19.45 Defect #25, a second time, and why the guard did not catch it
+
+**What happened.** Aircraft were given per-type sizes by multiplying the
+existing zoom ramp by a per-feature `scale`:
+
+```
+'icon-size': ['*', ['interpolate', ['linear'], ['zoom'], ...], ['get', 'scale']]
+```
+
+The style spec forbids this. A `zoom` expression may only appear as the direct
+input of a **top-level** `step` or `interpolate`; nested inside anything else it
+is invalid. MapLibre's response to an invalid paint property is to **discard the
+layer without raising anything**. The symbol layer vanished. The label layer,
+being a separate layer, carried on drawing callsigns - so the map showed a field
+of floating text over empty imagery, which looks like a data problem rather than
+a style problem.
+
+**Why the suite was green.** No test rendered the layer. The tests assert on the
+layer *specification object*, which was constructed exactly as intended - the
+spec is only invalid to MapLibre, and MapLibre was not present.
+
+**Why the existing guard missed it.** Defect #25 was the same class: the imagery
+crossfade wrapped in a multiplication, in D76. The fix then added
+`validateStyleMin` against the style - but only for `withImagery`, the function
+that had failed. Every layer added since, including this one, went unvalidated.
+
+**The correction.** The fix is trivial - move the multiplication inside each
+interpolate stop, so `zoom` stays the direct input:
+
+```
+'icon-size': ['interpolate', ['linear'], ['zoom'],
+  2, ['*', 0.14, ['get', 'scale']], ...]
+```
+
+The lesson is not about `icon-size`. **A guard written around the thing that
+failed protects that thing and nothing else.** The validator belongs at the
+boundary where anything is handed to MapLibre, not at the site of one past
+mistake.
+
+---
+
+### 19.46 The overlay that was correct and unreadable
+
+The coverage regions (D92) were measured first - 0 of 2,052 aircraft in the
+western China band from adsb.lol, 1 from OpenSky, 0 from adsb.fi against a
+passing Delhi control. The polygons were right.
+
+The first drawing was a 10% white wash with a thin dashed border. Over ocean it
+reads. Over the satellite imagery of the Taklamakan, which is pale, flat and
+already low-contrast, it is invisible - and that is where four of the five
+regions are. Phone's report was "the no coverage display borderline are not
+obvious", which is precisely accurate: the fill was arguably visible, the
+*boundary* was not, and a region without a legible boundary is not a region.
+
+**What was wrong was the reasoning, not the value.** "Subtle" had been treated
+as a property of the layer, when it is a property of the composite. The same
+alpha over different ground is a different amount of visible.
+
+The second version stops competing with the photograph:
+
+| Change | Why |
+|---|---|
+| Hatch pattern, generated as an image in code | Reads as an annotation - something drawn on afterwards - which is exactly the claim |
+| Solid line with a blur, replacing the dashes | A dashed line at 1 px over busy imagery is a suggestion of a line |
+| Text label from a point source | See below |
+| Hidden above zoom 5.5 | A continent-scale claim drawn across one city is no longer about anything visible |
+
+Phone's follow-up - "dont over do the sketch lines" - set the density. The
+hatching is there to be noticed, not to be the subject.
+
+**The label needed its own source.** MapLibre labels a polygon once per tile it
+touches, so "NO RECEIVER COVERAGE" printed twice across the largest region. A
+separate point source with one anchor per region gives one label, and gives
+control of where it sits.
+
+---
+
+### 19.47 Two switches that are not the same switch
+
+Searching an airport draws a marker on it (D89). Its label was set:
+
+```
+'text-allow-overlap': true,
+'text-ignore-placement': true,
+```
+
+on the assumption that both meant "this label always wins". They do not.
+
+| Property | What it controls |
+|---|---|
+| `text-allow-overlap` | Whether **this** label draws even where something already is |
+| `text-ignore-placement` | Whether **other** labels may draw over the space this one occupies |
+
+The first is wanted: this label answers a question the user has just asked and
+must never be dropped for lack of room. The second gives the basemap permission
+to print through it, which it did - "Don Mueang Internatio**DMK**rport" in
+Phone's screenshot, the airport's own basemap label overprinting ours.
+
+Set to `false`, our label is drawn and reserves its space. **The test that
+matters here asserts the pair**, not either value alone, because either one read
+in isolation looks reasonable.
+
+---
+
+### 19.48 Sizing, and four tests that proved nothing
+
+Aircraft are drawn by wingspan (D90) and shaped by size class (D91). The
+arithmetic is pure and was covered as data - no renderer needed.
+
+**Four of those tests were vacuous, and each was found the same way: by
+reverting the fix and confirming the test still passed.**
+
+| The test | Why it could not fail |
+|---|---|
+| Nose taper ratio | Sampled a `CylinderGeometry` at a coordinate where it has no vertices, computing `tip / 0` |
+| Body width at a station | The sample window sat over the engine nacelles, so it measured nacelle width, not fuselage |
+| Nose length | Read from a hardcoded `z` that `stretch` moves, so it measured a different part of a stretched model |
+| Widebody vs narrowbody width | The x-window clipped at a value narrower than the widths it existed to compare |
+
+None of these were caught by review; all four were caught in seconds by
+re-breaking the code. **A new test is not evidence until it has been seen to
+fail.** This is now standing practice, and it is worth noting that all four
+passed on a correct implementation - a vacuous test is indistinguishable from a
+good one while the code is right, which is the entire problem.
+
+Final drawn widths, for the record: C172 0.094, A320 0.114, B763 0.153,
+B789 and A388 0.193 - and a widebody is 2.05x a light aircraft, which is the
+number Phone was asking for when they said big aircraft should be "2-3x fatter".

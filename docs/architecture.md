@@ -1,6 +1,6 @@
 # Orbital — Architecture
 
-**CSC480 team project. Live aircraft tracking on a 3D globe.**
+**CSC480 team project. Live aircraft tracking on the Earth in a browser.**
 
 This document describes how Orbital is built and why. It is written to be read
 start to finish by someone who has not seen the code.
@@ -9,13 +9,24 @@ start to finish by someone who has not seen the code.
 
 ## 1. What Orbital does
 
-Orbital renders an interactive 3D Earth in the browser and plots live aircraft
-positions on it. A user can rotate and zoom the globe, search for a flight by
-callsign, click an aircraft to see its details, and view the path that aircraft
-has been observed to fly.
+Orbital renders the Earth in the browser and plots live aircraft positions on
+it. A user can rotate and zoom, search for a flight by callsign or an airport
+by name or code, click an aircraft to see its details, and view the path that
+aircraft has been observed to fly.
+
+**There are two renderers over the same data**, and `VITE_VIEW` picks one: a
+three.js globe (`src/globe/`) and a MapLibre map on satellite imagery
+(`src/planet/`). They are not two products. The globe was built first and is
+still the default in code; the map was built to go past the zoom the globe can
+hold (D53, D54) and is where the newer work has landed. Everything below the
+render layer is shared, and neither renderer knows the other exists.
 
 **Out of scope:** user accounts, native mobile apps, historical playback,
-flight schedules or delay data, offline use, and satellite tracking — see §8.
+delay and disruption data, and satellite tracking — see §8. *Schedules* are a
+qualified exception: the scheduled origin and destination for a callsign are
+looked up per selection (D88), because an aircraft does not transmit where it
+is going and the panel would otherwise have nothing to say. Nothing else about
+a schedule is used.
 
 ---
 
@@ -25,15 +36,20 @@ Orbital is three layers with one rule between them: **data flows in one
 direction, and each layer knows only the layer directly beneath it.**
 
 ```
-   OpenSky Network                     (external, unreliable, rate-limited)
-          |
-          |  HTTP, once per interval, once per server
-          v
+   adsb.lol            OpenSky Network      (external, unreliable, both limited
+   (free, rate         (metered, billed      in different ways -- see below)
+    limited)            by area)
+          \                  /
+           \                /  HTTP, once per interval, once per server
+            v              v
   +-------------------------------------------------------------+
   |  1. INGESTION            backend/app/providers, ingestion    |
   |                                                              |
   |  Provider  -- speaks HTTP to one upstream, returns the        |
   |               normalized shape and nothing else               |
+  |  Union     -- a Provider that is two providers (D83): the     |
+  |               free one answers every poll, the metered one    |
+  |               fills its gaps every 120 s                      |
   |  Poller    -- schedules fetches, owns retry and backoff        |
   |  Store     -- holds the latest snapshot + per-object history  |
   +-------------------------------------------------------------+
@@ -52,18 +68,24 @@ direction, and each layer knows only the layer directly beneath it.**
   +-------------------------------------------------------------+
   |  3. FRONTEND             frontend/src                        |
   |                                                              |
-  |  Globe + visual layer  |  Marker layer  |  UI components      |
-  |  Interpolates positions between polls                        |
+  |  src/globe (three.js)  |  src/planet (MapLibre)  |  shared UI  |
+  |  Interpolates positions between polls; both renderers read    |
+  |  the same store and the same wingspan/airframe tables         |
   +-------------------------------------------------------------+
 ```
 
 Three properties follow from this, and they are the design:
 
-1. **The browser never talks to OpenSky.** Every external call goes through the
-   backend, so rate limiting and caching are enforced in exactly one place. A
-   hundred open browser tabs cost the same upstream quota as one.
+1. **The browser never talks to a data source.** Every external call goes
+   through the backend, so rate limiting and caching are enforced in exactly one
+   place. A hundred open browser tabs cost the same upstream quota as one. This
+   is what made adding a second feed a backend-only change: the frontend was
+   never told, because there was nothing to tell it.
 2. **The ingestion layer does not know a browser exists**, and the frontend does
-   not know OpenSky exists. Either can be replaced without touching the other.
+   not know where the data came from. Either can be replaced without touching
+   the other, and both have been: the backend gained a second upstream, and the
+   frontend gained a second renderer, neither requiring a change on the other
+   side of the wire.
 3. **Upstream failure is contained at layer 1.** The API serves the last good
    snapshot with an explicit staleness flag. An OpenSky outage degrades the
    display; it does not break it.
@@ -78,6 +100,7 @@ Summary:
 | Layer | Choice | One-line reason |
 |---|---|---|
 | Globe rendering | **Globe.gl** (over three.js) | Days to learn instead of weeks; CesiumJS's accuracy is invisible at this scale |
+| Map rendering | **MapLibre GL** | The globe turns to mush past about z9 (D53); MapLibre goes from orbit to sub-metre on real imagery, and its custom-layer hook lets the same three.js airframe be drawn inside it (D54, D67) |
 | Backend | **FastAPI** (Python) | Pydantic makes the cross-layer contract executable and self-documenting |
 | Frontend | **React + Vite + TypeScript** | The contract is enforced at compile time on both sides of the wire |
 | Cache | **In-process dictionary** | One process, one poller; Redis would be operational cost for no benefit |
@@ -88,12 +111,18 @@ Summary:
 
 ## 4. The normalized shape
 
-Every moving object in Orbital — today an aircraft, later a satellite — is
-represented by the same nine fields:
+Every moving object in Orbital — today an aircraft, and only an aircraft — is
+represented by the same ten fields:
 
 ```
-{ id, lat, lon, altitude, velocity, heading, label, lastSeen, type }
+{ id, lat, lon, altitude, velocity, heading, label, model, lastSeen, type }
 ```
+
+`model` is the tenth and the newest: what the source says the object *is*, in
+its own vocabulary — for an aircraft the ICAO type designator, `B789`. It is
+source-agnostic in the same way the rest is, which is why it is in the shape
+rather than in `meta`; the frontend reads it to size and shape what it draws
+(§5.8), but this contract promises only the designator.
 
 This is the contract between all three layers. It is defined once in
 `backend/app/models.py` as a Pydantic model, mirrored in
@@ -112,9 +141,9 @@ Three model types, each with a job:
 
 | Type | Contains | Who sees it |
 |---|---|---|
-| `TrackedObject` | The nine fields | The browser, in list responses |
+| `TrackedObject` | The ten fields | The browser, in list responses |
 | `TrackedObjectRecord` | + `meta` | Providers and the store, internally |
-| `TrackedObjectDetail` | + `track` | The browser, from the by-id endpoint only |
+| `TrackedObjectDetail` | + `track`, `trackSource`, `origin`, `route`, `meta` | The browser, from the by-id endpoint only |
 
 The list endpoint declares `TrackedObject` as its response model, so FastAPI
 projects `meta` away automatically. This is what keeps a 2000-object response
@@ -122,22 +151,40 @@ small without anyone having to remember to strip fields.
 
 ---
 
-## 5. Data flow: from OpenSky to a pixel
+## 5. Data flow: from a feed to a pixel
 
 1. **Schedule.** On startup, FastAPI's `lifespan` handler starts the poller,
    which runs one asyncio task per configured job. One poller per server, not
-   per connected browser. Under the default preset there are two jobs:
-   **tier 1** fetches the whole globe every 5 minutes to buy *coverage*, and
-   **tier 2** fetches the client's viewport every 45 seconds to buy *latency*.
-   The split exists because OpenSky bills by requested area, and a full-globe
-   call buys 324x more area per credit than a small box — so the globe is the
-   cheap way to stay populated, and a small box is the cheap way to stay fresh.
-   See [decisions.md](decisions.md) D21 for the arithmetic.
-2. **Fetch.** The task calls `provider.fetch(bbox)`. `OpenSkyProvider` obtains
-   an OAuth2 token if it does not hold a valid one, then issues one HTTP request
-   with a timeout. It records `X-Rate-Limit-Remaining` from the response so the
-   poller can throttle against the real balance. On failure it raises a typed
-   `ProviderError`; all retry and backoff policy lives in the poller.
+   per connected browser. There are always two jobs: **tier 1** fetches the
+   whole world to buy *coverage*, and **tier 2** fetches the client's viewport
+   to buy *latency*. The split exists because OpenSky bills by requested area,
+   and a full-globe call buys 324x more area per credit than a small box — so
+   the world is the cheap way to stay populated, and a small box is the cheap
+   way to stay fresh. See [decisions.md](decisions.md) D21 for the arithmetic.
+
+   **What sets the intervals changed when the second feed arrived.** Under the
+   OpenSky-only presets they are set by the credit ladder: 5 minutes and 45
+   seconds on the authenticated tier. Under `union` they are 120 s and 30 s,
+   which the credit ladder could never afford — they are paid for by adsb.lol
+   answering every poll for nothing, and priced instead by *its* rate limit,
+   measured at a burst of 4 then roughly one request per 12 s (D83, D85, and
+   defect #35 in the test plan).
+2. **Fetch.** The task calls `provider.fetch(bbox)`, and which provider that is
+   depends on configuration:
+   - `OpenSkyProvider` obtains an OAuth2 token if it does not hold a valid one,
+     then issues one request. It records `X-Rate-Limit-Remaining` so the poller
+     can throttle against the real balance.
+   - `AdsbLolProvider` needs no credentials at all. It covers a bbox by
+     sweeping overlapping circles, and paces itself through an internal gate so
+     it never asks faster than the service will serve.
+   - `UnionProvider` is both. adsb.lol answers every poll; OpenSky is called at
+     most every 120 s and its results are merged in to fill the gaps. Its
+     `remaining_credits` delegates to the metered half — declared on the
+     `Provider` interface, because a missing attribute once let a union feed
+     look free and the whole throttle ladder went dead (defect #34).
+
+   On failure a provider raises a typed `ProviderError`; all retry and backoff
+   policy lives in the poller.
 3. **Normalize.** OpenSky returns positional arrays — `state[0]` is the ICAO24
    address, `state[5]` is longitude, and so on — which are unreadable at the
    call site and would leak upstream's quirks into our code. The provider maps
@@ -162,11 +209,17 @@ small without anyone having to remember to strip fields.
    marker eases toward the true position over roughly a second rather than
    snapping. **This is not a polish feature** — it is what makes a 60-second
    poll interval acceptable, and therefore what makes the quota budget work.
-8. **Render.** Positions are written into a single buffer geometry and drawn in
-   one GPU call. Objects that have stopped updating are drawn muted, with their
-   `lastSeen` timestamp shown, rather than vanishing.
-9. **Select.** Click → raycast → id → the detail panel and the route polyline
-   render from that object's track history.
+8. **Render.** The globe writes positions into a single buffer geometry and
+   draws them in one GPU call; the map writes them into a GeoJSON source and
+   MapLibre draws them from an SDF sprite atlas. Both size each aircraft by its
+   own wingspan, read from `model` through a shared table (`wingspan.ts`), and
+   both draw objects that have stopped updating muted with their `lastSeen`
+   shown, rather than vanishing.
+9. **Select.** Click → hit test → id → the detail panel, the observed track,
+   and the selection redrawn as a 3D airframe whose proportions come from its
+   type (`airframeShape.ts`). An aircraft with **no heading gets no model** in
+   either renderer: a mesh commits to a direction on screen and there is none
+   to commit to (D18, D40, D42, D67).
 
 ---
 
@@ -175,18 +228,35 @@ small without anyone having to remember to strip fields.
 These are constraints we chose, not bugs. Each is defensible; each is recorded
 with its reasoning in [decisions.md](decisions.md).
 
-- **"Route" means the observed path, not the filed flight plan.** OpenSky state
-  vectors contain no route information. We draw the path we have actually
+- **"Route" means the observed path, not the filed flight plan.** A state
+  vector contains no route information. We draw the path we have actually
   watched the aircraft fly since it entered our polling window. An aircraft
   seen thirty seconds ago has a thirty-second route.
+- **Where a flight is going is looked up; where it came from is inferred.**
+  Neither is observed, and the panel keeps them apart on purpose (D88). The
+  destination comes from what the *callsign* is published as flying, which can
+  be confidently wrong. The origin is the nearest airport to the first point of
+  *this aircraft's* track, with the distance carried alongside so the wording
+  can differ between an aircraft on a runway and one already climbing.
+- **Neither feed sees the whole planet.** Both depend on volunteer ground
+  receivers, and there are regions — western China most visibly — with none, so
+  aircraft genuinely disappear there and reappear on the far side. This is
+  upstream reality, not a defect, and no free source covers it (test plan
+  19.42). The map draws the measured gaps rather than letting them read as
+  empty sky.
 - **The Earth is a sphere, not the WGS84 ellipsoid.** The error is about 0.3%,
   which over the distance an aircraft covers between polls is a few metres —
   far below one screen pixel at globe zoom.
-- **No 3D buildings, terrain meshes, or tiled geometry.** At globe zoom a
-  building is smaller than a pixel, and the streaming pipeline would cost more
-  than the rest of the project combined.
+- **The globe draws no buildings or terrain; the map does.** At globe zoom a
+  building is smaller than a pixel. The map exists precisely to go past that
+  zoom, and gets its buildings and imagery from a tile service rather than from
+  a pipeline of ours — which is also the one place the app is not offline.
 - **Localhost only.** No Docker, no hosting. CORS is configured permissively
   for local development and is flagged as the change point if that ever changes.
+- **The two renderers are not at parity.** The map has airport markers and the
+  coverage overlay; the globe does not. This is drift rather than a decision,
+  and the intended resolution is to adopt the map as the default and delete the
+  globe, not to port each feature twice.
 
 ---
 
@@ -229,10 +299,11 @@ They were not, and they earn their place on their own:
    costs one enum with one value. Retrofitting one into a contract spanning
    three layers is a migration. It exists because the shape is deliberately
    source-agnostic (D4), not because a second type is planned.
-2. **The provider registry.** This is the pluggability requirement itself:
-   swapping OpenSky for adsb.fi or airplanes.live is a config change, and the
-   fixture provider that makes the whole project runnable offline (D8) is a
-   registry entry.
+2. **The provider registry.** This is the pluggability requirement itself, and
+   it stopped being a claim: adsb.lol was added as a second live source, and
+   then a third entry that is *both at once*, without the API or the frontend
+   changing. The fixture provider that makes the whole project runnable offline
+   (D8) is a registry entry too.
 
 Two tests assert that no satellite provider is registered and no satellite
 endpoint exists. They are **permanent guards against undeclared scope growth**,
@@ -256,15 +327,21 @@ orbital/
 │   │   ├── geo.py           spherical geometry helpers       (M1)
 │   │   ├── config.py        env-driven settings, presets     (M2)
 │   │   ├── quota.py         credit cost model + throttling   (M2)
+│   │   ├── airports.py      28,291 airports; nearest, and search (D78, D89)
 │   │   ├── providers/
 │   │   │   ├── base.py      the Provider interface           (M1)
 │   │   │   ├── fixture.py   offline replay provider          (M1)
 │   │   │   ├── registry.py  name -> provider                 (M1)
-│   │   │   └── opensky.py   the live source                  (M2)
+│   │   │   ├── opensky.py   the metered source               (M2)
+│   │   │   ├── adsblol.py   the free source, and its own rate gate (D83)
+│   │   │   └── union.py     both at once, free feed pacing   (D83)
 │   │   ├── ingestion/
 │   │   │   ├── store.py     object cache + track history     (M2)
-│   │   │   └── poller.py    two-tier scheduling, backoff     (M2)
+│   │   │   ├── poller.py    two-tier scheduling, backoff     (M2)
+│   │   │   ├── flights.py   the detail view's assembly
+│   │   │   └── flightroutes.py  scheduled route by callsign, cached (D88)
 │   │   ├── api/             REST endpoints                   (M3)
+│   │   │   ├── search.py    one box, two lists: aircraft and airports (D89)
 │   │   │   └── etag.py      weak validators, so the polled endpoint can 304 (D47)
 │   │   ├── thinning.py      server-side marker reduction     (M3)
 │   │   └── logging_config.py  handler setup for app.* loggers
@@ -279,15 +356,29 @@ orbital/
     │   ├── textures/            generated, gitignored
     │   ├── geo/                 generated, gitignored
     │   └── data/                generated, gitignored
-    ├── src/
-    │   └── airlines.ts          callsign -> airline, in the client (D46)
-    └── src/globe/
-        ├── earth.ts             the lit planet, atmosphere, stars
-        ├── borders.ts           country boundaries, one line layer (D44)
-        ├── labels.ts            country/city/airport names, DOM    (D45)
-        ├── markers.ts           every tracked object, one Points
-        ├── route.ts             the observed track of the selection
-        └── selectedAircraft.ts  the selection as a 3D airframe     (D42)
+    └── src/
+        ├── airlines.ts          callsign -> airline, in the client (D46)
+        ├── wingspan.ts          ICAO type -> wingspan and draw scale (D90)
+        ├── airframeShape.ts     ICAO type -> proportions, by size class (D91)
+        ├── airframe.ts          the 3D airframe geometry, shared by both
+        ├── globe/               renderer 1: three.js               (M4)
+        │   ├── earth.ts             the lit planet, atmosphere, stars
+        │   ├── borders.ts           country boundaries, one line layer (D44)
+        │   ├── labels.ts            country/city/airport names, DOM    (D45)
+        │   ├── markers.ts           every tracked object, one Points
+        │   ├── route.ts             the observed track of the selection
+        │   └── selectedAircraft.ts  the selection as a 3D airframe     (D42)
+        └── planet/              renderer 2: MapLibre                (D54)
+            ├── basemap.ts           the style: imagery, roads, buildings (D56-D59)
+            ├── aircraftLayer.ts     every tracked object, one SDF sprite atlas
+            ├── routeLayer.ts        the observed track, and what is guessed (D82)
+            ├── modelLayer.ts        the selection as a 3D airframe, in MapLibre's
+            │                        own GL context via a custom layer (D67)
+            ├── modelFrame.ts        the tangent-frame arithmetic that puts it there
+            ├── airportLayer.ts      the searched-for airport, ringed and named (D89)
+            ├── coverageLayer.ts     where nobody is listening, drawn on (D92)
+            ├── terminatorLayer.ts   day and night, behind a toggle (D68, D73, D74)
+            └── diagnostics.ts       what the map says about itself (D57)
 ```
 
 Three asset directories under `public/` are generated rather than committed:
