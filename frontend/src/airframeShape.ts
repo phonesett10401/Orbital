@@ -100,13 +100,19 @@ const DIMENSIONS: Record<string, [length: number, diameter: number, engines: num
  *
  * Interpolated on wingspan between these three, so a 757 sits between a
  * narrowbody and a widebody rather than jumping. The widebody figure is about
- * two and a half times the light-aircraft one, which is the separation asked
- * for: a selected A380 should look substantial next to a selected Cessna, and
- * proportional truth does the opposite.
+ * twice the light-aircraft one: a selected A380 should look substantial next
+ * to a selected Cessna, and proportional truth does the opposite.
+ *
+ * **Trimmed once from a wider spread.** The first version put a widebody at
+ * 0.228 body widths per span against a wing chord of 0.31, and the wings and
+ * tailplane stopped looking attached to it - the body had become the biggest
+ * thing on the model rather than the thing the rest is mounted on. These
+ * numbers are the most separation the surfaces can carry, not the most that
+ * looks big.
  */
-const BODY_SCALE_LIGHT = 1.1;
-export const BODY_SCALE_NARROW = 1.25;
-const BODY_SCALE_WIDE = 2.5;
+const BODY_SCALE_LIGHT = 0.95;
+export const BODY_SCALE_NARROW = 1.15;
+const BODY_SCALE_WIDE = 1.95;
 
 const SPAN_LIGHT = 15;
 const SPAN_NARROW = 35.8;

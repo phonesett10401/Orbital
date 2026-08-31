@@ -138,9 +138,13 @@ describe('how fat the body is drawn', () => {
     // selection. The sprite's white FILL is 0.083 - the same aeroplane - so
     // the entire difference was its dark outline, which a mesh has no
     // equivalent of.
+    // The margin is 1.1 rather than 1.15 because the body was later trimmed:
+    // a widebody at 0.228 was fatter than its own wings could carry. What this
+    // guards is the direction - the mesh must never be thinner than the fill
+    // it replaces - and not any particular slack above it.
     const SPRITE_FILL = 0.083;
     for (const code of [null, 'C172', 'A320', 'A388']) {
-      expect(width(code)).toBeGreaterThan(SPRITE_FILL * 1.15);
+      expect(width(code)).toBeGreaterThan(SPRITE_FILL * 1.1);
     }
   });
 
