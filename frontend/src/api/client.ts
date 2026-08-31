@@ -15,6 +15,7 @@ import type {
   BoundingBox,
   HealthResponse,
   ObjectListResponse,
+  SearchResponse,
   TrackedObjectDetail,
 } from '../types';
 
@@ -110,6 +111,17 @@ export function searchObjects(
 ): Promise<ObjectListResponse> {
   const params = new URLSearchParams({ q: query, limit: '20' });
   return request<ObjectListResponse>(`/api/${resource}/search?${params}`, signal);
+}
+
+/**
+ * Search aircraft and airports together.
+ *
+ * One request rather than two, because this fires on every keystroke and the
+ * ranking of each kind belongs on the server, next to the data.
+ */
+export function search(query: string, signal?: AbortSignal): Promise<SearchResponse> {
+  const params = new URLSearchParams({ q: query, limit: '8' });
+  return request<SearchResponse>(`/api/search?${params}`, signal);
 }
 
 export function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {

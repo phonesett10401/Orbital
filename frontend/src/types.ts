@@ -201,3 +201,15 @@ export interface LayerDescriptor {
   /** Path segment on the API, e.g. `aircraft`. */
   resource: string;
 }
+
+/**
+ * What one search box gets back.
+ *
+ * Two lists, not one ranked list. An aircraft is something being watched right
+ * now and an airport is a place that is always there; the backend refuses to
+ * invent a ranking between them, and the panel draws them as separate groups.
+ */
+export interface SearchResponse {
+  aircraft: TrackedObject[];
+  airports: Airport[];
+}

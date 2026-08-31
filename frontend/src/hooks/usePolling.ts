@@ -8,7 +8,7 @@
 
 import { useEffect, useRef } from 'react';
 
-import { fetchObjectDetail, fetchObjects, searchObjects, ApiError } from '../api/client';
+import { fetchObjectDetail, fetchObjects, search, ApiError } from '../api/client';
 import { config } from '../config';
 import { useOrbitalStore } from '../state/store';
 
@@ -123,13 +123,15 @@ export function useSearch(): void {
     useOrbitalStore.getState().setSearching(true);
 
     const timer = window.setTimeout(() => {
-      void searchObjects(layer.resource, trimmed, controller.signal)
+      void search(trimmed, controller.signal)
         .then((response) =>
-          useOrbitalStore.getState().setSearchResults(response.objects),
+          useOrbitalStore
+            .getState()
+            .setSearchResults(response.aircraft, response.airports),
         )
         .catch((error) => {
           if ((error as Error).name === 'AbortError') return;
-          useOrbitalStore.getState().setSearchResults([]);
+          useOrbitalStore.getState().setSearchResults([], []);
         });
     }, 250);
 

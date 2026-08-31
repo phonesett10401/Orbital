@@ -132,3 +132,88 @@ def origin_of(track: "Iterable[object]") -> Airport | None:
     if altitude is not None and altitude > ORIGIN_MAX_ALTITUDE_M:
         return None
     return nearest_airport(getattr(first, "lat"), getattr(first, "lon"))
+
+
+@lru_cache(maxsize=1)
+def _searchable() -> tuple[tuple[str, str, str, str, dict], ...]:
+    """Every airport with its match keys pre-upper-cased.
+
+    Built once. Upper-casing 28,291 rows on each keystroke is the kind of work
+    that is invisible at a desk and obvious on a phone, and the table never
+    changes, so there is no reason to do it more than once.
+
+    Airports with neither an ICAO nor an IATA code are dropped: a result the
+    user cannot identify is not a result.
+    """
+    rows = []
+    for code, row in airportsdata.load("ICAO").items():
+        iata = (row["iata"] or "").upper()
+        rows.append((code.upper(), iata, (row["name"] or "").upper(), (row["city"] or "").upper(), row))
+    return tuple(rows)
+
+
+def search_airports(query: str, *, limit: int = 8) -> list[Airport]:
+    """Airports whose code, name or city matches ``query``.
+
+    **Codes before names.** Someone typing "LHR" wants Heathrow, not the first
+    airport whose description happens to contain those three letters; someone
+    typing "London" wants a list of London's airports. So an exact code match
+    ranks first, then a code prefix, then a city or name prefix, then anything
+    containing the string.
+
+    ``distance_km`` is left unset, as it is for a scheduled airport (D88):
+    there is no point to measure from. A search result is a place, not an
+    observation.
+    """
+    needle = query.strip().upper()
+    if not needle:
+        return []
+
+    tiers: tuple[list[tuple[int, Airport]], ...] = ([], [], [], [])
+    for icao, iata, name, city, row in _searchable():
+        if needle in (icao, iata):
+            tier = 0
+        elif icao.startswith(needle) or iata.startswith(needle):
+            tier = 1
+        elif _starts_a_word(city, needle) or _starts_a_word(name, needle):
+            tier = 2
+        elif needle in name or needle in city:
+            tier = 3
+        else:
+            continue
+        tiers[tier].append(
+            (
+                # Within a tier, airports with an IATA code first. The table
+                # holds 28,291 airports and most of them are farm strips; "the
+                # one with a scheduled service" is the only proxy for "the one
+                # you meant" available here, and without it a search for London
+                # answers with two private airfields before Heathrow.
+                0 if iata else 1,
+                Airport(
+                    icao=icao,
+                    name=row["name"],
+                    lat=row["lat"],
+                    lon=row["lon"],
+                    country=row["country"] or None,
+                    municipality=row["city"] or None,
+                    iata=row["iata"] or None,
+                ),
+            )
+        )
+
+    ranked = [
+        airport
+        for tier in tiers
+        for _, airport in sorted(tier, key=lambda pair: (pair[0], pair[1].icao))
+    ]
+    return ranked[:limit]
+
+
+def _starts_a_word(haystack: str, needle: str) -> bool:
+    """Whether ``needle`` begins ``haystack`` or any word inside it.
+
+    Matching only the whole string would rank an airfield literally named
+    "Heathrow" above London Heathrow, whose name begins with "London". People
+    search for the distinctive word, wherever it sits in the name.
+    """
+    return any(word.startswith(needle) for word in haystack.split())

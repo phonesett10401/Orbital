@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api import aircraft, health
+from app.api import aircraft, health, search
 from app.config import Settings, get_settings
 from app.ingestion.poller import Poller
 from app.ingestion.flights import FlightHistory
@@ -113,6 +113,7 @@ def create_app(
 
     app.include_router(aircraft.router)
     app.include_router(health.router)
+    app.include_router(search.router)
     return app
 
 

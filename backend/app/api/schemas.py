@@ -14,7 +14,7 @@ from datetime import datetime
 
 from pydantic import Field
 
-from app.models import ObjectType, OrbitalModel, TrackedObject
+from app.models import Airport, ObjectType, OrbitalModel, TrackedObject
 from app.quota import ThrottleLevel
 
 
@@ -90,3 +90,21 @@ class HealthResponse(OrbitalModel):
     last_success_at: datetime | None = None
     quota: QuotaHealth
     jobs: tuple[JobHealth, ...]
+
+
+class SearchResponse(OrbitalModel):
+    """What one search box returns: aircraft now, and airports always.
+
+    Kept as two lists rather than one merged and ranked list. They are not
+    comparable - an aircraft is an observation with an age, an airport is a
+    fixed place - and the client draws them as separate groups anyway.
+    """
+
+    aircraft: list[TrackedObject] = Field(
+        default_factory=list,
+        description="Aircraft currently held whose callsign or address matches.",
+    )
+    airports: list[Airport] = Field(
+        default_factory=list,
+        description="Airports whose code, city or name matches. No distance: there is no point to measure from.",
+    )

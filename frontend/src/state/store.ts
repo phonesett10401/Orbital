@@ -18,6 +18,7 @@
 import { create } from 'zustand';
 
 import type {
+  Airport,
   BoundingBox,
   LayerDescriptor,
   ObjectListResponse,
@@ -78,9 +79,11 @@ export interface OrbitalState {
 
   searchQuery: string;
   searchResults: TrackedObject[];
+  /** Airports matching the same query. Kept apart from aircraft (D89). */
+  searchAirports: Airport[];
   searching: boolean;
   setSearchQuery(query: string): void;
-  setSearchResults(results: TrackedObject[]): void;
+  setSearchResults(results: TrackedObject[], airports?: Airport[]): void;
   setSearching(searching: boolean): void;
 
   feed: FeedStatus;
@@ -127,6 +130,7 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
       selectedId: null,
       selectedDetail: null,
       searchResults: [],
+      searchAirports: [],
     });
   },
 
@@ -146,13 +150,15 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
 
   searchQuery: '',
   searchResults: [],
+  searchAirports: [],
   searching: false,
   setSearchQuery(query) {
     set({ searchQuery: query });
-    if (query.trim() === '') set({ searchResults: [], searching: false });
+    if (query.trim() === '')
+      set({ searchResults: [], searchAirports: [], searching: false });
   },
-  setSearchResults(results) {
-    set({ searchResults: results, searching: false });
+  setSearchResults(results, airports = []) {
+    set({ searchResults: results, searchAirports: airports, searching: false });
   },
   setSearching(searching) {
     set({ searching });
