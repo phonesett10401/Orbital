@@ -27,7 +27,7 @@
 import * as THREE from 'three';
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 
-import { createAircraftGeometry } from '../airframe';
+import { aircraftGeometryFor } from '../airframe';
 import { altitudeColor } from '../globe/markers';
 import type { RenderableObject } from '../types';
 import { scaleFor, wingspanFor } from '../wingspan';
@@ -161,7 +161,9 @@ export function createModelLayer(
   const scene = new THREE.Scene();
   scene.matrixWorldAutoUpdate = false;
 
-  const geometry = createAircraftGeometry();
+  // The generic airframe to begin with; swapped for the selected
+  // aircraft's proportions on the first frame it is drawn.
+  const geometry = aircraftGeometryFor(null);
   const material = new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader,
@@ -227,6 +229,12 @@ export function createModelLayer(
         wingspanFor(target.model) ?? REAL_SPAN_METRES,
         scaleFor(target.model),
       );
+      // Proportions as well as size: a four-engined widebody is a different
+      // shape, not a larger A320. Cached, so this is a reference swap on the
+      // frames where the selection has not changed.
+      const wanted = aircraftGeometryFor(target.model);
+      if (mesh.geometry !== wanted) mesh.geometry = wanted;
+
       const lift = span * MODEL_LIFT_SPANS;
 
       let model: number[];
@@ -273,7 +281,9 @@ export function createModelLayer(
     },
 
     dispose() {
-      geometry.dispose();
+      // The geometry is shared and cached (see aircraftGeometryFor), so it is
+      // deliberately not disposed here: the globe's layer may still be holding
+      // the same mesh.
       material.dispose();
       // The renderer is not disposed: it does not own the context, MapLibre
       // does, and disposing it would take the map's context down with it.

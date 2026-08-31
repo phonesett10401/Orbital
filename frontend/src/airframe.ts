@@ -28,6 +28,8 @@
 
 import * as THREE from 'three';
 
+import { DEFAULT_SHAPE, shapeFor, type AirframeShape } from './airframeShape';
+
 /**
  * The model's wingspan in local units, before scaling.
  *
@@ -137,44 +139,49 @@ function panel(
  * Cylinders use 8 radial segments deliberately. The faceting is visible on a
  * close approach and reads as stylised, where 6 reads as broken.
  */
-export function createAircraftGeometry(): THREE.BufferGeometry {
+export function createAircraftGeometry(
+  shape: AirframeShape = DEFAULT_SHAPE,
+): THREE.BufferGeometry {
+  // Everything below is authored for DEFAULT_SHAPE and then adjusted, so the
+  // generic airframe is still exactly the aeroplane it always was and only a
+  // typed one differs. `stretch` and `girth` are ratios against that baseline
+  // rather than absolute sizes, which keeps the span normalised to
+  // MODEL_SPAN_UNITS whatever the proportions are (that is the one invariant
+  // callers rely on).
+  const stretch = shape.lengthRatio / DEFAULT_SHAPE.lengthRatio;
+  const girth = shape.fuselageRatio / DEFAULT_SHAPE.fuselageRatio;
+  const r = (radius: number) => radius * girth;
+
   // Every cylinder below reads (forwardRadius, aftRadius, length) -- see `at`.
   const parts: THREE.BufferGeometry[] = [
     // Fuselage: widest at the front, tapering gently aft.
-    bake(new THREE.CylinderGeometry(0.042, 0.036, 0.98, 8, 1), at(0, 0, 0, true)),
+    bake(new THREE.CylinderGeometry(r(0.042), r(0.036), 0.98 * stretch, 8, 1), at(0, 0, 0, true)),
     // Nose cone: a point at the front, full fuselage width where it joins.
-    bake(new THREE.CylinderGeometry(0.004, 0.042, 0.14, 8, 1), at(0, 0, 0.56, true)),
+    bake(new THREE.CylinderGeometry(0.004, r(0.042), 0.14 * stretch, 8, 1), at(0, 0, 0.56 * stretch, true)),
     // Tail cone: fuselage width at the front, tapering to the tail, and lifted
     // slightly so it runs up into the fin root the way an airliner's does.
-    bake(new THREE.CylinderGeometry(0.036, 0.012, 0.12, 8, 1), at(0, 0.012, -0.55, true)),
+    bake(new THREE.CylinderGeometry(r(0.036), r(0.012), 0.12 * stretch, 8, 1), at(0, 0.012, -0.55 * stretch, true)),
     // Wings, one panel per side, rooted at the centreline so they meet inside
     // the fuselage and there is no seam to line up. Swept back and tapered:
     // root chord 0.24, tip chord 0.09, tip trailing edge 0.16 aft of the root's.
-    bake(
-      panel(
-        [
-          [0, 0.1],
-          [-0.5, -0.06],
-          [-0.5, -0.15],
-          [0, -0.14],
-        ],
-        0.02,
-        -0.012,
+    // Wing sweep is interpolated rather than switched: a light aircraft's wing
+    // is straight and a jet's is raked back, and drawn with the same sweep a
+    // Cessna reads as a very small airliner. `sweep` moves the tip aft; at 0
+    // the leading and trailing edges run square across.
+    ...[-1, 1].map((side) =>
+      bake(
+        panel(
+          [
+            [0, 0.1],
+            [side * 0.5, 0.1 - 0.16 * shape.sweep],
+            [side * 0.5, 0.1 - 0.16 * shape.sweep - (0.09 + 0.06 * (1 - shape.sweep))],
+            [0, -0.14],
+          ],
+          0.02,
+          -0.012,
+        ),
+        at(0, 0, 0),
       ),
-      at(0, 0, 0),
-    ),
-    bake(
-      panel(
-        [
-          [0, 0.1],
-          [0.5, -0.06],
-          [0.5, -0.15],
-          [0, -0.14],
-        ],
-        0.02,
-        -0.012,
-      ),
-      at(0, 0, 0),
     ),
     // Tailplane, swept and tapered on the same rules, at a fifth of the span.
     bake(
@@ -223,6 +230,23 @@ export function createAircraftGeometry(): THREE.BufferGeometry {
     bake(new THREE.CylinderGeometry(0.036, 0.032, 0.17, 8, 1), at(0.2, -0.05, 0.04, true)),
   ];
 
+  // **Four engines, where there are four.** From above this is the most
+  // recognisable thing an airliner has: four means an A380, a 747 or an A340
+  // and nothing else in civil aviation, so drawing those with two was the most
+  // visible way one generic airframe was wrong. The outer pair sits further
+  // out and slightly further aft, on the thinner part of the wing, as it does
+  // on all three.
+  if (shape.engines >= 4) {
+    for (const side of [-1, 1]) {
+      parts.push(
+        bake(
+          new THREE.CylinderGeometry(0.03, 0.027, 0.14, 8, 1),
+          at(side * 0.33, -0.038, -0.01, true),
+        ),
+      );
+    }
+  }
+
   let vertices = 0;
   for (const part of parts) vertices += part.attributes.position.count;
 
@@ -259,3 +283,46 @@ export function createAircraftGeometry(): THREE.BufferGeometry {
   return geometry;
 }
 
+
+/**
+ * Geometries already built, by the proportions that define them.
+ *
+ * Two aircraft of the same type are the same mesh, and so are two types that
+ * happen to share proportions - an A319 and an A320 differ in length, an A320
+ * and an A20N do not. Keyed by the shape rather than the designator for that
+ * reason.
+ *
+ * Bounded in practice by the size of the dimensions table, a few dozen
+ * entries of a few hundred triangles each. Only ever built for the *selected*
+ * aircraft, so at most one new entry per selection.
+ */
+const geometries = new Map<string, THREE.BufferGeometry>();
+
+/** A key that is equal exactly when two shapes would build the same mesh. */
+function shapeKey(shape: AirframeShape): string {
+  return `${shape.lengthRatio}|${shape.fuselageRatio}|${shape.engines}|${shape.sweep}`;
+}
+
+/**
+ * The airframe for a type designator, built once and shared.
+ *
+ * **Shared, therefore not the caller's to dispose.** Both renderers hold the
+ * result for as long as they are alive and swap it when the selection changes;
+ * disposing it in one would empty the mesh in the other. `disposeAirframes`
+ * exists for a test that wants a clean slate.
+ */
+export function aircraftGeometryFor(model: string | null | undefined): THREE.BufferGeometry {
+  const shape = shapeFor(model);
+  const key = shapeKey(shape);
+  let geometry = geometries.get(key);
+  if (!geometry) {
+    geometry = createAircraftGeometry(shape);
+    geometries.set(key, geometry);
+  }
+  return geometry;
+}
+
+export function disposeAirframes(): void {
+  for (const geometry of geometries.values()) geometry.dispose();
+  geometries.clear();
+}

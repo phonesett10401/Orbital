@@ -26,7 +26,7 @@
 
 import * as THREE from 'three';
 
-import { createAircraftGeometry } from '../airframe';
+import { aircraftGeometryFor } from '../airframe';
 import type { RenderableObject } from '../types';
 import { scaleFor } from '../wingspan';
 import { latLonToVector3 } from './earth';
@@ -232,7 +232,7 @@ export interface SelectedAircraftLayer {
 }
 
 export function createSelectedAircraftLayer(globeRadius: number): SelectedAircraftLayer {
-  const geometry = createAircraftGeometry();
+  const geometry = aircraftGeometryFor(null);
   const material = new THREE.ShaderMaterial({
     uniforms: {
       // White, matching the colour the marker layer already gives a selected
@@ -270,6 +270,11 @@ export function createSelectedAircraftLayer(globeRadius: number): SelectedAircra
     // markers already float on, so a literal altitude would drop the model
     // into the surface texture at the moment of selection and make it jump.
     // Altitude is carried by colour, as it has been since D28.
+    // Proportions as well as size, and the same cached mesh the planet view
+    // uses, so the two renderers cannot disagree about what a 747 looks like.
+    const wanted = aircraftGeometryFor(object.model);
+    if (mesh.geometry !== wanted) mesh.geometry = wanted;
+
     const { lat, lon } = positionAt(object, nowMs);
     mesh.position.copy(latLonToVector3(lat, lon, globeRadius * (1 + MARKER_ALTITUDE)));
     aircraftOrientation(lat, lon, object.heading as number, mesh.quaternion);
@@ -294,7 +299,8 @@ export function createSelectedAircraftLayer(globeRadius: number): SelectedAircra
     mesh,
     update,
     dispose() {
-      geometry.dispose();
+      // Shared and cached; see aircraftGeometryFor. The planet view's layer
+      // may still be using the same mesh.
       material.dispose();
     },
   };
