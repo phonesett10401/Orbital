@@ -154,3 +154,54 @@ describe('how fat the body is drawn', () => {
     expect(shapeFor('C172').sweep).toBe(0);
   });
 });
+
+describe('the nose stays an aeroplane nose', () => {
+  /**
+   * Nose-tip width as a fraction of fuselage width.
+   *
+   * **Measured at the rings, because that is where the vertices are.** A
+   * `CylinderGeometry` with one height segment has vertices only at its two
+   * ends, so an earlier version of this sampled the middle of the fuselage,
+   * found nothing, and computed `tip / 0` - which is Infinity, passes every
+   * assertion, and made the whole test vacuous. It was caught by putting the
+   * needle nose back and watching this file still pass.
+   *
+   * The fuselage is picked out on x rather than on z, since the wing panels
+   * run from the centreline outward and no z window separates them. The cutoff
+   * has to clear the engine nacelles too, which sit at x 0.16 to 0.24 - a
+   * looser one let them stand in for the fuselage and halved every ratio.
+   */
+  function noseTaper(geometry: ReturnType<typeof aircraftGeometryFor>): number {
+    const position = geometry.attributes.position.array as Float32Array;
+    let zMax = -Infinity;
+    for (let i = 2; i < position.length; i += 3) {
+      if (position[i] > zMax) zMax = position[i];
+    }
+    let tip = 0;
+    let body = 0;
+    for (let i = 0; i < position.length; i += 3) {
+      const z = position[i + 2];
+      const x = Math.abs(position[i]);
+      if (z > zMax - 0.005) tip = Math.max(tip, x);
+      if (z > 0 && x < 0.15) body = Math.max(body, x);
+    }
+    return tip / body;
+  }
+
+  it('never tapers to a needle, at any size', () => {
+    // The tip was a fixed radius while the body grew, so fattening the
+    // widebodies turned the nose into a spike on a fat tube - which does not
+    // read as an aeroplane, and was reported in blunter terms than that.
+    for (const code of [null, 'C172', 'A320', 'B789', 'A388']) {
+      expect(noseTaper(aircraftGeometryFor(code))).toBeGreaterThan(0.25);
+    }
+  });
+
+  it('keeps the taper constant as the body grows', () => {
+    // The failure mode was a ratio that changed with size: fine on a slim body
+    // and grotesque once a widebody was drawn twice as fat.
+    const a320 = noseTaper(aircraftGeometryFor('A320'));
+    expect(noseTaper(aircraftGeometryFor('A388'))).toBeCloseTo(a320, 2);
+    expect(noseTaper(aircraftGeometryFor('C172'))).toBeCloseTo(a320, 2);
+  });
+});

@@ -191,10 +191,21 @@ export function createAircraftGeometry(
     // Fuselage: widest at the front, tapering gently aft.
     bake(new THREE.CylinderGeometry(r(0.057), r(0.049), 0.98 * stretch, 8, 1), at(0, 0, 0, true)),
     // Nose cone: a point at the front, full fuselage width where it joins.
-    bake(new THREE.CylinderGeometry(0.006, r(0.057), 0.14 * stretch, 8, 1), at(0, 0, 0.56 * stretch, true)),
+    // **The tip scales with the body.** Left at a fixed radius it stayed a
+    // needle while the fuselage got fatter, and a fat tube ending in a spike
+    // does not read as an aeroplane -- reported, accurately, as looking like
+    // something else entirely. An airliner's nose is blunt: about a third of
+    // the fuselage width at the tip, over a length of roughly one diameter.
+    bake(
+      new THREE.CylinderGeometry(r(0.020), r(0.057), 0.13 * stretch, 8, 1),
+      at(0, 0, 0.555 * stretch, true),
+    ),
     // Tail cone: fuselage width at the front, tapering to the tail, and lifted
     // slightly so it runs up into the fin root the way an airliner's does.
-    bake(new THREE.CylinderGeometry(r(0.049), r(0.016), 0.12 * stretch, 8, 1), at(0, 0.012, -0.55 * stretch, true)),
+    bake(
+      new THREE.CylinderGeometry(r(0.049), r(0.020), 0.12 * stretch, 8, 1),
+      at(0, 0.012, -0.55 * stretch, true),
+    ),
     // Wings, one panel per side, rooted at the centreline so they meet inside
     // the fuselage and there is no seam to line up. Swept back and tapered:
     // root chord 0.24, tip chord 0.09, tip trailing edge 0.16 aft of the root's.

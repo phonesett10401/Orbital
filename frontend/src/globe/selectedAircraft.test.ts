@@ -589,10 +589,18 @@ describe('the airframe is shaped the way an airframe is', () => {
     // `join` is asserted wide as well as `tip` narrow: under the defect the
     // join was the needle and the tip was full width, so checking only that
     // the two differ would have passed on the broken model too.
+    //
+    // **The tip is now bounded below as well.** This used to demand a tip
+    // under 30% of the join, which is a needle - and once the body was drawn
+    // fatter for the large aircraft, a needle on a fat tube stopped reading as
+    // an aeroplane at all. An airliner's nose is blunt: roughly a third of the
+    // fuselage width, tapering over about one diameter. The upper bound still
+    // catches the inversion this test exists for.
     const join = bodyRadiusBetween(0.47, 0.5);
     const tip = bodyRadiusBetween(0.6, 0.63);
     expect(join).toBeGreaterThan(0.03);
-    expect(tip).toBeLessThan(join * 0.3);
+    expect(tip).toBeLessThan(join * 0.6);
+    expect(tip).toBeGreaterThan(join * 0.2);
   });
 
   it('tapers the tail cone away, aft', () => {
