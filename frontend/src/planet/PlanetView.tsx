@@ -41,6 +41,7 @@ import {
   loadPlanetStyle,
 } from './basemap';
 import { createBasemapControl } from './basemapControl';
+import { COVERAGE_SOURCE, coverageFeatures, coverageLayers } from './coverageLayer';
 import { createModelLayer, modelTarget } from './modelLayer';
 import { createTerminatorControl } from './terminatorControl';
 import { createTerminatorLayer } from './terminatorLayer';
@@ -251,6 +252,16 @@ export function PlanetView() {
           // everything before this line recedes, everything after stays at
           // full strength.
           if (config.flatBasemapDim > 0) map.addLayer(basemapDimLayer(config.flatBasemapDim));
+
+          // Where the receiver networks do not reach, so an empty region reads
+          // as unheard rather than as broken.
+          //
+          // **After the dim, not before.** The dim is for the basemap; this is
+          // an annotation about the basemap and has to stay legible over the
+          // dimmed version of it. Still below the aircraft, which nothing may
+          // compete with.
+          map.addSource(COVERAGE_SOURCE, { type: 'geojson', data: coverageFeatures() });
+          for (const layer of coverageLayers()) map.addLayer(layer);
 
           map.addSource(AIRCRAFT_SOURCE, {
             type: 'geojson',
