@@ -64,12 +64,15 @@ describe('the airport layers', () => {
     expect(validateStyleMin(style as never).map((e) => e.message)).toEqual([]);
   });
 
-  it('never drops the label to a collision', () => {
-    // It is the answer to the question that moved the camera here. Losing it
-    // to a nearby place name would undo the search.
+  it('is never dropped, and is never printed through', () => {
+    // The two options sound like a pair and do opposite jobs. `allow-overlap`
+    // keeps this label drawn; `ignore-placement` would let every other label
+    // draw over it - which is how the basemap's own name came out as
+    // "Don Mueang Internatio DMK rport" over Bangkok.
     const label = airportLayers().find((l) => l.type === 'symbol');
     const layout = label?.layout as Record<string, unknown>;
     expect(layout['text-allow-overlap']).toBe(true);
+    expect(layout['text-ignore-placement']).toBe(false);
     expect(layout['text-optional']).toBeUndefined();
   });
 

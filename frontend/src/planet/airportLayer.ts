@@ -103,10 +103,19 @@ export function airportLayers(): LayerSpecification[] {
         'text-offset': [0, 1.4],
         'text-anchor': 'top',
         'text-line-height': 1.3,
-        // Never dropped. This is the answer to the question that moved the
-        // camera here, so losing it to a label collision would undo the search.
+        // **Never dropped, and never printed through.** These two options
+        // sound like a pair and do opposite jobs, which is how the basemap's
+        // own airport name ended up overprinting this one at Don Mueang:
+        //
+        //   allow-overlap  - *this* label is drawn even if something is there
+        //   ignore-placement - *other* labels may draw over this one
+        //
+        // So the first is wanted and the second is exactly wrong. With
+        // ignore-placement off, this label reserves its space and the
+        // surrounding place names yield to it, which is the correct precedence:
+        // it is the answer to the question that just moved the camera.
         'text-allow-overlap': true,
-        'text-ignore-placement': true,
+        'text-ignore-placement': false,
       },
       paint: {
         'text-color': '#ffffff',
