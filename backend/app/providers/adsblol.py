@@ -93,17 +93,25 @@ GLOBAL_RADIUS_NM = 6000
 #: requests that do not know about each other cannot work; the limit is a
 #: property of the address, so the gate has to be too (defect #35).
 #:
-#: The interval itself was measured with the server stopped, so nothing else
-#: was competing: 2 s failed 1 of 4, 3 s passed, 4 s passed three times over.
-#: The threshold is between two and three seconds, and 4 s is double the value
-#: that failed.
+#: **The interval is the measured limit, not a guess at one.** The first value
+#: here was 4 s, chosen by sending bursts of four with long gaps between them,
+#: which never refused. Production sends continuously, and still lost a circle
+#: on 38% of polls.
 #:
-#: **What it costs.** A global sweep is four requests, so about 16 s of a 60 s
-#: poll, and a viewport request can wait up to one interval for its slot.
-#: Demand is 4 sweep + 4 viewport requests a minute against the 15 a minute
-#: this allows, so the queue is short by construction. A viewport poll arriving
-#: 4 s late is a far better failure than a circle of the planet going missing.
-MIN_REQUEST_INTERVAL_SECONDS = 4.0
+#: Measured properly - steady sending, nothing else running - the limit is not
+#: a gap between requests at all. **Four requests go through, then about one
+#: every twelve seconds:** a burst of four over roughly five a minute, which is
+#: what `limit_req rate=5r/m burst=4 nodelay` looks like from outside. A
+#: spacing rule would have refused the first four or none of them.
+#:
+#: 12 s is that rate. It cannot on its own make demand fit - no spacing makes
+#: eight requests fit a budget of five - so the poll intervals were cut to suit
+#: as well (see PRESETS["union"]). The gate's job is to keep the *shape* of the
+#: traffic inside the bucket; the presets keep the *volume* there.
+#:
+#: **What it costs.** A four-circle sweep takes about 36 s, inside a 120 s
+#: poll, and a viewport request can wait up to one interval for a slot.
+MIN_REQUEST_INTERVAL_SECONDS = 12.0
 
 #: The largest radius asked for a viewport, in nautical miles.
 #:

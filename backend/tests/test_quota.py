@@ -141,14 +141,22 @@ class TestConfiguredPresetsFitTheirBudget:
             Settings(quota_preset="generous")
 
     def test_objects_outlive_a_missed_poll_but_not_a_lost_aircraft(self):
-        # 300 s is five times the union preset's global sweep and two and a
-        # half times its metered refresh, so no aircraft is dropped for a
-        # missed poll - and an aircraft nobody has reported for five minutes
-        # has landed or left coverage. At the old 1800 s, 39% of everything
-        # served was past the client's two-minute fade: a map of ghosts (D86).
+        # The rule this encodes is "one missed poll must not empty the map,
+        # and an aircraft nobody has reported for minutes must not stay on it".
+        # It was written as 4x the longest interval when that interval was
+        # 60 s, which made 4x free. The union sweep is 120 s now, measured
+        # against adsb.lol's real rate limit (19.43), and 4x would mean an
+        # 480 s TTL - back toward the 1800 s that made 39% of everything served
+        # a ghost past the client's two-minute fade (D86).
+        #
+        # So the multiplier is 2x, which is the rule itself rather than the
+        # comfortable margin it used to have: at 300 s against a 120 s sweep an
+        # aircraft survives a missed poll with a minute to spare and is dropped
+        # after two. Tightening the TTL and lengthening the poll both make this
+        # fail, which is what it is for.
         settings = Settings(quota_preset="union", provider="union")
         longest = max(job.interval_seconds for job in settings.jobs)
-        assert settings.object_ttl_seconds >= 4 * longest
+        assert settings.object_ttl_seconds >= 2 * longest
         assert settings.object_ttl_seconds <= 600
 
     def test_ttl_must_exceed_the_longest_interval(self):

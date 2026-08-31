@@ -77,19 +77,35 @@ PRESETS: dict[str, tuple[PollJob, ...]] = {
     # For the union provider, where the cadence is set by the free feed and the
     # metered one answers once every supplement interval regardless (D83, D87).
     #
-    # **The viewport job costs nothing at all.** It is served entirely by
-    # adsb.lol - a union viewport poll never calls the metered feed (D84) - so
-    # its interval is a question of what is decent to ask of a free service
-    # rather than of what the credit ladder allows. 15 s is one request per
-    # poll, four a minute, against the whole-world sweep's four every sixty
-    # seconds.
+    # **These two intervals are a budget, and the budget was measured.**
+    # adsb.lol costs no credits, so the first version of this preset treated
+    # the intervals as a question of what is decent to ask of a free service -
+    # 60 s and 15 s, four requests a minute each, eight in total. That was
+    # wrong, and it cost a circle of the planet on 38% of polls for the life of
+    # the union provider.
     #
-    # The global sweep stays at 60 s because it is four requests, not one, and
-    # it exists to keep the parts of the map nobody is looking at from going
-    # stale rather than to animate them.
+    # Measured directly, with nothing else running, by sending at a steady 4 s
+    # and watching where refusals begin: **four requests go through, then about
+    # one every twelve seconds.** A burst of four over roughly five a minute -
+    # the signature of `limit_req rate=5r/m burst=4 nodelay`. Asking for eight
+    # against a budget of five refuses three, which is 37.5% against the 38%
+    # observed (defect #35, 19.43).
+    #
+    # So: 4 sweep requests per 120 s plus 4 viewport requests per 120 s is
+    # **4 a minute**, a fifth under the cap.
+    #
+    # **What each interval buys, and what it cost to fit.** The sweep is four
+    # requests, not one, and it exists to keep the parts of the map nobody is
+    # watching from going stale rather than to animate them - so it is the half
+    # that can afford to slow down. 120 s also matches the OpenSky supplement
+    # interval it already runs alongside (D84) and sits well inside the 300 s
+    # object TTL. The viewport is the half a user actually sees, and doubling
+    # it to 30 s is the real price paid here: D87 measured a 2 s median
+    # position age at 15 s, and that roughly doubles. Nothing freezes, because
+    # the client dead-reckons to 120 s (D71).
     "union": (
-        PollJob(name="global", bbox=None, interval_seconds=60.0, tier=1),
-        PollJob(name="viewport", bbox=None, interval_seconds=15.0, tier=2),
+        PollJob(name="global", bbox=None, interval_seconds=120.0, tier=1),
+        PollJob(name="viewport", bbox=None, interval_seconds=30.0, tier=2),
     ),
     # 8000 credits/day. 1920 + 2880 = 4800/day, 60% of budget.
     "contributor": (
