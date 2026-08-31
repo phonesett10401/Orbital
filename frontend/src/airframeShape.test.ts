@@ -205,3 +205,82 @@ describe('the nose stays an aeroplane nose', () => {
     expect(noseTaper(aircraftGeometryFor('C172'))).toBeCloseTo(a320, 2);
   });
 });
+
+describe('everything meets the body', () => {
+  function bounds(geometry: ReturnType<typeof aircraftGeometryFor>) {
+    const position = geometry.attributes.position.array as Float32Array;
+    let zMin = Infinity;
+    let zMax = -Infinity;
+    let bodyRadius = 0;
+    for (let i = 0; i < position.length; i += 3) {
+      const x = Math.abs(position[i]);
+      const z = position[i + 2];
+      if (z < zMin) zMin = z;
+      if (z > zMax) zMax = z;
+      if (x < 0.15 && z > 0) bodyRadius = Math.max(bodyRadius, x);
+    }
+    return { zMin, zMax, bodyRadius };
+  }
+
+  /**
+   * Nose length as a multiple of body width.
+   *
+   * The front of the fuselage is found by looking for the widest part of the
+   * tube rather than assumed at a fixed z: `stretch` moves it per type, and an
+   * earlier version of this hardcoded 0.45 and compared two aircraft whose
+   * fuselages end in different places.
+   */
+  function noseInBodyWidths(code: string | null): number {
+    const geometry = aircraftGeometryFor(code);
+    const position = geometry.attributes.position.array as Float32Array;
+    const { zMax, bodyRadius } = bounds(geometry);
+    let frontOfBody = -Infinity;
+    for (let i = 0; i < position.length; i += 3) {
+      const x = Math.abs(position[i]);
+      if (x > bodyRadius * 0.95 && x < 0.15) {
+        frontOfBody = Math.max(frontOfBody, position[i + 2]);
+      }
+    }
+    return (zMax - frontOfBody) / (bodyRadius * 2);
+  }
+
+  it('lengthens the nose in step with the body, so the join is never a step', () => {
+    // A cone of fixed length on a tube twice as fat is a stub. The taper has
+    // to happen over a length related to the width it is tapering from, which
+    // means the ratio is what stays constant, not the length.
+    const wide = noseInBodyWidths('A388');
+    const narrow = noseInBodyWidths('A320');
+    expect(wide).toBeGreaterThan(0.9);
+    expect(wide / narrow).toBeGreaterThan(0.8);
+    expect(wide / narrow).toBeLessThan(1.25);
+  });
+
+  it('roots the tailplane inside the fuselage, not off the end of it', () => {
+    // Sized and placed so it meets the body however fat the body is drawn:
+    // floating clear of a slim one or swallowed by a broad one both read as a
+    // mistake.
+    for (const code of ['C172', 'A320', 'A388']) {
+      const geometry = aircraftGeometryFor(code);
+      const position = geometry.attributes.position.array as Float32Array;
+      // The tailplane's outboard tips, and how far aft the fuselage reaches.
+      let tipZ = 0;
+      for (let i = 0; i < position.length; i += 3) {
+        const x = Math.abs(position[i]);
+        if (x > 0.2 && x < 0.3) tipZ = Math.min(tipZ, position[i + 2]);
+      }
+      expect(tipZ).toBeLessThan(0);
+      expect(tipZ).toBeGreaterThan(bounds(geometry).zMin);
+    }
+  });
+
+  it('keeps the wing inside the span it is normalised to', () => {
+    // Making the wing bigger must grow its chord, never its span: the span is
+    // the unit both renderers scale by.
+    for (const code of ['C172', 'A320', 'A388']) {
+      const position = aircraftGeometryFor(code).attributes.position.array as Float32Array;
+      let maxX = 0;
+      for (let i = 0; i < position.length; i += 3) maxX = Math.max(maxX, Math.abs(position[i]));
+      expect(maxX).toBeCloseTo(0.5, 3);
+    }
+  });
+});

@@ -185,6 +185,11 @@ export function createAircraftGeometry(
   const stretch = temper(shape.lengthRatio / DEFAULT_SHAPE.lengthRatio, 0.6, 0.86, 1.24);
   const girth = shape.bodyScale / DEFAULT_SHAPE.bodyScale;
   const r = (radius: number) => radius * girth;
+  // **The nose lengthens with the body.** A cone of fixed length on a tube
+  // twice as fat is a stub: the taper has to happen over a length related to
+  // the width it is tapering from, or the join reads as a step rather than a
+  // nose. One and a bit body diameters is about what an airliner has.
+  const noseLength = Math.max(0.13, r(0.057) * 2 * 1.15) * stretch;
 
   // Every cylinder below reads (forwardRadius, aftRadius, length) -- see `at`.
   const parts: THREE.BufferGeometry[] = [
@@ -197,8 +202,8 @@ export function createAircraftGeometry(
     // something else entirely. An airliner's nose is blunt: about a third of
     // the fuselage width at the tip, over a length of roughly one diameter.
     bake(
-      new THREE.CylinderGeometry(r(0.020), r(0.057), 0.13 * stretch, 8, 1),
-      at(0, 0, 0.555 * stretch, true),
+      new THREE.CylinderGeometry(r(0.020), r(0.057), noseLength, 8, 1),
+      at(0, 0, (0.49 * stretch + noseLength / 2), true),
     ),
     // Tail cone: fuselage width at the front, tapering to the tail, and lifted
     // slightly so it runs up into the fin root the way an airliner's does.
@@ -217,43 +222,35 @@ export function createAircraftGeometry(
       bake(
         panel(
           [
-            [0, 0.1],
-            [side * 0.5, 0.1 - 0.16 * shape.sweep],
-            [side * 0.5, 0.1 - 0.16 * shape.sweep - (0.09 + 0.06 * (1 - shape.sweep))],
-            [0, -0.14],
+            [0, 0.13],
+            [side * 0.5, 0.13 - 0.17 * shape.sweep],
+            [side * 0.5, 0.13 - 0.17 * shape.sweep - (0.11 + 0.07 * (1 - shape.sweep))],
+            [0, -0.18],
           ],
-          0.02,
+          0.024,
           -0.012,
         ),
         at(0, 0, 0),
       ),
     ),
-    // Tailplane, swept and tapered on the same rules, at a fifth of the span.
-    bake(
-      panel(
-        [
-          [-0.19, -0.46],
-          [0, -0.39],
-          [0, -0.51],
-          [-0.19, -0.52],
-        ],
-        0.016,
-        0.01,
+    // Tailplane, swept and tapered on the same rules, at a quarter of the
+    // span. Its root runs from ahead of the tail cone to behind it, so it
+    // meets the body however fat the body is drawn rather than floating clear
+    // of a slim one or being swallowed by a broad one.
+    ...[-1, 1].map((side) =>
+      bake(
+        panel(
+          [
+            [side * 0.24, -0.45],
+            [0, -0.36],
+            [0, -0.52],
+            [side * 0.24, -0.53],
+          ],
+          0.018,
+          0.01,
+        ),
+        at(0, 0, 0),
       ),
-      at(0, 0, 0),
-    ),
-    bake(
-      panel(
-        [
-          [0.19, -0.46],
-          [0, -0.39],
-          [0, -0.51],
-          [0.19, -0.52],
-        ],
-        0.016,
-        0.01,
-      ),
-      at(0, 0, 0),
     ),
     // Fin: the same panel stood up in XY, leading edge raked back.
     bake(
