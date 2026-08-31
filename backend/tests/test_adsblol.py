@@ -15,8 +15,10 @@ the ground reports the *string* `"ground"` where a number is expected.
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 
+import anyio
 import httpx
 import pytest
 
@@ -54,10 +56,10 @@ LIVE_RECORD = {
 
 def provider(handler) -> AdsbLolProvider:
     transport = httpx.MockTransport(handler)
-    # No pause between sweep circles: the real one exists to avoid a rate
+    # No spacing between requests: the real gate exists to stay under a rate
     # limiter that a mock transport does not have.
     return AdsbLolProvider(
-        client=httpx.AsyncClient(transport=transport), sweep_pause_seconds=0.0
+        client=httpx.AsyncClient(transport=transport), min_request_interval_seconds=0.0
     )
 
 
@@ -341,3 +343,67 @@ class TestFailures:
     async def test_an_empty_sky_is_not_an_error(self) -> None:
         assert await provider(responds({"ac": []})).fetch(VIEWPORT) == []
         assert await provider(responds({})).fetch(VIEWPORT) == []
+
+
+class TestTheRequestGate:
+    """Defect #35, second half.
+
+    Spacing the sweep's own circles fixed the sweep in isolation and left it
+    sharing a rate limit with the viewport job, which polls on its own 15 s
+    schedule through the same provider. One circle was still refused twice
+    under viewport traffic. The limit belongs to the address, so the gate does
+    too - it spaces *every* request this provider makes, whoever asked.
+    """
+
+    @pytest.mark.anyio
+    async def test_requests_are_spaced_by_the_interval(self) -> None:
+        sent: list[float] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            sent.append(time.monotonic())
+            return httpx.Response(200, json={"ac": []})
+
+        provider = AdsbLolProvider(
+            client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+            min_request_interval_seconds=0.05,
+        )
+        await provider.fetch(VIEWPORT)
+        await provider.fetch(VIEWPORT)
+        assert len(sent) == 2
+        assert sent[1] - sent[0] >= 0.05
+
+    @pytest.mark.anyio
+    async def test_two_callers_at_once_get_two_slots_not_one(self) -> None:
+        # The failure this rules out: both read the clock, both see a free
+        # slot, both send. That is exactly the sweep-and-viewport collision.
+        sent: list[float] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            sent.append(time.monotonic())
+            return httpx.Response(200, json={"ac": []})
+
+        provider = AdsbLolProvider(
+            client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+            min_request_interval_seconds=0.05,
+        )
+        async with anyio.create_task_group() as group:
+            group.start_soon(provider.fetch, VIEWPORT)
+            group.start_soon(provider.fetch, VIEWPORT)
+        assert len(sent) == 2
+        assert abs(sent[1] - sent[0]) >= 0.05
+
+    @pytest.mark.anyio
+    async def test_the_first_request_does_not_wait(self) -> None:
+        # A gate that made every poll pay an interval before its first request
+        # would add latency for nothing; only the gaps matter.
+        provider = AdsbLolProvider(
+            client=httpx.AsyncClient(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(200, json={"ac": []})
+                )
+            ),
+            min_request_interval_seconds=5.0,
+        )
+        started = time.monotonic()
+        await provider.fetch(VIEWPORT)
+        assert time.monotonic() - started < 1.0

@@ -36,6 +36,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -81,28 +82,28 @@ GLOBAL_SWEEP: tuple[tuple[float, float], ...] = (
 )
 GLOBAL_RADIUS_NM = 6000
 
-#: Seconds between the sweep's requests.
+#: Minimum seconds between *any* two requests this provider makes.
 #:
-#: The service throttles a burst with HTTP 420 and stays cross for about a
-#: minute afterwards, which costs far more than the pause does.
+#: **One gate for the whole provider, not a pause inside the sweep.** The first
+#: version of this spaced the four global-sweep circles apart and nothing else,
+#: which fixed the sweep in isolation and left it sharing a rate limit with the
+#: viewport job - a second caller, on its own 15 s schedule, through the same
+#: provider and the same address. Measured over eight polls afterwards, one
+#: circle was still refused twice, during a burst of viewport traffic. Spacing
+#: requests that do not know about each other cannot work; the limit is a
+#: property of the address, so the gate has to be too (defect #35).
 #:
-#: **Two seconds was not enough, and the shortfall was invisible.** The fourth
-#: circle of every global sweep came back 429, every poll, for the life of the
-#: provider - and because a partial sweep is deliberately tolerated below, it
-#: logged a warning and carried on. The circle that happened to be fourth is
-#: the Americas, so the entire continent was served by the OpenSky supplement
-#: alone (defect #35).
+#: The interval itself was measured with the server stopped, so nothing else
+#: was competing: 2 s failed 1 of 4, 3 s passed, 4 s passed three times over.
+#: The threshold is between two and three seconds, and 4 s is double the value
+#: that failed.
 #:
-#: Measured with the server stopped, so nothing else was competing for the
-#: limit: 2 s failed 1 of 4, 3 s passed, 4 s passed three times over. The
-#: threshold is between two and three seconds; 4 s is double the value that
-#: failed, and the margin is deliberate because in production the viewport job
-#: is also querying this API every 15 s from the same address, which the
-#: measurement above did not include.
-#:
-#: Four circles four seconds apart is about fifteen seconds of a sixty-second
-#: poll.
-SWEEP_PAUSE_SECONDS = 4.0
+#: **What it costs.** A global sweep is four requests, so about 16 s of a 60 s
+#: poll, and a viewport request can wait up to one interval for its slot.
+#: Demand is 4 sweep + 4 viewport requests a minute against the 15 a minute
+#: this allows, so the queue is short by construction. A viewport poll arriving
+#: 4 s late is a far better failure than a circle of the planet going missing.
+MIN_REQUEST_INTERVAL_SECONDS = 4.0
 
 #: The largest radius asked for a viewport, in nautical miles.
 #:
@@ -124,11 +125,16 @@ class AdsbLolProvider(Provider):
         base_url: str = "https://api.adsb.lol/v2",
         timeout_seconds: float = 30.0,
         user_agent: str = "Orbital/0.1 (CSC480 student project)",
-        sweep_pause_seconds: float = SWEEP_PAUSE_SECONDS,
+        min_request_interval_seconds: float = MIN_REQUEST_INTERVAL_SECONDS,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
-        self._sweep_pause = sweep_pause_seconds
+        self._min_interval = min_request_interval_seconds
+        #: Serialises the wait itself, so two callers cannot both look at the
+        #: clock, both see a free slot, and both take it.
+        self._gate = asyncio.Lock()
+        #: Monotonic time before which no request may be sent.
+        self._next_allowed_at = 0.0
         # Sent on every request because the service asks for one, and because a
         # free service run on donations deserves to know who is calling it.
         self._client = client or httpx.AsyncClient(
@@ -150,9 +156,10 @@ class AdsbLolProvider(Provider):
         failed: list[tuple[float, float]] = []
         last_error: BaseException | None = None
 
-        for index, point in enumerate(GLOBAL_SWEEP):
-            if index:
-                await asyncio.sleep(self._sweep_pause)
+        for point in GLOBAL_SWEEP:
+            # No pause here: `_wait_turn` spaces every request this provider
+            # makes, including the viewport job's, which a pause local to this
+            # loop could not see.
             error = await self._sweep_circle(point, merged)
             if error is not None:
                 # One circle failing is a partial view, not no view: the sweep
@@ -168,7 +175,6 @@ class AdsbLolProvider(Provider):
         # pause and only when something actually failed, and it turns a
         # permanent hole into at worst a delayed one.
         for point in list(failed):
-            await asyncio.sleep(self._sweep_pause)
             error = await self._sweep_circle(point, merged)
             if error is None:
                 failed.remove(point)
@@ -204,10 +210,28 @@ class AdsbLolProvider(Provider):
             return exc
         return None
 
+    async def _wait_turn(self) -> None:
+        """Block until this provider is allowed to send another request.
+
+        Holding the lock across the sleep is what makes it a queue rather than
+        a race: waiters are admitted one at a time and each claims the next
+        slot before releasing, so two concurrent callers get two slots an
+        interval apart instead of both reading the same clock and both going.
+        """
+        if self._min_interval <= 0:
+            return
+        async with self._gate:
+            now = time.monotonic()
+            wait = self._next_allowed_at - now
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._next_allowed_at = max(now, self._next_allowed_at) + self._min_interval
+
     async def _fetch_circle(
         self, lat: float, lon: float, radius_nm: int
     ) -> list[TrackedObjectRecord]:
         url = f"{self.base_url}/point/{lat}/{lon}/{radius_nm}"
+        await self._wait_turn()
         try:
             response = await self._client.get(url)
         except httpx.HTTPError as exc:
