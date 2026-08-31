@@ -36,6 +36,7 @@ import {
   BASEMAP_FLAT,
   BASEMAP_IMAGERY,
   BASEMAP_STATE,
+  basemapDimLayer,
   firstLabelLayerId,
   loadPlanetStyle,
 } from './basemap';
@@ -244,6 +245,12 @@ export function PlanetView() {
             data: originFeature(useOrbitalStore.getState().selectedDetail?.origin),
           });
           for (const layer of originLayers()) map.addLayer(layer);
+
+          // Dims the flat basemap, and nothing above it. Added here rather
+          // than in the style so its position is the thing that defines it:
+          // everything before this line recedes, everything after stays at
+          // full strength.
+          if (config.flatBasemapDim > 0) map.addLayer(basemapDimLayer(config.flatBasemapDim));
 
           map.addSource(AIRCRAFT_SOURCE, {
             type: 'geojson',

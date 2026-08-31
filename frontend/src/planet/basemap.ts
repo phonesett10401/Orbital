@@ -116,6 +116,40 @@ export function whenFlat<T>(flat: T, imagery: T): ExpressionSpecification {
   ] as unknown as ExpressionSpecification;
 }
 
+/** The id of the layer that dims the flat basemap. */
+export const BASEMAP_DIM_LAYER = 'orbital-basemap-dim';
+
+/**
+ * A layer that dims the cartography without touching what is drawn over it.
+ *
+ * The flat basemap is a light style and correct as one. It is wrong under two
+ * thousand small bright aircraft: everything is bright, so nothing reads as
+ * foreground. Over imagery the problem does not arise, because a satellite
+ * photograph is dark and busy and the aircraft sit clearly on top of it.
+ *
+ * **Why a layer rather than a canvas filter.** A CSS `brightness()` on the
+ * canvas would dim the aircraft too, which is precisely backwards. Inserted
+ * here - after the whole basemap, before the aircraft - it dims the map and
+ * leaves every marker, track and label of ours at full strength.
+ *
+ * Internal contrast is preserved: an alpha blend toward black moves every
+ * basemap colour by the same proportion, so a road still reads against its
+ * ground and a label still reads against its halo. It is the map as a whole
+ * that recedes, which is what "too bright" was asking for.
+ *
+ * Zero in imagery mode, so the toggle costs nothing there.
+ */
+export function basemapDimLayer(strength: number): LayerSpecification {
+  return {
+    id: BASEMAP_DIM_LAYER,
+    type: 'background',
+    paint: {
+      'background-color': '#05070c',
+      'background-opacity': whenFlat(strength, 0),
+    },
+  } as LayerSpecification;
+}
+
 export const KEPT_LAYER_TYPES = new Set(['line', 'symbol', 'fill-extrusion']);
 
 /**

@@ -169,6 +169,24 @@ export const config = {
   terminatorStrength: num(import.meta.env.VITE_TERMINATOR_STRENGTH, 0.85),
 
   /**
+   * How far the flat basemap is dimmed, 0 for none and 1 for black.
+   *
+   * The flat basemap is a light style - cream land, white roads, near-black
+   * labels - and it is correct on its own terms. It is wrong *here*, because
+   * what sits on top of it is two thousand small bright aircraft, and a page
+   * that is bright everywhere has nothing left to make them stand out with.
+   *
+   * Dimming the basemap rather than the whole canvas is the point: the dim
+   * layer goes above the cartography and below the aircraft, so the map's own
+   * internal contrast - road against ground, label against halo - is preserved
+   * exactly, while the aircraft gain the contrast they had over imagery.
+   *
+   * Tunable because brightness is a taste, and because the last two lighting
+   * constants in this file both needed a second attempt (D49).
+   */
+  flatBasemapDim: num(import.meta.env.VITE_FLAT_DIM, 0.32),
+
+  /**
    * Satellite imagery for the planet view, as XYZ tiles.
    *
    * NASA GIBS, no API key and no registration: `BlueMarble_NextGeneration` is

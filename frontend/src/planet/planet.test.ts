@@ -45,6 +45,7 @@ import {
   BASEMAP_FLAT,
   BASEMAP_IMAGERY,
   BASEMAP_STATE,
+  basemapDimLayer,
   whenFlat,
 } from './basemap';
 import { createBasemapControl } from './basemapControl';
@@ -965,5 +966,30 @@ describe('the assembled style is valid, according to the spec itself', () => {
     };
     const errors = validateStyleMin(withImagery(withZoomFade as never) as never);
     expect(errors.map((e) => `${e.message}`)).toEqual([]);
+  });
+});
+
+describe('basemapDimLayer', () => {
+  it('dims the flat map and leaves the imagery one alone', () => {
+    // The complaint was the flat basemap specifically: cream land and white
+    // roads under two thousand bright aircraft, with nothing reading as
+    // foreground. Imagery is already dark and busy and needs none of this.
+    const paint = basemapDimLayer(0.32).paint as Record<string, unknown>;
+    expect(forMode(paint['background-opacity'], 'flat')).toBe(0.32);
+    expect(forMode(paint['background-opacity'], 'imagery')).toBe(0);
+  });
+
+  it('dims toward the page rather than toward grey', () => {
+    // Blending to a neutral grey washes the map out; blending to the near
+    // black the page already uses reads as the map receding into it.
+    const paint = basemapDimLayer(0.32).paint as Record<string, unknown>;
+    expect(paint['background-color']).toBe('#05070c');
+  });
+
+  it('is a background layer, so its position is what scopes it', () => {
+    // It dims everything added before it and nothing after. That is the whole
+    // mechanism, and it only holds because PlanetView adds it immediately
+    // before the aircraft.
+    expect(basemapDimLayer(0.2).type).toBe('background');
   });
 });
