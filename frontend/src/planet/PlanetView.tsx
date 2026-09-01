@@ -466,6 +466,12 @@ export function PlanetView() {
             // extra dots (D96). Airport markers and the receiver-coverage
             // annotation are both aircraft furniture, and leaving them up
             // while the user is looking at orbits mixes two unrelated things.
+            // The 3D spacecraft stands in for the selected satellite's
+            // sprite, so the shell leaves that one out (D107). Told each frame
+            // rather than on selection, because whether the model is drawing
+            // depends on the zoom and the horizon as well as the selection.
+            shell?.setHideSelected(satelliteMode && (model?.drewLastFrame() ?? false));
+
             // The shell and the ground symbols are two drawings of the same
             // objects, so exactly one is on at a time (D105). The shell owns
             // the view while the whole planet is in frame; past that the

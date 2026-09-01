@@ -113,6 +113,11 @@ export interface ShellRenderer {
 }
 
 export interface ShellLayer extends CustomLayerInterface {
+  /**
+   * Leave the selected satellite's sprite out, because something else is
+   * drawing it. Off until the model layer says it is drawing.
+   */
+  setHideSelected(hide: boolean): void;
   /** How many satellites the last frame drew. Read by tests and the readout. */
   drawnCount(): number;
   /** One line for the dev readout saying what happened last frame. */
@@ -224,6 +229,7 @@ export function createShellLayer(
   let map: MapLibreMap | null = null;
   let drawn = 0;
   let status = 'never rendered';
+  let hideSelected = false;
   /** Last frame's clip-space positions, kept so `pick` can answer from them. */
   let projected: Array<{ id: string; x: number; y: number; size: number }> = [];
 
@@ -281,6 +287,11 @@ export function createShellLayer(
 
       let behind = 0;
       for (const object of objects) {
+        // The selected satellite is drawn as a 3D spacecraft by the model
+        // layer (D107), so its sprite is left out rather than drawn behind it.
+        // Same arrangement as aircraft: `setHidden` on the symbol layer, one
+        // object one picture.
+        if (object.id === selectedId && hideSelected) continue;
         const position = shellPosition(object.renderLon, object.renderLat, object.altitude);
         // Occlusion. MapLibre's clipping plane cuts the far hemisphere at the
         // *surface* horizon, so testing an elevated point against it hides a
@@ -328,6 +339,10 @@ export function createShellLayer(
 
     drawnCount() {
       return drawn;
+    },
+
+    setHideSelected(hide: boolean) {
+      hideSelected = hide;
     },
 
     describe() {

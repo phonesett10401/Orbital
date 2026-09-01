@@ -29,9 +29,13 @@ import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap 
 
 import { aircraftGeometryFor } from '../airframe';
 import { altitudeColor } from '../altitudeColor';
-import type { RenderableObject } from '../types';
+import type { ObjectType, RenderableObject } from '../types';
+import { familyFor, type SatelliteFamily } from '../satelliteFamily';
+import { regimeRgb, shellFor } from '../satelliteShell';
+import { SPAN_METRES, spacecraftGeometryFor } from '../spacecraft';
 import { scaleFor, wingspanFor } from '../wingspan';
 import {
+  GLOBE_RADIUS_METRES,
   MODEL_LIFT_SPANS,
   REAL_SPAN_METRES,
   globeAxes,
@@ -61,6 +65,10 @@ export interface ModelTarget {
   altitude: number | null;
   /** ICAO type designator, or null. Sets how large the airframe is drawn. */
   model: string | null;
+  /** Which layer this object belongs to. Decides which geometry is drawn. */
+  type: ObjectType;
+  /** Spacecraft family, for a satellite. Null for an aircraft. */
+  family: SatelliteFamily | null;
 }
 
 /**
@@ -72,19 +80,20 @@ export interface ModelTarget {
  */
 export function modelTarget(object: RenderableObject | null | undefined): ModelTarget | null {
   if (!object || object.heading === null) return null;
-  // **A satellite gets no model, even though it has a heading.** This mesh is
-  // an airframe - fuselage, wings, tailplane, engines, proportioned by ICAO
-  // type (D91). Drawing a satellite with it would be a detailed, confident
-  // claim about a shape we do not have, which is worse than drawing nothing.
-  // Same reasoning as the no-heading case above, and the same guard the globe
-  // applies (D96).
-  if (object.type === 'satellite') return null;
   return {
     lon: object.renderLon,
     lat: object.renderLat,
     heading: object.heading,
     altitude: object.altitude,
     model: object.model,
+    // **A satellite still never gets the airframe.** The guard used to be a
+    // refusal here; it is now a fork, because a satellite has a shape of its
+    // own worth drawing (D107). What must never happen is an aeroplane in
+    // orbit - fuselage, wings and engines are a claim about a machine that is
+    // not there - and that is enforced by which geometry this type selects,
+    // not by declining to draw anything (D96, D101).
+    type: object.type,
+    family: object.type === 'satellite' ? familyFor(object.label) : null,
   };
 }
 
@@ -230,19 +239,38 @@ export function createModelLayer(
       // compressed factor the symbols use for the pixel floor - so the model
       // differs by type at every zoom, not only past z16 where true scale
       // takes over.
-      const span = modelSpanMetres(
-        map.getZoom(),
-        scaleLat,
-        wingspanFor(target.model) ?? REAL_SPAN_METRES,
-        scaleFor(target.model),
-      );
+      const satellite = target.type === 'satellite' && target.family !== null;
+      const span = satellite
+        ? // A spacecraft's real span is metres against a planet 6,371 km
+          // across, so at the zoom the shell is drawn at the pixel floor
+          // decides this entirely. The true figure is passed anyway: it costs
+          // nothing and becomes the right answer the moment somebody zooms in.
+          modelSpanMetres(map.getZoom(), scaleLat, SPAN_METRES[target.family!], 2.4)
+        : modelSpanMetres(
+            map.getZoom(),
+            scaleLat,
+            wingspanFor(target.model) ?? REAL_SPAN_METRES,
+            scaleFor(target.model),
+          );
       // Proportions as well as size: a four-engined widebody is a different
       // shape, not a larger A320. Cached, so this is a reference swap on the
       // frames where the selection has not changed.
-      const wanted = aircraftGeometryFor(target.model);
+      // **This is where the airframe guard now lives.** A satellite selects a
+      // spacecraft; an aircraft selects an airframe. Neither can ever receive
+      // the other's geometry, which is the property D96 was protecting when it
+      // refused to draw satellites at all (D107).
+      const wanted = satellite
+        ? spacecraftGeometryFor(target.family!)
+        : aircraftGeometryFor(target.model);
       if (mesh.geometry !== wanted) mesh.geometry = wanted;
 
-      const lift = span * MODEL_LIFT_SPANS;
+      // An aircraft is lifted just clear of the ground for legibility; a
+      // satellite is lifted onto its shell, which is where the flat dot for it
+      // is also drawn (D105). `shellFor` is in globe radii and this wants
+      // metres, so it is scaled by the radius MapLibre's own globe uses.
+      const lift = satellite
+        ? shellFor(target.altitude) * GLOBE_RADIUS_METRES
+        : span * MODEL_LIFT_SPANS;
 
       let model: number[];
       if (globe) {
@@ -261,7 +289,12 @@ export function createModelLayer(
       const frame = globe ? projection.mainMatrix : projection.fallbackMatrix;
       camera.projectionMatrix.fromArray(multiplyMat4(Array.from(frame), model));
 
-      const [r, g, b] = altitudeColor(target.altitude);
+      // Satellites are coloured by orbit regime, not by the aircraft altitude
+      // ramp, which saturates three orders of magnitude below orbit and would
+      // render every one of them the same cyan (D99).
+      const [r, g, b] = satellite
+        ? (regimeRgb(target.altitude).map((c) => c / 255) as [number, number, number])
+        : altitudeColor(target.altitude);
       (material.uniforms.tint.value as THREE.Color).setRGB(r, g, b);
       const sun = sunInModelSpace(target.heading, !globe);
       (material.uniforms.sun.value as THREE.Vector3).set(sun[0], sun[1], sun[2]);

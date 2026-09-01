@@ -5581,3 +5581,76 @@ The project already has the right pattern for this and it should be followed:
 aircraft work (D42, D67) - a silhouette in the crowd, a full airframe once you
 have picked one out and it is large enough to repay the geometry. The satellite
 equivalent is the obvious next step and is not built yet.
+
+---
+
+## D107 - The selected satellite is a spacecraft, modelled
+
+**Decision:** selecting a satellite draws it as **3D geometry built for its
+family** - a truss with four arrays for a station, one lopsided array for a
+Starlink, a dish for a geostationary bus, a bare drum for a spinning probe.
+`modelLayer` now forks on object type rather than refusing satellites.
+
+Silhouette in the crowd, geometry for the selection. Exactly how aircraft work
+(D42, D67), and D106 said this was the shape the answer should take.
+
+### The airframe guard changed form, not force
+
+D96 made `modelTarget` return null for satellites. That was right when the only
+mesh available was an aeroplane: drawing one in orbit is a detailed claim about
+a machine that is not there, and the no-heading rule would never have caught it
+because a satellite has a perfectly good heading.
+
+The guard is now a **fork**: a satellite selects a spacecraft, an aircraft
+selects an airframe, and neither can receive the other's geometry. The property
+D96 protected is unchanged; what changed is that there is finally something
+correct to draw.
+
+**The test had to change with it, and nearly became worthless.** The first
+version compared `spacecraftGeometryFor(...)` against `aircraftGeometryFor(...)`
+and asserted they differ - which is true of two different builders however the
+layer chooses between them, so it would have passed with the fork removed. It
+now reads the geometry off the mesh the layer handed the renderer. Breaking the
+fork was what exposed that; the assertion looked reasonable until then.
+
+### Built in the frame, not merely in three dimensions
+
+`modelFrame.ts` gives the mesh a tangent frame: **+Y up, away from the Earth**,
+**+Z along the direction of travel**. The shapes are built to it, and that is
+what makes them read as spacecraft rather than as assorted boxes:
+
+- arrays extend along **X**, perpendicular to travel, as they do in orbit;
+- dishes and imaging instruments point along **−Y**, at the ground they are
+  talking to or looking at;
+- a truss runs along **X**, which is what makes a station a station.
+
+A test asserts the third of these directly - for navigation, observation and
+geostationary families the geometry must extend further below the body than
+above it. Getting that backwards would aim a weather satellite's camera at
+space, and nothing else in the suite would have noticed.
+
+### Two things the tests found that reading did not
+
+**The station was not the widest object.** It is meant to be the largest thing
+in orbit and the navigation satellite's arrays out-reached its truss. Caught by
+a test asserting the intent rather than the numbers.
+
+**The geostationary bus exceeded unit span**, which would have made the model
+layer's metre scaling mean something slightly different for that one family.
+
+Both were fixed in the geometry. Neither would have been visible on screen as
+anything more specific than "that looks a bit off".
+
+### Sizes are real and mostly will not matter
+
+`SPAN_METRES` holds true spans - the ISS is 109 m, a Starlink about 9 m. At the
+zoom the shell draws at, all of them are far under a pixel and the model
+layer's pixel floor decides the drawn size. They are there because they are
+true, cost nothing, and become the right answer the moment somebody zooms in.
+
+### One object, one picture
+
+The shell leaves the selected satellite's sprite out while the model is
+drawing, told per frame rather than on selection - whether the model draws
+depends on zoom and the horizon as well as on what is selected. The same
+arrangement `setHidden` gives the aircraft symbol layer.

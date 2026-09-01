@@ -48,6 +48,10 @@ import {
   usesGlobeFrame,
 } from './modelFrame';
 import { MODEL_LAYER, createModelLayer, modelTarget } from './modelLayer';
+import { aircraftGeometryFor } from '../airframe';
+import type { SatelliteFamily } from '../satelliteFamily';
+import { shellFor } from '../satelliteShell';
+import { SPAN_METRES, spacecraftGeometryFor } from '../spacecraft';
 
 const BANGKOK = { lon: 100.5, lat: 13.75 };
 
@@ -63,6 +67,9 @@ function object(overrides: Partial<RenderableObject> = {}): RenderableObject {
     altitude: 10_000,
     velocity: 220,
     heading: 90,
+    // The contract says `string | null`; the fixture omitted it and the cast
+    // below hid that it was arriving as undefined.
+    model: null,
     lastSeenMs: Date.now(),
     meta: {},
     ...overrides,
@@ -366,23 +373,45 @@ describe('modelTarget', () => {
     expect(modelTarget(undefined)).toBeNull();
   });
 
-  it('refuses a satellite even though it has a heading', () => {
-    // The mesh is an airframe: fuselage, wings, tailplane, engines, sized by
-    // ICAO type (D91). A satellite has a perfectly good heading, so the
-    // no-heading rule above would let one through - and it would be drawn as
-    // an airliner in orbit, which is a detailed claim about a shape we do not
-    // have (D96).
-    expect(modelTarget(object({ type: 'satellite' }))).toBeNull();
-    // The same object as an aircraft still gets its model, so this is the type
-    // check doing the work rather than something else about the fixture.
-    expect(modelTarget(object({ type: 'aircraft' }))).not.toBeNull();
+  it('gives a satellite a spacecraft family and an aircraft none', () => {
+    // The guard used to be a refusal; it is now a fork (D107). What it
+    // protects is unchanged and is the whole point: an aeroplane must never be
+    // drawn in orbit, so the type decides which geometry is selected. A
+    // satellite has a perfectly good heading, so the no-heading rule above
+    // would never have caught it.
+    const satellite = modelTarget(object({ type: 'satellite', label: 'ISS (ZARYA)' }));
+    expect(satellite?.type).toBe('satellite');
+    expect(satellite?.family).toBe('station');
+
+    const aircraft = modelTarget(object({ type: 'aircraft' }));
+    expect(aircraft?.type).toBe('aircraft');
+    expect(aircraft?.family).toBeNull();
+  });
+
+  it('reads the satellite family from the name, as the map does', () => {
+    // Same function the silhouettes use, so the selected model and the dot it
+    // replaces cannot disagree about what the object is (D101).
+    expect(modelTarget(object({ type: 'satellite', label: 'STARLINK-4621' }))?.family).toBe(
+      'constellation',
+    );
+    expect(modelTarget(object({ type: 'satellite', label: 'OBJECT AN' }))?.family).toBe(
+      'unidentified',
+    );
   });
 
   it('takes the interpolated position, not the reported one', () => {
     // The symbol layer draws renderLat/renderLon; taking lat/lon here would
     // leave the model a poll behind the marker it is replacing.
     const target = modelTarget(object());
-    expect(target).toEqual({ lon: 100.6, lat: 13.8, heading: 90, altitude: 10_000 });
+    expect(target).toEqual({
+      lon: 100.6,
+      lat: 13.8,
+      heading: 90,
+      altitude: 10_000,
+      model: null,
+      type: 'aircraft',
+      family: null,
+    });
   });
 });
 
@@ -433,7 +462,7 @@ describe('the layer', () => {
   });
 
   it('draws the selection through the globe matrix', () => {
-    const target = { lon: 0, lat: 0, heading: 90, altitude: 3000, model: null };
+    const target = { lon: 0, lat: 0, heading: 90, altitude: 3000, model: null, type: 'aircraft' as const, family: null };
     const { layer, renderer } = harness(target);
     layer.render({} as WebGL2RenderingContext, args());
     expect(renderer.render).toHaveBeenCalledTimes(1);
@@ -451,7 +480,7 @@ describe('the layer', () => {
   });
 
   it('switches to the fallback matrix once the map is mercator', () => {
-    const target = { lon: 0, lat: 0, heading: 0, altitude: null, model: null };
+    const target = { lon: 0, lat: 0, heading: 0, altitude: null, model: null, type: 'aircraft' as const, family: null };
     const { layer, renderer } = harness(target, 14);
     layer.render({} as WebGL2RenderingContext, args({ projectionTransition: 0 }));
     expect(renderer.render).toHaveBeenCalledTimes(1);
@@ -468,7 +497,7 @@ describe('the layer', () => {
   it('draws nothing for an aircraft over the horizon', () => {
     // On the far side of the planet MapLibre draws no terrain to hide it, so
     // an unclipped model would be visible *through* the Earth.
-    const { layer, renderer } = harness({ lon: 180, lat: 0, heading: 0, altitude: null, model: null });
+    const { layer, renderer } = harness({ lon: 180, lat: 0, heading: 0, altitude: null, model: null, type: 'aircraft' as const, family: null });
     layer.render({} as WebGL2RenderingContext, args());
     expect(renderer.render).not.toHaveBeenCalled();
     expect(layer.drewLastFrame()).toBe(false);
@@ -477,7 +506,7 @@ describe('the layer', () => {
   it('does not clip against the horizon under mercator', () => {
     // The clipping plane is globe-only; applying it in mercator would blank
     // the model for half the world.
-    const { layer, renderer } = harness({ lon: 180, lat: 0, heading: 0, altitude: null, model: null }, 14);
+    const { layer, renderer } = harness({ lon: 180, lat: 0, heading: 0, altitude: null, model: null, type: 'aircraft' as const, family: null }, 14);
     layer.render({} as WebGL2RenderingContext, args({ projectionTransition: 0 }));
     expect(renderer.render).toHaveBeenCalledTimes(1);
   });
@@ -490,11 +519,11 @@ describe('the layer', () => {
     idle.render({} as WebGL2RenderingContext, args());
     expect(idle.describe()).toMatch(/nothing selected/);
 
-    const horizon = harness({ lon: 180, lat: 0, heading: 0, altitude: null, model: null }).layer;
+    const horizon = harness({ lon: 180, lat: 0, heading: 0, altitude: null, model: null, type: 'aircraft' as const, family: null }).layer;
     horizon.render({} as WebGL2RenderingContext, args());
     expect(horizon.describe()).toMatch(/over the horizon/);
 
-    const drawing = harness({ lon: 0, lat: 0, heading: 0, altitude: null, model: null }).layer;
+    const drawing = harness({ lon: 0, lat: 0, heading: 0, altitude: null, model: null, type: 'aircraft' as const, family: null }).layer;
     drawing.render({} as WebGL2RenderingContext, args());
     expect(drawing.describe()).toMatch(/drawing .* globe frame/);
     drawing.render({} as WebGL2RenderingContext, args({ projectionTransition: 0 }));
@@ -514,10 +543,97 @@ describe('the layer', () => {
   it('resets the GL state before drawing, every frame', () => {
     // MapLibre and three.js both cache what they think the context is set to,
     // and only one of them can be right.
-    const { layer, renderer } = harness({ lon: 0, lat: 0, heading: 0, altitude: null, model: null });
+    const { layer, renderer } = harness({ lon: 0, lat: 0, heading: 0, altitude: null, model: null, type: 'aircraft' as const, family: null });
     layer.render({} as WebGL2RenderingContext, args());
     layer.render({} as WebGL2RenderingContext, args());
     expect(renderer.resetState).toHaveBeenCalledTimes(2);
+  });
+
+  describe('the selected satellite is a spacecraft, not an aeroplane', () => {
+    const satellite = (family: SatelliteFamily, altitude: number) => ({
+      lon: 0,
+      lat: 0,
+      heading: 90,
+      altitude,
+      model: null,
+      type: 'satellite' as const,
+      family,
+    });
+
+    it('is lifted onto its orbit shell, not onto the ground', () => {
+      // An aircraft is lifted 0.6 spans clear of the surface for legibility. A
+      // satellite is lifted onto the shell the flat dot for it also sits on, so
+      // the two drawings of one object cannot be in different places (D105).
+      const target = satellite('station', 420_000);
+      const { layer } = harness(target);
+      layer.render({} as WebGL2RenderingContext, args());
+
+      const span = modelSpanMetres(3, 0, SPAN_METRES.station, 2.4);
+      const expected = multiplyMat4(
+        new THREE.Matrix4().makeScale(2, 2, 2).toArray(),
+        globeModelMatrix(0, 0, 90, span, shellFor(420_000) * GLOBE_RADIUS_METRES),
+      );
+      const actual = layer.camera.projectionMatrix.toArray();
+      for (let i = 0; i < 16; i += 1) expect(actual[i]).toBeCloseTo(expected[i], 10);
+    });
+
+    it('puts a higher orbit further out than a lower one', () => {
+      // The one claim the shell makes, checked where the model is placed rather
+      // than only where the sprite is.
+      const radius = (altitude: number) => {
+        const { layer } = harness(satellite('geoComms', altitude));
+        layer.render({} as WebGL2RenderingContext, args());
+        const m = layer.camera.projectionMatrix.toArray();
+        // Translation column of the composed matrix, over the fixed 2x scale.
+        return Math.hypot(m[12], m[13], m[14]) / 2;
+      };
+      expect(radius(35_786_000)).toBeGreaterThan(radius(420_000));
+    });
+
+    /** The geometry the layer actually put on its mesh this frame. */
+    function drawnGeometry(renderer: { render: ReturnType<typeof vi.fn> }) {
+      const scene = renderer.render.mock.calls[0][0] as THREE.Scene;
+      return (scene.children[0] as THREE.Mesh).geometry;
+    }
+
+    it('is given a spacecraft, never the airframe', () => {
+      // The guard D96 was protecting, now enforced by which geometry the type
+      // selects rather than by refusing to draw (D107). Asserted on what the
+      // layer put on the mesh, not on the two builders side by side - the
+      // latter compares functions and would pass however the layer chose.
+      const { layer, renderer } = harness(satellite('station', 420_000));
+      layer.render({} as WebGL2RenderingContext, args());
+
+      const geometry = drawnGeometry(renderer);
+      expect(geometry).toBe(spacecraftGeometryFor('station'));
+      expect(geometry).not.toBe(aircraftGeometryFor(null));
+      expect(geometry).not.toBe(aircraftGeometryFor('B789'));
+    });
+
+    it('gives an aircraft the airframe, so the fork goes both ways', () => {
+      const { layer, renderer } = harness({
+        lon: 0, lat: 0, heading: 90, altitude: 3000,
+        model: 'B789', type: 'aircraft' as const, family: null,
+      });
+      layer.render({} as WebGL2RenderingContext, args());
+      expect(drawnGeometry(renderer)).toBe(aircraftGeometryFor('B789'));
+    });
+
+    it('draws a different shape for each family', () => {
+      for (const family of ['station', 'constellation', 'probe'] as SatelliteFamily[]) {
+        const { layer, renderer } = harness(satellite(family, 420_000));
+        layer.render({} as WebGL2RenderingContext, args());
+        expect(drawnGeometry(renderer)).toBe(spacecraftGeometryFor(family));
+      }
+    });
+
+    it('still refuses one that is over the horizon', () => {
+      // Nothing about being in orbit makes it visible through the planet.
+      const { layer, renderer } = harness(satellite('station', 420_000));
+      layer.render({} as WebGL2RenderingContext, args({ clippingPlane: [0, 0, -1, -1] }));
+      expect(renderer.render).not.toHaveBeenCalled();
+      expect(layer.drewLastFrame()).toBe(false);
+    });
   });
 });
 
@@ -567,4 +683,5 @@ describe('the model is the size the aircraft is', () => {
     expect(modelSpanMetres(18, LAT, 64.8, 1.345)).toBe(64.8);
     expect(modelSpanMetres(18, LAT, 11, 0.7)).toBe(11);
   });
+
 });
