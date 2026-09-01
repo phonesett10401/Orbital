@@ -27,13 +27,41 @@ const STORAGE_KEY = 'orbital.recentSearches';
  * and only falls back to the remembered position.
  */
 export interface RecentSearch {
-  kind: 'aircraft' | 'airport';
+  kind: 'aircraft' | 'airport' | 'satellite';
   /** ICAO24 address for an aircraft, ICAO code for an airport. */
   id: string;
   label: string;
   sublabel: string;
   lat: number;
   lon: number;
+}
+
+export function satelliteEntry(object: TrackedObject): RecentSearch {
+  return {
+    kind: 'satellite',
+    id: object.id,
+    label: object.label,
+    sublabel: `NORAD ${object.id}`,
+    lat: object.lat,
+    lon: object.lon,
+  };
+}
+
+/**
+ * The remembered entries that belong to one layer.
+ *
+ * Aircraft and airports are aircraft-layer furniture; satellites are not.
+ * Showing yesterday's airport searches under a satellite search box offers
+ * answers the box cannot give - choosing one would switch the user out of the
+ * layer they are in (D103).
+ */
+export function recentForLayer(
+  entries: readonly RecentSearch[],
+  layer: 'aircraft' | 'satellite',
+): RecentSearch[] {
+  return entries.filter((entry) =>
+    layer === 'satellite' ? entry.kind === 'satellite' : entry.kind !== 'satellite',
+  );
 }
 
 export function aircraftEntry(object: TrackedObject): RecentSearch {
@@ -119,7 +147,9 @@ function isRecent(value: unknown): value is RecentSearch {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return (
-    (candidate.kind === 'aircraft' || candidate.kind === 'airport') &&
+    (candidate.kind === 'aircraft' ||
+      candidate.kind === 'airport' ||
+      candidate.kind === 'satellite') &&
     typeof candidate.id === 'string' &&
     typeof candidate.label === 'string' &&
     typeof candidate.sublabel === 'string' &&

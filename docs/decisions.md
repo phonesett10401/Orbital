@@ -5288,3 +5288,60 @@ line looked correct; `cat -A` showed `OBJECT^H`.
 The check is now plain `startsWith` comparisons with no escapes in it, and a
 sweep confirmed no other source file carries stray control characters. **When a
 regex looks right and behaves as though it is not there, check the bytes.**
+
+---
+
+## D103 - The search box searches the layer you are in
+
+**Decision:** `/api/search` returns a third list, `satellites`, and the box
+shows the results and the remembered searches that belong to the **active
+layer**. Enter picks from the group that layer can act on.
+
+### The bug that made this obvious
+
+Phone typed in satellite mode and got airports back. Worse than untidy: **"ISS"
+matched WISCASSET**, a Maine airfield whose IATA code happens to be ISS. Search
+for the space station, get an aerodrome - and the recent list underneath was
+still offering BKK, DMK and Yangon.
+
+Two failures with one cause. The search box was aircraft-layer furniture that
+the satellite mode inherited without anyone deciding it should.
+
+### A third list, not a merged one
+
+`SearchResponse` gains `satellites` beside `aircraft` and `airports` rather
+than folding them together, for the same reason those two are separate (D89):
+they are different kinds of thing, and a single ranking across them invents a
+comparison that does not exist. Now demonstrably so - the aircraft layer's
+ranking would have put an airport above the ISS.
+
+### Searched against elements, not positions
+
+`SatelliteProvider.search` scans the **held element sets** by name and
+catalogue number, then propagates only the matches. A keystroke costs a string
+scan over 1,670 names instead of propagating the whole catalogue, and the
+tiering is the airports' (D89): exact catalogue number or name first, then a
+name that starts with the query, then one that contains it. "ISS" now returns
+`ISS (ZARYA)` and `ISS (NAUKA)` before `SWISSCUBE`.
+
+### Remembered searches belong to a layer
+
+Aircraft and airports are aircraft-layer entries; satellites are not. Offering
+an airport under a satellite search box offers an answer the box cannot give,
+and **choosing it would throw the user out of the layer they are in** - it
+would fly the camera to an airport with no aircraft drawn.
+
+They stay in one stored list, filtered at the point of display. Splitting the
+storage would lose entries on a layer switch and make the "last few things you
+searched for" claim false in a different way.
+
+### The rule underneath
+
+This is D100 again, one level deeper. That entry fixed the chrome *describing*
+the wrong subject; this one fixes a control *acting on* the wrong subject.
+Words that name the wrong layer mislead; a control wired to the wrong layer
+takes the user somewhere they did not ask to go, which is worse.
+
+**Everything the active layer offers should be something that layer can
+answer.** The layer toggle, the key, the panel and now the search box all
+follow from that.

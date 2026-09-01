@@ -7,6 +7,8 @@ import {
   loadRecent,
   remember,
   saveRecent,
+  recentForLayer,
+  satelliteEntry,
   type RecentSearch,
 } from './recentSearches';
 
@@ -121,5 +123,55 @@ describe('storage', () => {
   it('ignores stored text that is not JSON at all', () => {
     const storage = fakeStorage({ 'orbital.recentSearches': '{oh dear' });
     expect(loadRecent(storage)).toEqual([]);
+  });
+});
+
+describe('recentForLayer', () => {
+  const entries = [
+    { kind: 'airport' as const, id: 'VTBS', label: 'BKK', sublabel: 'Bangkok', lat: 13, lon: 100 },
+    { kind: 'aircraft' as const, id: 'abc', label: 'THA677', sublabel: 'Aircraft', lat: 1, lon: 2 },
+    { kind: 'satellite' as const, id: '25544', label: 'ISS (ZARYA)', sublabel: 'NORAD 25544', lat: 0, lon: 0 },
+  ];
+
+  it('offers a satellite box only satellites', () => {
+    // The defect: a satellite search box listing yesterday's airports offers
+    // answers it cannot give, and choosing one throws the user out of the
+    // layer they are in (D103).
+    expect(recentForLayer(entries, 'satellite').map((e) => e.kind)).toEqual(['satellite']);
+  });
+
+  it('offers an aircraft box aircraft and airports, which both belong to it', () => {
+    expect(recentForLayer(entries, 'aircraft').map((e) => e.kind)).toEqual([
+      'airport',
+      'aircraft',
+    ]);
+  });
+
+  it('keeps the stored order within a layer', () => {
+    const many = [entries[0], entries[1], entries[0]];
+    expect(recentForLayer(many, 'aircraft')).toEqual(many);
+  });
+
+  it('is empty rather than throwing when nothing matches', () => {
+    expect(recentForLayer([entries[0]], 'satellite')).toEqual([]);
+  });
+});
+
+describe('satelliteEntry', () => {
+  it('remembers the catalogue number as the subtitle', () => {
+    const entry = satelliteEntry({
+      id: '25544',
+      lat: 10,
+      lon: 20,
+      altitude: 420000,
+      velocity: 7658,
+      heading: 45,
+      label: 'ISS (ZARYA)',
+      model: null,
+      lastSeen: '2026-09-01T00:00:00Z',
+      type: 'satellite',
+    });
+    expect(entry.kind).toBe('satellite');
+    expect(entry.sublabel).toBe('NORAD 25544');
   });
 });

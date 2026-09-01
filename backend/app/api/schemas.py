@@ -108,3 +108,12 @@ class SearchResponse(OrbitalModel):
         default_factory=list,
         description="Airports whose code, city or name matches. No distance: there is no point to measure from.",
     )
+    satellites: list[TrackedObject] = Field(
+        default_factory=list,
+        description=(
+            "Satellites whose name or catalogue number matches. A third list "
+            "rather than merged into `aircraft`, for the reason the first two "
+            "are separate: they are different kinds of thing and any single "
+            "ranking across them would invent a comparison (D89, D103)."
+        ),
+    )

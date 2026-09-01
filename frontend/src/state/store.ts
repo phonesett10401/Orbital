@@ -107,9 +107,14 @@ export interface OrbitalState {
   searchResults: TrackedObject[];
   /** Airports matching the same query. Kept apart from aircraft (D89). */
   searchAirports: Airport[];
+  searchSatellites: TrackedObject[];
   searching: boolean;
   setSearchQuery(query: string): void;
-  setSearchResults(results: TrackedObject[], airports?: Airport[]): void;
+  setSearchResults(
+    results: TrackedObject[],
+    airports?: Airport[],
+    satellites?: TrackedObject[],
+  ): void;
   setSearching(searching: boolean): void;
 
   feed: FeedStatus;
@@ -167,6 +172,7 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
       selectedDetail: null,
       searchResults: [],
       searchAirports: [],
+      searchSatellites: [],
       focusedAirport: null,
     });
   },
@@ -192,14 +198,20 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   searchQuery: '',
   searchResults: [],
   searchAirports: [],
+  searchSatellites: [],
   searching: false,
   setSearchQuery(query) {
     set({ searchQuery: query });
     if (query.trim() === '')
-      set({ searchResults: [], searchAirports: [], searching: false });
+      set({ searchResults: [], searchAirports: [], searchSatellites: [], searching: false });
   },
-  setSearchResults(results, airports = []) {
-    set({ searchResults: results, searchAirports: airports, searching: false });
+  setSearchResults(results, airports = [], satellites = []) {
+    set({
+      searchResults: results,
+      searchAirports: airports,
+      searchSatellites: satellites,
+      searching: false,
+    });
   },
   setSearching(searching) {
     set({ searching });

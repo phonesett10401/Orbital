@@ -18,7 +18,9 @@ from fastapi import APIRouter, Depends, Query
 
 from app.airports import search_airports
 from app.api.deps import get_store
+from app.api.satellites import get_satellites
 from app.api.schemas import SearchResponse
+from app.providers.satellites import SatelliteProvider
 from app.ingestion.store import ObjectStore
 
 router = APIRouter(prefix="/api/search", tags=["search"])
@@ -30,9 +32,13 @@ router = APIRouter(prefix="/api/search", tags=["search"])
     summary="Find aircraft and airports by one query",
 )
 def search(
-    q: str = Query(min_length=1, description="Callsign, ICAO24 address, airport code or place."),
+    q: str = Query(
+        min_length=1,
+        description="Callsign, ICAO24 address, airport code or place, satellite name or catalogue number.",
+    ),
     limit: int = Query(default=8, gt=0, le=50, description="Maximum of each kind."),
     store: ObjectStore = Depends(get_store),
+    satellites: SatelliteProvider | None = Depends(get_satellites),
 ) -> SearchResponse:
     """Aircraft currently held, and airports from the static table.
 
@@ -45,4 +51,7 @@ def search(
     return SearchResponse(
         aircraft=store.search(q, limit=limit),
         airports=search_airports(q, limit=limit),
+        # Satellites come from the catalogue in memory rather than the store,
+        # because that layer has no store (D95). Empty when the layer is off.
+        satellites=satellites.search(q, limit=limit) if satellites else [],
     )

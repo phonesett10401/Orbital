@@ -235,4 +235,12 @@ export interface LayerDescriptor {
 export interface SearchResponse {
   aircraft: TrackedObject[];
   airports: Airport[];
+  /**
+   * Satellites whose name or catalogue number matches.
+   *
+   * A third list rather than merged into `aircraft`, for the reason the first
+   * two are separate: any single ranking across different kinds of thing
+   * invents a comparison that does not exist (D89, D103).
+   */
+  satellites: TrackedObject[];
 }

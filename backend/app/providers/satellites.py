@@ -362,6 +362,43 @@ class SatelliteProvider(Provider):
             logger.debug("refused %d element sets as too old or unusable", refused)
         return records
 
+    def search(self, query: str, *, limit: int = 8) -> list[TrackedObjectRecord]:
+        """Satellites whose name or catalogue number matches, best first.
+
+        Matched against the **held elements** rather than against propagated
+        positions, so a keystroke costs a string scan over 1,670 names instead
+        of propagating the whole catalogue. Only the matches are propagated.
+
+        Tiered the way airports are (D89): an exact catalogue number first,
+        then a name that starts with the query, then a name that contains it.
+        Somebody typing "ISS" wants the space station, not every satellite with
+        those three letters somewhere in its name.
+        """
+        needle = query.strip().upper()
+        if not needle:
+            return []
+
+        exact: list[ElementSet] = []
+        prefix: list[ElementSet] = []
+        contains: list[ElementSet] = []
+        for element in self._elements:
+            name = element.name.upper()
+            if element.catalog_id == needle or name == needle:
+                exact.append(element)
+            elif name.startswith(needle) or element.catalog_id.startswith(needle):
+                prefix.append(element)
+            elif needle in name:
+                contains.append(element)
+
+        now = utcnow()
+        found: list[TrackedObjectRecord] = []
+        for element in (*exact, *prefix, *contains):
+            records = self._propagate(now, [element], None)
+            found.extend(records)
+            if len(found) >= limit:
+                break
+        return found[:limit]
+
     @property
     def element_count(self) -> int:
         return len(self._elements)

@@ -25,7 +25,9 @@ import {
   aircraftEntry,
   airportEntry,
   loadRecent,
+  recentForLayer,
   remember,
+  satelliteEntry,
   saveRecent,
   type RecentSearch,
 } from './recentSearches';
@@ -37,6 +39,7 @@ export function SearchBar() {
   const query = useOrbitalStore((s) => s.searchQuery);
   const results = useOrbitalStore((s) => s.searchResults);
   const airports = useOrbitalStore((s) => s.searchAirports);
+  const satellites = useOrbitalStore((s) => s.searchSatellites);
   const searching = useOrbitalStore((s) => s.searching);
   const setSearchQuery = useOrbitalStore((s) => s.setSearchQuery);
   const select = useOrbitalStore((s) => s.select);
@@ -62,6 +65,21 @@ export function SearchBar() {
     // view would otherwise select an aircraft the user cannot see.
     requestFlyTo(object.lat, object.lon);
     keep(aircraftEntry(object));
+    setSearchQuery('');
+  };
+
+  // Only the remembered searches this layer can act on. Offering an airport
+  // under a satellite search box would be offering an answer the box cannot
+  // give, and choosing it would throw the user out of the layer (D103).
+  const visibleRecent = recentForLayer(
+    recent,
+    activeLayer.id === 'satellite' ? 'satellite' : 'aircraft',
+  );
+
+  const chooseSatellite = (object: TrackedObject) => {
+    select(object.id);
+    requestFlyTo(object.lat, object.lon);
+    keep(satelliteEntry(object));
     setSearchQuery('');
   };
 
@@ -122,16 +140,20 @@ export function SearchBar() {
           // Enter picks the top hit, aircraft first — the backend ranks exact
           // above prefix above substring within each kind.
           if (event.key === 'Enter') {
-            if (results.length > 0) chooseAircraft(results[0]);
+            // Whichever group the active layer can actually act on comes
+            // first, so Enter never jumps the user out of the layer they are
+            // looking at (D103).
+            if (satellites.length > 0) chooseSatellite(satellites[0]);
+            else if (results.length > 0) chooseAircraft(results[0]);
             else if (airports.length > 0) chooseAirport(airports[0]);
           }
         }}
       />
 
-      {showRecent && (
+      {showRecent && visibleRecent.length > 0 && (
         <ul className="search__results">
           <li className="search__group">Recent</li>
-          {recent.map((entry) => (
+          {visibleRecent.map((entry) => (
             <li key={`${entry.kind}:${entry.id}`}>
               <button className="search__result" onClick={() => chooseRecent(entry)}>
                 <span className="search__callsign">{entry.label}</span>
@@ -150,6 +172,20 @@ export function SearchBar() {
               No match. Aircraft are only findable while the backend is tracking them.
             </li>
           )}
+
+          {satellites.length > 0 && <li className="search__group">Satellites</li>}
+          {satellites.map((object) => (
+            <li key={`sat-${object.id}`}>
+              <button className="search__result" onClick={() => chooseSatellite(object)}>
+                <span className="search__callsign">{object.label}</span>
+                <span className="search__meta">
+                  {object.altitude === null
+                    ? 'altitude unknown'
+                    : `${Math.round(object.altitude / 1000).toLocaleString()} km`}
+                </span>
+              </button>
+            </li>
+          ))}
 
           {results.length > 0 && <li className="search__group">Aircraft</li>}
           {results.map((object) => (

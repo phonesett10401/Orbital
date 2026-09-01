@@ -127,11 +127,11 @@ export function useSearch(): void {
         .then((response) =>
           useOrbitalStore
             .getState()
-            .setSearchResults(response.aircraft, response.airports),
+            .setSearchResults(response.aircraft, response.airports, response.satellites ?? []),
         )
         .catch((error) => {
           if ((error as Error).name === 'AbortError') return;
-          useOrbitalStore.getState().setSearchResults([], []);
+          useOrbitalStore.getState().setSearchResults([], [], []);
         });
     }, 250);
 
