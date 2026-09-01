@@ -7,6 +7,7 @@ environment variable, not a code change:
     ORBITAL_PROVIDER=opensky   # live data, metered
     ORBITAL_PROVIDER=adsblol   # live data, free
     ORBITAL_PROVIDER=union     # both, merged (D83)
+    ORBITAL_PROVIDER=satellites  # a different layer entirely (D93)
 
 That last one is why the interface was worth having. Adding a second live
 source meant writing one module and one three-line factory; nothing in
@@ -21,6 +22,7 @@ from app.providers.adsblol import AdsbLolProvider
 from app.providers.base import Provider
 from app.providers.fixture import FixtureProvider
 from app.providers.opensky import OpenSkyProvider
+from app.providers.satellites import SatelliteProvider
 from app.providers.union import UnionProvider
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
@@ -49,6 +51,20 @@ def _build_adsblol(settings: "Settings") -> Provider:
     )
 
 
+def _build_satellites(settings: "Settings") -> Provider:
+    """Positions computed from orbital elements, not fetched (D93).
+
+    Takes no credentials and no quota settings because there are none to take:
+    every source in this path is free and unauthenticated.
+    """
+    return SatelliteProvider(
+        timeout_seconds=settings.satellite_timeout_seconds,
+        user_agent=settings.adsblol_user_agent,
+        refresh_seconds=settings.satellite_element_refresh_seconds,
+        cache_path=settings.satellite_element_cache_path,
+    )
+
+
 def _build_union(settings: "Settings") -> Provider:
     """The free feed every poll, the metered one occasionally (D83)."""
     return UnionProvider(
@@ -66,6 +82,7 @@ _BUILDERS: Mapping[str, Callable[["Settings"], Provider]] = {
     "opensky": _build_opensky,
     "adsblol": _build_adsblol,
     "union": _build_union,
+    "satellites": _build_satellites,
 }
 
 

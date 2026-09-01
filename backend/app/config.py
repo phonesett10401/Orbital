@@ -12,6 +12,8 @@ git-ignored. ``.env.example`` documents the names with empty values.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from functools import lru_cache
 
 from pydantic import BaseModel, Field, model_validator
@@ -165,6 +167,31 @@ class Settings(BaseSettings):
     adsblol_user_agent: str = Field(
         default="Orbital/0.1 (CSC480 student project)",
         description="Sent on every request; a free service deserves to know who is calling.",
+    )
+
+    #: Satellites need no credentials at all -- there is no metered upstream
+    #: anywhere in that path (D93), so these are the only two knobs it has.
+    satellite_timeout_seconds: float = Field(default=60.0, gt=0)
+    satellite_element_cache_path: Path = Field(
+        default=Path(".cache") / "orbital-elements.json",
+        description=(
+            "Where fetched orbital elements are kept between runs. On disk "
+            "rather than only in memory so that a restart during an upstream "
+            "outage still has something to propagate -- day-old elements are "
+            "accurate to a kilometre or two, and both free sources were down "
+            "simultaneously on the day this was written."
+        ),
+    )
+    satellite_element_refresh_seconds: float = Field(
+        default=6 * 3600.0,
+        gt=0,
+        description=(
+            "How often orbital elements are refetched. Hours, not seconds: "
+            "elements describe an orbit rather than a position and stay usable "
+            "for days, and CelesTrak's usage policy asks callers not to check "
+            "more than every two hours. Positions are computed fresh on every "
+            "poll regardless of this (D94)."
+        ),
     )
 
     union_supplement_interval_seconds: float = Field(

@@ -12,6 +12,12 @@ dependencies = [
     # 28,291 airports with ICAO codes and coordinates, so a departure can be
     # named from where a track begins (D78). Public-domain data, no network.
     "airportsdata>=20240000",
+    # SGP4, the standard propagator for the orbital elements every satellite
+    # source publishes (D93). Vallado's C++ reference with a Python wrapper,
+    # and it ships the official verification data its own test suite checks
+    # against -- which is what let the maths be proved before any of this was
+    # wired up. No network.
+    "sgp4>=2.20",
 ]
 
 [project.optional-dependencies]

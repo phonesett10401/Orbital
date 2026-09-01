@@ -78,3 +78,7 @@ frontend/public/geo/
 # ICAO airline designators, reduced out of node_modules by
 # scripts/build-airlines.mjs. Generated, for the same reason.
 frontend/public/data/
+
+# Orbital elements cached between runs, so a restart during an upstream
+# outage still has something to propagate. Derived data with a network source.
+backend/.cache/
