@@ -199,11 +199,16 @@ class TestRegistry:
         with pytest.raises(KeyError, match="fixture"):
             registry.build("opensky-typo")
 
-    def test_no_satellite_provider_exists_yet(self):
-        # A permanent guard, not a temporary one. Satellite tracking was
-        # considered and is not being built; this fails loudly if it reappears
-        # without a deliberate decision to take the project there (D37).
-        assert not any("satellite" in name for name in registry.available())
+    def test_no_provider_serves_debris_or_rocket_bodies(self):
+        # Re-aimed, not retired (D93). D37's guard asked whether satellites
+        # existed at all; that question was answered by a deliberate decision,
+        # so the guard now sits on the boundary that decision drew. The
+        # catalogue holds ~100,000 objects and most are neither satellites nor
+        # worth drawing; serving them is a different product.
+        forbidden = ("debris", "rocket", "junk")
+        assert not any(
+            word in name for name in registry.available() for word in forbidden
+        )
 
 
 class TestGeo:

@@ -1012,6 +1012,12 @@ which is now step 14 of the manual test script.
 
 ## D37 — Satellite tracking is out of scope
 
+> **Superseded by [D93](#d93---satellites-are-in-scope-again-and-what-that-does-and-does-not-mean) on 2026-09-01.** Phone reversed this deliberately, which is
+> the mechanism the tripwire tests below were built to force. The entry stays
+> as written because the reasoning at the time is part of the record - and
+> because its argument that the `type` field and the provider registry were
+> *not* satellite scaffolding is still correct.
+
 **Decision:** satellites are **not being built**. Not deferred, not scheduled —
 removed from the plan. Nothing in this repository is groundwork for them, and
 no document should describe them as upcoming work.
@@ -4556,3 +4562,83 @@ to control where it sits.
 The overlay hides above zoom 5.5. Its claim is about a continent-scale region,
 and a continent-scale claim drawn across a city is no longer about anything the
 viewer can see.
+
+---
+
+## D93 - Satellites are in scope again, and what that does and does not mean
+
+**Decision:** Orbital gains a **satellite layer**, selectable in place of the
+aircraft layer. This reverses D37. It is Phone's decision, made explicitly on
+2026-09-01, and the three tripwire tests that existed to force exactly this
+moment have done their job.
+
+### Why this is recorded before any code
+
+D37 did not say "later". It said satellites were removed from the plan, that
+nothing in the repository was groundwork for them, and that **no document
+should describe them as upcoming work**. Three tests enforced it. Every one of
+those statements is now false, and until this entry exists the README,
+`architecture.md` and D37 itself all contradict the code we are about to write.
+
+The order matters. Writing the guard down before writing the feature is what
+separates a change of direction from scope drift.
+
+### What the tripwires were actually for
+
+They were written to be **permanent**, not to be deleted at a sign-off. The
+distinction survives this decision: they are not being removed, they are being
+**re-aimed at the new boundary**.
+
+| Test | Was | Becomes |
+|---|---|---|
+| `test_no_satellite_provider_exists_yet` | No provider named "satellite" | No provider serves debris or rocket bodies |
+| `test_no_satellite_endpoint_exists_yet` | No path containing "satellite" | No conjunction, collision or re-entry prediction endpoint |
+| `exposes exactly one layer` | `LAYERS` has length 1 | `LAYERS` holds exactly the two declared kinds |
+
+A guard that is deleted the moment it fires was never a guard. Re-aiming keeps
+the property D37 was really buying: **scope grows only by a written decision.**
+
+### The new boundary
+
+**In scope:** active satellites, on-orbit, drawn on the globe, with a detail
+panel describing the orbit. Position is computed from published orbital
+elements.
+
+**Out of scope, and these are the tripwires above:**
+
+- **Debris and rocket bodies.** The catalogue holds around 100,000 objects and
+  the overwhelming majority are neither satellites nor interesting to look at.
+  Drawing them is a different product: a cloud, not a set of objects.
+- **Conjunction, collision or re-entry prediction.** SGP4 is a general
+  perturbations model. It is accurate to kilometres, degrading with age from
+  epoch, and it is emphatically not what anyone should use to say two objects
+  will meet. Publishing such a claim from this data would be wrong in a way a
+  viewer could not detect.
+- **Ground station passes, look angles, and "when can I see it from here".**
+  A reasonable feature, and a different one.
+
+### Why this is a smaller change than it looks, and where it is bigger
+
+**Smaller:** the hardest subsystem in this project does not apply. Satellite
+positions are **computed, not fetched**. Orbital elements stay valid for days,
+so there is no quota, no credit ladder, no throttle, no rate limit, and no poll
+cadence to tune. The layer works offline once the elements are cached, which
+makes it *more* reliable than the aircraft layer, not less.
+
+**Bigger:** altitude stops being cosmetic. An aircraft at 12 km on a 6,371 km
+globe is a 0.2% radial offset (D18). The ISS is 6.6%, GPS is 3.2 Earth radii,
+and geostationary is 5.6 Earth radii. Drawn true to scale, the interesting
+satellites hug the surface and the far ones are off-screen. That is its own
+decision and it is not made here.
+
+### What D37 got right, and keeps
+
+D37 argued that the `type` discriminator and the provider registry were **not**
+scaffolding for satellites - that both earned their place on their own terms and
+would exist had satellites never been mentioned. That argument stands, and it
+is worth noting that it has now been tested twice: the registry took a second
+live aircraft feed and then a third entry that is two providers at once (D83),
+neither of which had anything to do with satellites.
+
+The discriminator is about to gain its second value. It was still right to carry
+it for its own reasons rather than for this one.

@@ -212,10 +212,12 @@ describe('search', () => {
 });
 
 describe('layers', () => {
-  it('exposes exactly one layer', () => {
-    // Permanent guard against undeclared scope growth (D37).
-    expect(LAYERS).toHaveLength(1);
-    expect(LAYERS[0].id).toBe('aircraft');
+  it('exposes exactly the declared layers, and no others', () => {
+    // Permanent guard against undeclared scope growth, re-aimed by D93. The
+    // question is no longer "is there more than one kind?" but "is every kind
+    // on screen one somebody decided to add?" - so this asserts the exact set,
+    // which fails on an addition as loudly as the length check it replaces.
+    expect(LAYERS.map((layer) => layer.id).sort()).toEqual(['aircraft']);
   });
 
   it('switching layers clears objects and selection', () => {

@@ -21,8 +21,9 @@ still the default in code; the map was built to go past the zoom the globe can
 hold (D53, D54) and is where the newer work has landed. Everything below the
 render layer is shared, and neither renderer knows the other exists.
 
-**Out of scope:** user accounts, native mobile apps, historical playback,
-delay and disruption data, and satellite tracking — see §8. *Schedules* are a
+**Out of scope:** user accounts, native mobile apps, historical playback, and
+delay and disruption data — see §8, which also covers where the satellite layer
+stops. *Schedules* are a
 qualified exception: the scheduled origin and destination for a callsign are
 looked up per selection (D88), because an aircraft does not transmit where it
 is going and the panel would otherwise have nothing to say. Nothing else about
@@ -289,25 +290,42 @@ stale data is not a nice-to-have — that test *is* the exit criterion.
 
 ## 8. Scope boundaries
 
-Satellite tracking was considered and **is not being built**. It is out of
-scope, not deferred, and nothing in this repository is groundwork for it (D37).
+**Satellites are in scope as of September 2026 (D93).** They were dropped in
+D37 — removed rather than deferred — and that reversal was made deliberately
+rather than drifted into, which is exactly what D37's tripwire tests existed to
+force. Their positions are **computed** from published orbital elements rather
+than fetched from a feed, so that layer spends no quota and keeps working
+offline once the elements are cached.
 
-Two pieces of the design look like they were built for a second data layer.
-They were not, and they earn their place on their own:
+Two pieces of the design look like they were built as groundwork for this. They
+were not, and D37's argument for why still holds:
 
 1. **The `type` field on the shape.** A discriminator carried from the start
    costs one enum with one value. Retrofitting one into a contract spanning
    three layers is a migration. It exists because the shape is deliberately
-   source-agnostic (D4), not because a second type is planned.
+   source-agnostic (D4), and it is about to gain its second value having earned
+   its place without one.
 2. **The provider registry.** This is the pluggability requirement itself, and
    it stopped being a claim: adsb.lol was added as a second live source, and
    then a third entry that is *both at once*, without the API or the frontend
    changing. The fixture provider that makes the whole project runnable offline
    (D8) is a registry entry too.
 
-Two tests assert that no satellite provider is registered and no satellite
-endpoint exists. They are **permanent guards against undeclared scope growth**,
-not temporary markers awaiting deletion.
+**Where the satellite layer stops**, each line guarded by a test:
+
+- **Debris and rocket bodies.** The catalogue holds around 100,000 objects and
+  the overwhelming majority are neither satellites nor interesting to look at.
+- **Conjunction, collision and re-entry prediction.** SGP4 is accurate to
+  kilometres and degrades with age from epoch. It must never be the basis of a
+  claim that two objects will meet — a viewer has no way to detect that such an
+  answer is wrong.
+- **Ground station passes and look angles.** A reasonable feature; a different
+  one.
+
+Three tests enforce those boundaries. They are **permanent guards against
+undeclared scope growth**, not markers awaiting deletion — when D93 reversed
+D37, the guards were re-aimed at the new boundary rather than removed. A guard
+deleted the moment it fires was never a guard.
 
 ---
 

@@ -133,7 +133,10 @@ cd backend && .venv/Scripts/python benchmarks/bench_backend.py
 - **An upstream outage does not break the display.** The backend keeps serving
   its last good snapshot with a `stale` flag; the frontend keeps drawing
   last-known positions with their age. Both refuse to show an empty globe.
-- **Satellite tracking is out of scope**, not planned. The `type` field and the
-  provider registry exist for their own reasons — a discriminator is cheap to
-  carry and expensive to retrofit, and swappable providers were a requirement.
-  Two tests fail if a satellite provider or endpoint appears.
+- **Satellites are in scope as of September 2026** (D93), reversing an earlier
+  decision to drop them (D37). Their positions are *computed* from published
+  orbital elements rather than fetched, so that layer costs no quota and works
+  offline once the elements are cached. What stays out: debris and rocket
+  bodies, and any prediction of conjunctions, collisions or re-entry — SGP4 is
+  not accurate enough to make those claims, and three tests fail if either
+  appears.

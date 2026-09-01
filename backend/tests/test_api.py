@@ -372,7 +372,13 @@ class TestApplicationSurface:
         )
         assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
 
-    def test_no_satellite_endpoint_exists_yet(self, client):
-        # Permanent tripwire against undeclared scope growth (D37).
+    def test_no_prediction_endpoint_exists(self, client):
+        # Permanent tripwire against undeclared scope growth, re-aimed by D93.
+        # SGP4 is a general perturbations model: accurate to kilometres and
+        # degrading with age from epoch. It must never be the basis of a claim
+        # that two objects will meet, or that one is coming down - a viewer has
+        # no way to detect that such an answer is wrong.
         paths = client.get("/openapi.json").json()["paths"]
-        assert not any("satellite" in p for p in paths)
+        forbidden = ("conjunction", "collision", "reentry", "re-entry", "decay")
+        offenders = [p for p in paths for word in forbidden if word in p.lower()]
+        assert offenders == []
