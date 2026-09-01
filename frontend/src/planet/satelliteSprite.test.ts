@@ -5,7 +5,14 @@ import {
   familyFor,
   type SatelliteFamily,
 } from '../satelliteFamily';
-import { FAMILY_ICON, ICON_UNIDENTIFIED, iconFor } from './satelliteSprite';
+import {
+  ATLAS_CELLS,
+  ATLAS_ORDER,
+  FAMILY_ICON,
+  ICON_UNIDENTIFIED,
+  atlasCellFor,
+  iconFor,
+} from './satelliteSprite';
 
 // Names taken verbatim from the live catalogue on 2026-09-01, including the
 // unidentified ones, so this is tested against what actually arrives.
@@ -116,5 +123,37 @@ describe('the icon set', () => {
     // Not "Other" or "Misc" - the catalogue genuinely does not know what these
     // are, and the key should say so.
     expect(FAMILY_LABEL.unidentified).toBe('Unidentified object');
+  });
+});
+
+describe('the shell atlas', () => {
+  it('has a cell for every family, so none falls back to another shape', () => {
+    // The map draws one image per family; the shell samples one strip. They
+    // come from the same DRAW table, and this is what keeps the two sets the
+    // same size (D106).
+    expect(ATLAS_ORDER.length).toBe(Object.keys(FAMILY_ICON).length);
+    expect(new Set(ATLAS_ORDER).size).toBe(ATLAS_CELLS);
+  });
+
+  it('sends each name to the cell its family occupies', () => {
+    expect(ATLAS_ORDER[atlasCellFor('ISS (ZARYA)')]).toBe('station');
+    expect(ATLAS_ORDER[atlasCellFor('STARLINK-4621')]).toBe('constellation');
+    expect(ATLAS_ORDER[atlasCellFor('CLUSTER II-FM8')]).toBe('probe');
+  });
+
+  it('keeps the two unknowns in different cells on the shell too', () => {
+    // A named satellite we cannot place and an object the catalogue cannot
+    // name are different claims, and must not share a picture (D102).
+    expect(atlasCellFor('CUBEBUG 1')).not.toBe(atlasCellFor('OBJECT AN'));
+    expect(ATLAS_ORDER[atlasCellFor('CUBEBUG 1')]).toBe('satellite');
+    expect(ATLAS_ORDER[atlasCellFor('OBJECT AN')]).toBe('unidentified');
+  });
+
+  it('never returns a cell outside the atlas', () => {
+    for (const name of ['', 'ISS', 'OBJECT W', 'SOMETHING UNLISTED', 'GPS BIIR-2']) {
+      const cell = atlasCellFor(name);
+      expect(cell).toBeGreaterThanOrEqual(0);
+      expect(cell).toBeLessThan(ATLAS_CELLS);
+    }
   });
 });

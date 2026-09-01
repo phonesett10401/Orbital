@@ -38,6 +38,7 @@ import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap 
 import { regimeRgb, shellFor } from '../satelliteShell';
 import type { RenderableObject } from '../types';
 import { globeAxes, isOnNearSide, usesGlobeFrame } from './modelFrame';
+import { ATLAS_CELLS, atlasCellFor, createSatelliteAtlasCanvas } from './satelliteSprite';
 
 export const SHELL_LAYER = 'orbital-satellite-shell';
 
@@ -51,9 +52,17 @@ export const SHELL_LAYER = 'orbital-satellite-shell';
  */
 export const SHELL_MAX_ZOOM = 3.2;
 
-/** Screen size of a satellite on the shell, in pixels. */
-const POINT_MIN_PX = 3.0;
-const POINT_MAX_PX = 7.0;
+/**
+ * Screen size of a satellite on the shell, in pixels.
+ *
+ * Bigger than a dot needs to be, because these are no longer dots: a
+ * silhouette has to survive being drawn at this size or the family it names is
+ * invisible and the shape is decoration (D101, D106). Ten pixels is about the
+ * floor at which the one-panel constellation reads differently from the
+ * two-panel navigation shape.
+ */
+const POINT_MIN_PX = 10.0;
+const POINT_MAX_PX = 20.0;
 
 /** How much bigger the selected one is drawn. */
 const SELECTED_SCALE = 2.4;
@@ -61,28 +70,39 @@ const SELECTED_SCALE = 2.4;
 const vertexShader = /* glsl */ `
   attribute vec3 tint;
   attribute float size;
+  attribute float cell;
 
   varying vec3 vTint;
+  varying float vCell;
 
   void main() {
     vTint = tint;
+    vCell = cell;
     gl_Position = projectionMatrix * vec4(position, 1.0);
     gl_PointSize = size;
   }
 `;
 
 const fragmentShader = /* glsl */ `
+  uniform sampler2D atlas;
+  uniform float atlasCells;
+
   varying vec3 vTint;
+  varying float vCell;
 
   void main() {
-    // A round point rather than the square GL gives us. Without this the shell
-    // reads as a grid of pixels rather than as objects.
-    vec2 offset = gl_PointCoord - vec2(0.5);
-    float d = dot(offset, offset);
-    if (d > 0.25) discard;
-    // A soft edge, so a 3 px dot is not a hard aliased square.
-    float alpha = smoothstep(0.25, 0.16, d);
-    gl_FragColor = vec4(vTint, alpha);
+    // The silhouette for this satellite's family, out of the strip. Same
+    // shapes the map's symbols draw, from the same table, so the two views
+    // cannot disagree about what a navigation satellite looks like (D106).
+    //
+    // gl_PointCoord runs y-down, which is the canvas's own convention, so no
+    // flip is needed here -- unlike the aircraft atlas, which is sampled from
+    // a mesh and needed its flipY turned off for the same reason (D40).
+    vec2 cellUv = gl_PointCoord;
+    vec2 uv = vec2((cellUv.x + vCell) / atlasCells, cellUv.y);
+    vec4 texel = texture2D(atlas, uv);
+    if (texel.a < 0.08) discard;
+    gl_FragColor = vec4(vTint * texel.rgb, texel.a);
   }
 `;
 
@@ -131,6 +151,29 @@ export function shellPosition(
   return [up[0] * radius, up[1] * radius, up[2] * radius];
 }
 
+/**
+ * The family silhouettes as one texture the point shader can sample.
+ *
+ * `flipY` is left at three's default here, unlike the aircraft atlas: this is
+ * sampled with `gl_PointCoord`, which already runs y-down in canvas
+ * orientation, so flipping would put the satellites upside down rather than
+ * fixing them.
+ */
+function createAtlasTexture(): THREE.CanvasTexture {
+  const texture = new THREE.CanvasTexture(createSatelliteAtlasCanvas());
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = 4;
+  // The shader discards outside the shape, but a wrapped sample at a cell
+  // boundary would still bleed the neighbouring family in.
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 export function createShellLayer(
   getSatellites: () => { objects: RenderableObject[]; selectedId: string | null },
   createRenderer: (canvas: HTMLCanvasElement, gl: WebGL2RenderingContext) => ShellRenderer = (
@@ -150,19 +193,26 @@ export function createShellLayer(
   let positions = new Float32Array(allocated * 3);
   let tints = new Float32Array(allocated * 3);
   let sizes = new Float32Array(allocated);
+  let cells = new Float32Array(allocated);
   let ids: string[] = [];
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('tint', new THREE.BufferAttribute(tints, 3));
   geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  geometry.setAttribute('cell', new THREE.BufferAttribute(cells, 1));
 
+  const atlas = createAtlasTexture();
   const material = new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader,
     transparent: true,
     depthTest: false,
     depthWrite: false,
+    uniforms: {
+      atlas: { value: atlas },
+      atlasCells: { value: ATLAS_CELLS },
+    },
   });
 
   const points = new THREE.Points(geometry, material);
@@ -182,9 +232,11 @@ export function createShellLayer(
     positions = new Float32Array(allocated * 3);
     tints = new Float32Array(allocated * 3);
     sizes = new Float32Array(allocated);
+    cells = new Float32Array(allocated);
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('tint', new THREE.BufferAttribute(tints, 3));
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    geometry.setAttribute('cell', new THREE.BufferAttribute(cells, 1));
   }
 
   return {
@@ -250,6 +302,7 @@ export function createShellLayer(
         tints[drawn * 3 + 1] = selected ? 1 : g / 255;
         tints[drawn * 3 + 2] = selected ? 1 : b / 255;
         sizes[drawn] = basePx * pixelRatio * (selected ? SELECTED_SCALE : 1);
+        cells[drawn] = atlasCellFor(object.label);
         ids[drawn] = object.id;
         drawn += 1;
       }
@@ -258,6 +311,7 @@ export function createShellLayer(
       geometry.getAttribute('position').needsUpdate = true;
       geometry.getAttribute('tint').needsUpdate = true;
       geometry.getAttribute('size').needsUpdate = true;
+      geometry.getAttribute('cell').needsUpdate = true;
 
       const matrix = Array.from(projection.mainMatrix);
       camera.projectionMatrix.fromArray(matrix);
@@ -300,6 +354,7 @@ export function createShellLayer(
     dispose() {
       geometry.dispose();
       material.dispose();
+      atlas.dispose();
       renderer = null;
     },
   };

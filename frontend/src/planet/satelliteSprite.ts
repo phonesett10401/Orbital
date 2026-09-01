@@ -169,6 +169,61 @@ const DRAW: Record<SatelliteFamily, (ctx: Ctx) => void> = {
   },
 };
 
+/** The order families occupy in the atlas below. Index is the shader's cell. */
+export const ATLAS_ORDER: SatelliteFamily[] = [
+  'station',
+  'constellation',
+  'navigation',
+  'observation',
+  'geoComms',
+  'probe',
+  'satellite',
+  'unidentified',
+];
+
+export const ATLAS_CELLS = ATLAS_ORDER.length;
+
+/** Which atlas cell a name draws from. */
+export function atlasCellFor(name: string | null | undefined): number {
+  const index = ATLAS_ORDER.indexOf(familyFor(name));
+  // Never -1: familyFor only returns families, and every family is listed.
+  return index < 0 ? ATLAS_ORDER.length - 1 : index;
+}
+
+/**
+ * The same silhouettes again, laid out in one strip for the shell layer.
+ *
+ * The map draws these through `map.addImage`, one image per family, because
+ * that is how MapLibre symbol layers take them. The shell is a custom layer
+ * drawing points in MapLibre's own GL context, and a point sprite samples a
+ * *texture*, so the same shapes are needed a second way. Drawn from the same
+ * `DRAW` table rather than redrawn, so the two can never disagree about what a
+ * navigation satellite looks like.
+ *
+ * Returned as a canvas rather than a three.js texture so this module stays free
+ * of three: the shell layer owns the GL objects.
+ */
+export function createSatelliteAtlasCanvas(): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = CELL * ATLAS_CELLS;
+  canvas.height = CELL;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2D canvas context unavailable for the satellite atlas');
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ATLAS_ORDER.forEach((family, index) => {
+    ctx.save();
+    ctx.translate(index * CELL, 0);
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#fff';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    DRAW[family](ctx);
+    ctx.restore();
+  });
+  return canvas;
+}
+
 /** Every sprite, as `[imageId, canvas]`, ready for `map.addImage(..., {sdf:true})`. */
 export function createSatelliteIconCanvases(): Array<[string, HTMLCanvasElement]> {
   return (Object.keys(DRAW) as SatelliteFamily[]).map((family) => {

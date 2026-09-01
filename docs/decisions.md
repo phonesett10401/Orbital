@@ -5526,3 +5526,58 @@ MapLibre, so the shell is pinned by arithmetic and nothing else. That is the
 same position the globe's version was in when D99 defended it - and the reason
 that decision was wrong. This entry should not be read as evidence the picture
 is good, only that the geometry is right.
+
+---
+
+## D106 - The shell draws the same silhouettes the map does
+
+**Decision:** satellites on the altitude shell are drawn as their family
+silhouette rather than as plain dots, sampled from a texture atlas built by the
+same code that draws the map's symbols. Point size rises from 3-7 px to
+10-20 px, because a silhouette that cannot be read is not a silhouette.
+
+### Why the shapes disappeared
+
+D101 gave every satellite a shape by family. D105 built the shell as GL points
+with a round fragment shader. Nothing connected the two: MapLibre's symbol
+layer takes images through `map.addImage`, and a point sprite in a custom layer
+samples a *texture*. Same shapes, two entirely different delivery mechanisms.
+
+So the shell showed the constellation's **structure** - which is what it is
+for - while throwing away what each object **is**, which the flat view had.
+Phone's report was exactly that: the icons are gone in this state.
+
+### One table, two consumers
+
+`createSatelliteAtlasCanvas` lays the same `DRAW` functions into one strip, one
+cell per family. It is not a second set of drawings: if the map's navigation
+satellite changes, the shell's changes with it, because there is only ever one
+definition. Two copies of a shape drift apart exactly as two copies of a colour
+scale do, and the whole point of the shapes is that they mean something.
+
+### Size is part of the decision, not tuning
+
+The dots were 3-7 px, which is right for dots and useless for silhouettes: at
+that size the one-panel constellation and the two-panel navigation shape are
+the same grey smudge. Ten pixels is about where they separate.
+
+This is the third time the same trap has been walked into on this feature: the
+SDF blur (D102) and the flooded halo (D102) both came from detail too fine to
+survive the size it was drawn at. **A shape has to be legible at the size it
+renders, and that size is part of the design rather than something discovered
+afterwards.**
+
+### On 3D shapes, which is what was actually asked for
+
+Phone asked for the icons back "and make 3d shape of their icons if possible".
+The icons are back; the 3D is deliberately not done, and the reason is size
+again. At 10-20 px a modelled spacecraft is a blob - the panels that
+distinguish the families are a pixel or two, which is precisely the failure
+D102 recorded. A billboarded silhouette carries more information at that size
+than a mesh does.
+
+The project already has the right pattern for this and it should be followed:
+**a sprite for every object, a 3D model for the selected one.** That is how
+aircraft work (D42, D67) - a silhouette in the crowd, a full airframe once you
+have picked one out and it is large enough to repay the geometry. The satellite
+equivalent is the obvious next step and is not built yet.
