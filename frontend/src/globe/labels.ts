@@ -152,6 +152,16 @@ export function candidatesFor(
   data: LabelData,
   budget: ReturnType<typeof labelBudget>,
   globeRadius: number,
+  /**
+   * Label kinds to leave out entirely, whatever the zoom budget allows.
+   *
+   * Satellite mode suppresses airports: an airport is aircraft furniture, and
+   * a globe covered in runway codes while the user is looking at orbits mixes
+   * two subjects that have nothing to do with each other. Country and city
+   * names stay, because "where on Earth is this passing over" is the question
+   * a satellite view is actually asking (D96).
+   */
+  suppressed: readonly LabelKind[] = [],
 ): LabelCandidate[] {
   const radius = globeRadius * (1 + LABEL_ALTITUDE);
   const out: LabelCandidate[] = [];
@@ -177,7 +187,7 @@ export function candidatesFor(
     }
   }
 
-  if (budget.airports) {
+  if (budget.airports && !suppressed.includes('airport')) {
     for (const airport of data.airports) {
       out.push({
         kind: 'airport',
@@ -313,6 +323,8 @@ export interface LabelLayer {
   load(fetchData: () => Promise<LabelData>): Promise<void>;
   update(camera: THREE.PerspectiveCamera, width: number, height: number, now: number): void;
   setVisible(visible: boolean): void;
+  /** Leave these kinds out entirely. See `candidatesFor`. */
+  setSuppressedKinds(kinds: readonly LabelKind[]): void;
   dispose(): void;
 }
 
@@ -362,6 +374,7 @@ export function createLabelLayer(globeRadius: number): LabelLayer {
   // every selection allocated 1,422 vectors five times a second to get the
   // same answer, so it is cached against the budget that produced it.
   let cacheKey = '';
+  let suppressed: readonly LabelKind[] = [];
   let cached: LabelCandidate[] = [];
 
   // One pooled element per possible label. Creating and destroying nodes as
@@ -384,10 +397,13 @@ export function createLabelLayer(globeRadius: number): LabelLayer {
 
     const altitude = (camera.position.length() - globeRadius) / globeRadius;
     const budget = labelBudget(altitude);
-    const key = `${budget.countries}/${budget.cityMinRank}/${budget.airports}`;
+    // The suppressed set is part of the cache key, or switching mode would keep
+    // serving the candidate list built for the other one until the zoom
+    // happened to change.
+    const key = `${budget.countries}/${budget.cityMinRank}/${budget.airports}/${suppressed.join(',')}`;
     if (key !== cacheKey) {
       cacheKey = key;
-      cached = candidatesFor(data, budget, globeRadius);
+      cached = candidatesFor(data, budget, globeRadius, suppressed);
     }
 
     const projected: Array<LabelCandidate & { x: number; y: number; width: number }> = [];
@@ -457,6 +473,12 @@ export function createLabelLayer(globeRadius: number): LabelLayer {
         for (const span of pool) span.style.display = 'none';
         layer.count = 0;
       }
+    },
+    setSuppressedKinds(kinds: readonly LabelKind[]) {
+      suppressed = kinds;
+      // Force a rebuild rather than waiting for the zoom to change: the mode
+      // switch is the user's action and has to be visible immediately.
+      cacheKey = '';
     },
     dispose() {
       element.remove();

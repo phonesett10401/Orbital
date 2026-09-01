@@ -4810,3 +4810,74 @@ query and the selection all worked unchanged. D19 kept that abstraction
 deliberately thin on the grounds that a richer one built before a second layer
 existed would be fitted to an imagined use case. The second layer arrived four
 months later and the thin version fitted it.
+
+---
+
+## D96 - Satellites are drawn on a logarithmic shell, and satellite mode is a different subject
+
+**Decision:** the globe draws satellites at a **log-compressed** height above
+the surface rather than at true altitude, and satellite mode **suppresses
+aircraft furniture** rather than adding satellites to the aircraft view.
+
+### Why the aircraft answer does not transfer
+
+`MARKER_ALTITUDE` puts every aircraft on one uniform shell 0.012 R up, and says
+plainly why: a cruising airliner is 0.2% of Earth's radius above the ground, so
+an honest height would put the marker inside the surface texture. Altitude is
+carried by colour there instead.
+
+Satellites cannot do that, because **height is the information**. The
+difference between a Starlink and a GPS satellite is mostly how far out it is.
+
+### True scale is not an option, measured against the live catalogue
+
+The 1,432 satellites served on 2026-09-01 spanned **0.010 R to 16.39 R**. The
+orbit controls stop the camera at 8 R from the centre, so at true scale:
+
+- everything past geostationary is **outside the camera's reach entirely** -
+  invisible at the exact moment the user asked to look at satellites;
+- and 1,390 of the 1,432 are in low orbit, collapsing into a film on the
+  surface where the ISS and a 2,000 km orbit are indistinguishable.
+
+Both ends fail at once. Compressed, the same catalogue occupies 0.096 R to
+1.268 R, with the furthest object 2.27 R from the centre - the whole
+constellation visible at the default zoom.
+
+### Logarithmic, not banded
+
+`shell = 0.05 + 0.203 * ln(1 + km / 260)`, solved against two anchors: the
+Starlink shell at 550 km lands at 0.28 R, geostationary at 1.05 R.
+
+Banded shells (a LEO ring, a MEO ring, a GEO ring) were the obvious
+alternative and are wrong for one reason: they are not **strictly monotonic**.
+Two satellites at different altitudes inside the same band would be drawn at
+the same height. The single claim this drawing makes is *higher on screen means
+higher in orbit*, and it should never be false. A logarithm keeps it true
+everywhere, including across the 1,390 objects crowded into low orbit.
+
+This is D91 and D92's trade for a third time: the accurate number and the
+legible one differ, the drawing chooses legibility deliberately, and the real
+altitude stays in the data where the panel shows it.
+
+### Satellite mode is a mode, not a layer of dots
+
+Phone's instruction was that satellites should not be mixed with airports -
+that this is another mode, switched like a view filter. Two things follow, and
+the first is a correctness matter rather than a preference:
+
+**The 3D airframe must not draw for a satellite.** The selection mesh is an
+aeroplane: fuselage, wings, tailplane, engines, proportioned by ICAO type
+(D91). Handing it a satellite would draw an airliner in orbit - a confident,
+detailed claim about the shape of something we have no shape for. Satellites
+keep the disc, for the same reason an aircraft with no heading does (D18, D40,
+D42): a shape that commits to something unknown is worse than one that does
+not.
+
+**Airport labels are suppressed.** An airport is aircraft furniture, and a
+globe covered in runway codes while the user is looking at orbits mixes two
+subjects with nothing to do with each other. Country and city names stay:
+"what is it passing over" is the question an orbit view is actually asking.
+
+The suppressed set is part of the label layer's cache key, or a mode switch
+would keep serving the candidate list built for the other mode until the zoom
+happened to change - present, correct, and invisible until you moved.

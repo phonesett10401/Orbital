@@ -11,15 +11,19 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  MARKER_ALTITUDE,
   MAX_MARKER_PX,
   MIN_MARKER_PX,
   PICK_RADIUS_PX,
   altitudeColor,
   markerPixelSize,
+  markerRadius,
+  markerSprite,
   spriteFor,
   worldUnitsPerPixel,
 } from './markers';
 import { SPRITE_AIRCRAFT, SPRITE_UNKNOWN } from './aircraftSprite';
+import { shellFor } from '../satelliteShell';
 
 const FOV = 50;
 const VIEWPORT_H = 720;
@@ -238,5 +242,44 @@ describe('legend agrees with the shader colours', () => {
     const unknown = altitudeColor(null);
     expect(unknown).not.toEqual(altitudeColor(0));
     expect(unknown).not.toEqual(altitudeColor(12000));
+  });
+});
+
+describe('satellites are drawn on their own shell', () => {
+  it('places a satellite far above the aircraft shell', () => {
+    const plane = markerRadius({ type: 'aircraft', altitude: 11_000 }, GLOBE_RADIUS);
+    const satellite = markerRadius({ type: 'satellite', altitude: 420_000 }, GLOBE_RADIUS);
+
+    expect(plane).toBeCloseTo(GLOBE_RADIUS * (1 + MARKER_ALTITUDE), 6);
+    expect(satellite).toBeCloseTo(GLOBE_RADIUS * (1 + shellFor(420_000)), 6);
+    // Far enough apart that no viewer could mistake one shell for the other.
+    expect(satellite).toBeGreaterThan(plane * 1.1);
+  });
+
+  it('ignores altitude for an aircraft and honours it for a satellite', () => {
+    // The asymmetry is the decision: aircraft altitude is carried by colour
+    // because at this scale height cannot show it; satellite altitude is the
+    // whole point of the layer.
+    const low = markerRadius({ type: 'aircraft', altitude: 1_000 }, GLOBE_RADIUS);
+    const high = markerRadius({ type: 'aircraft', altitude: 13_000 }, GLOBE_RADIUS);
+    expect(low).toBe(high);
+
+    const iss = markerRadius({ type: 'satellite', altitude: 420_000 }, GLOBE_RADIUS);
+    const geo = markerRadius({ type: 'satellite', altitude: 35_786_000 }, GLOBE_RADIUS);
+    expect(geo).toBeGreaterThan(iss);
+  });
+
+  it('keeps every satellite inside the camera range', () => {
+    // maxDistance is 8 R. A shell beyond that cannot be looked at, which is
+    // precisely the failure true scale produces for anything past geostationary.
+    const cluster = markerRadius({ type: 'satellite', altitude: 105_466_000 }, GLOBE_RADIUS);
+    expect(cluster).toBeLessThan(GLOBE_RADIUS * 8);
+  });
+
+  it('never draws a satellite with the aeroplane sprite', () => {
+    expect(markerSprite({ type: 'satellite', heading: 90 })).toBe(SPRITE_UNKNOWN);
+    expect(markerSprite({ type: 'satellite', heading: null })).toBe(SPRITE_UNKNOWN);
+    expect(markerSprite({ type: 'aircraft', heading: 90 })).toBe(SPRITE_AIRCRAFT);
+    expect(markerSprite({ type: 'aircraft', heading: null })).toBe(SPRITE_UNKNOWN);
   });
 });

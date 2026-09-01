@@ -188,6 +188,7 @@ export function GlobeView() {
 
     let frame = 0;
     let lastSunUpdate = 0;
+    let lastLayerId: string | null = null;
     let lastViewportUpdate = 0;
     let lastCityVersion = -1;
 
@@ -208,9 +209,14 @@ export function GlobeView() {
       //
       // Null selection, an object that has left the feed, and an object with
       // no heading all come back as null, and the sprite stands as it was.
-      const selectedObject = state.selectedId
+      const selected = state.selectedId
         ? state.objects.get(state.selectedId) ?? null
         : null;
+      // **The 3D mesh is an airframe.** Handing it a satellite would draw an
+      // airliner in orbit, complete with wings and a tailplane, which is worse
+      // than drawing nothing: it is a confident claim about the shape of
+      // something we have no shape for. Satellites keep the disc (D96).
+      const selectedObject = selected?.type === 'satellite' ? null : selected;
       markers.setHidden(
         selectedAircraft.update(
           selectedObject,
@@ -262,6 +268,18 @@ export function GlobeView() {
         );
       } else if (shouldExitCity(altitude, city.isActive())) {
         city.exit();
+      }
+
+      // Satellite mode is a different subject, not the same globe with extra
+      // dots on it. Airport codes are aircraft furniture: a globe covered in
+      // runway names while the user is looking at orbits mixes two things that
+      // have nothing to do with each other (D96). Countries and cities stay -
+      // "what is it passing over" is the question this view is asking.
+      if (state.activeLayer.id !== lastLayerId) {
+        lastLayerId = state.activeLayer.id;
+        labels.setSuppressedKinds(
+          state.activeLayer.id === 'satellite' ? ['airport'] : [],
+        );
       }
 
       // Labels reproject every frame so they track the globe while dragging;

@@ -18,7 +18,8 @@
 
 import * as THREE from 'three';
 
-import type { RenderableObject } from '../types';
+import type { ObjectType, RenderableObject } from '../types';
+import { shellFor } from '../satelliteShell';
 import { ATLAS_CELLS, SPRITE_AIRCRAFT, SPRITE_UNKNOWN, createMarkerAtlas } from './aircraftSprite';
 import { STALE_AFTER_SECONDS, ageSeconds, positionAt } from './interpolate';
 import { latLonToVector3 } from './earth';
@@ -284,6 +285,43 @@ export function markerPixelSize(
 }
 
 /** Which atlas cell an object should use. */
+/**
+ * How far from the globe centre this object is drawn.
+ *
+ * Pure and exported because it is a *presentation judgement*, and the layer
+ * that uses it cannot be tested here — `createMarkerLayer` needs a 2D canvas
+ * for its sprite atlas, which jsdom does not provide. Extracting the decision
+ * is how the rest of this renderer stays covered (D19's pattern).
+ */
+export function markerRadius(
+  object: { type: ObjectType; altitude: number | null },
+  globeRadius: number,
+): number {
+  // Aircraft sit on one uniform shell because their real altitude is invisible
+  // at this scale (see MARKER_ALTITUDE); altitude is carried by colour instead.
+  // For a satellite the height *is* the information, so it goes on a
+  // log-compressed shell (D96).
+  if (object.type === 'satellite') {
+    return globeRadius * (1 + shellFor(object.altitude));
+  }
+  return globeRadius * (1 + MARKER_ALTITUDE);
+}
+
+/**
+ * Which sprite this object draws.
+ *
+ * A satellite is not an aeroplane and must never be drawn as one. The disc
+ * carries no direction, which is the honest shape for something whose
+ * orientation we neither know nor would recognise.
+ */
+export function markerSprite(object: {
+  type: ObjectType;
+  heading: number | null;
+}): number {
+  if (object.type === 'satellite') return SPRITE_UNKNOWN;
+  return object.heading === null ? SPRITE_UNKNOWN : SPRITE_AIRCRAFT;
+}
+
 export function spriteFor(object: { heading: number | null }): number {
   return object.heading === null ? SPRITE_UNKNOWN : SPRITE_AIRCRAFT;
 }
@@ -441,7 +479,6 @@ export function createMarkerLayer(globeRadius: number, capacity = 4096): MarkerL
       if (ids.length !== objects.length) ids = new Array(objects.length);
     }
 
-    const radius = globeRadius * (1 + MARKER_ALTITUDE);
     let drawn = 0;
 
     for (let i = 0; i < objects.length; i += 1) {
@@ -449,7 +486,7 @@ export function createMarkerLayer(globeRadius: number, capacity = 4096): MarkerL
       if (object.id === hiddenId) continue;
 
       const { lat, lon } = positionAt(object, nowMs);
-      const vector = latLonToVector3(lat, lon, radius);
+      const vector = latLonToVector3(lat, lon, markerRadius(object, globeRadius));
 
       positions[drawn * 3] = vector.x;
       positions[drawn * 3 + 1] = vector.y;
@@ -467,7 +504,7 @@ export function createMarkerLayer(globeRadius: number, capacity = 4096): MarkerL
         // An unknown heading draws the disc, which has no direction to convey.
         // Rotating it is harmless, so no branch is needed in the shader.
         headings[drawn] = object.heading === null ? 0 : object.heading * DEG_TO_RAD;
-        sprites[drawn] = object.heading === null ? SPRITE_UNKNOWN : SPRITE_AIRCRAFT;
+        sprites[drawn] = markerSprite(object);
 
         // Selection still overrides everything: which aircraft is selected
         // matters more than what kind it is. Otherwise the size comes from

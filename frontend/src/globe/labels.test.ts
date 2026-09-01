@@ -496,3 +496,34 @@ describe('a camera with no viewport', () => {
     layer.dispose();
   });
 });
+
+describe('satellite mode leaves aircraft furniture out', () => {
+  it('drops airport labels when they are suppressed', () => {
+    // The zoom is deep enough that airports would normally be drawn, so this
+    // is testing the suppression rather than the budget.
+    const budget = labelBudget(0.05);
+    expect(budget.airports).toBe(true);
+
+    const withAirports = candidatesFor(data, budget, GLOBE_RADIUS);
+    const withoutAirports = candidatesFor(data, budget, GLOBE_RADIUS, ['airport']);
+
+    expect(withAirports.some((c) => c.kind === 'airport')).toBe(true);
+    expect(withoutAirports.some((c) => c.kind === 'airport')).toBe(false);
+  });
+
+  it('keeps countries and cities, which the satellite view still needs', () => {
+    // "What is it passing over" is the question an orbit view is asking, so
+    // suppressing geography as well would leave an unreadable black ball.
+    const kinds = new Set(
+      candidatesFor(data, labelBudget(0.05), GLOBE_RADIUS, ['airport']).map((c) => c.kind),
+    );
+    expect(kinds.has('country')).toBe(true);
+    expect(kinds.has('city')).toBe(true);
+  });
+
+  it('suppressing nothing is the same as not suppressing', () => {
+    const a = candidatesFor(data, labelBudget(0.05), GLOBE_RADIUS);
+    const b = candidatesFor(data, labelBudget(0.05), GLOBE_RADIUS, []);
+    expect(b.map((c) => c.kind)).toEqual(a.map((c) => c.kind));
+  });
+});
