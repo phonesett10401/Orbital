@@ -151,11 +151,18 @@ export interface Queryable<P> {
 export function hitsAt<P>(
   map: Queryable<P>,
   point: P,
+  /**
+   * Which layers count as a hit. Defaults to the aircraft layers.
+   *
+   * The satellite layer passes its own, so one click handler serves both modes
+   * without either knowing about the other - and, more to the point, without a
+   * second handler that could disagree with this one about what was clicked
+   * (D69).
+   */
+  layers: string[] = [AIRCRAFT_LAYER, AIRCRAFT_LABEL_LAYER],
 ): Array<{ properties?: Record<string, unknown> | null }> {
   try {
-    return map.queryRenderedFeatures(point, {
-      layers: [AIRCRAFT_LAYER, AIRCRAFT_LABEL_LAYER],
-    });
+    return map.queryRenderedFeatures(point, { layers });
   } catch {
     return [];
   }

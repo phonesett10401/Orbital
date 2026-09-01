@@ -40,11 +40,54 @@ import {
   firstLabelLayerId,
   loadPlanetStyle,
 } from './basemap';
-import { AIRPORT_SOURCE, airportFeature, airportLayers } from './airportLayer';
+import {
+  AIRPORT_HALO_LAYER,
+  AIRPORT_LABEL_LAYER,
+  AIRPORT_RING_LAYER,
+  AIRPORT_SOURCE,
+  airportFeature,
+  airportLayers,
+} from './airportLayer';
+import {
+  SATELLITE_LABEL_LAYER,
+  SATELLITE_LAYER,
+  SATELLITE_SOURCE,
+  satelliteFeatures,
+  satelliteLayers,
+} from './satelliteLayer';
+
+/**
+ * Layers that belong to the aircraft view and are hidden in satellite mode.
+ *
+ * Airport markers and the receiver-coverage annotation are both statements
+ * about *aircraft* tracking. Leaving them up while the user is looking at
+ * orbits mixes two subjects with nothing to do with each other (D96). The
+ * observed track and its leader go too: a satellite's path is computed rather
+ * than watched, so the line drawn for an aircraft would be making a claim
+ * about a satellite that nothing here supports.
+ */
+const AIRCRAFT_FURNITURE = [
+  AIRPORT_HALO_LAYER,
+  AIRPORT_RING_LAYER,
+  AIRPORT_LABEL_LAYER,
+  COVERAGE_FILL_LAYER,
+  COVERAGE_HATCH_LAYER,
+  COVERAGE_LINE_LAYER,
+  COVERAGE_LABEL_LAYER,
+  ROUTE_LAYER,
+  ROUTE_CASING_LAYER,
+  ROUTE_GAP_LAYER,
+  LEADER_LAYER,
+  LEADER_CASING_LAYER,
+];
 import { createBasemapControl } from './basemapControl';
 import {
+  COVERAGE_FILL_LAYER,
   COVERAGE_HATCH_IMAGE,
+  COVERAGE_HATCH_LAYER,
+  COVERAGE_LABEL_LAYER,
   COVERAGE_LABEL_SOURCE,
+  COVERAGE_LINE_LAYER,
   COVERAGE_SOURCE,
   coverageFeatures,
   coverageLabelFeatures,
@@ -55,8 +98,13 @@ import { createModelLayer, modelTarget } from './modelLayer';
 import { createTerminatorControl } from './terminatorControl';
 import { createTerminatorLayer } from './terminatorLayer';
 import {
+  LEADER_CASING_LAYER,
+  LEADER_LAYER,
   LEADER_SOURCE,
   ORIGIN_SOURCE,
+  ROUTE_CASING_LAYER,
+  ROUTE_GAP_LAYER,
+  ROUTE_LAYER,
   ROUTE_SOURCE,
   leaderFeature,
   leaderLayers,
@@ -297,6 +345,15 @@ export function PlanetView() {
           });
           for (const layer of aircraftLayers()) map.addLayer(layer);
 
+          // Satellites, drawn as their sub-satellite point. A map has no room
+          // above it, so this shows *where* rather than *how high* - the globe
+          // is where altitude is available (D96, D97).
+          map.addSource(SATELLITE_SOURCE, {
+            type: 'geojson',
+            data: satelliteFeatures([]),
+          });
+          for (const layer of satelliteLayers()) map.addLayer(layer);
+
           // The selected aircraft, as a mesh in MapLibre's own context (D67).
           // It reads the store itself, once per frame, rather than being told:
           // the aircraft is moving between polls and the symbol it replaces is
@@ -320,7 +377,17 @@ export function PlanetView() {
           // query, one decision, no ordering to get right (D69).
           map.on('click', (event) => {
             if (!map) return;
-            useOrbitalStore.getState().select(selectionFromHits(hitsAt(map, event.point)));
+            const active = useOrbitalStore.getState().activeLayer.id;
+            // One handler for both modes, querying only the layer that is
+            // actually drawn. Two handlers could disagree about what was
+            // clicked, which is the defect D69 removed.
+            const layers =
+              active === 'satellite'
+                ? [SATELLITE_LAYER, SATELLITE_LABEL_LAYER]
+                : undefined;
+            useOrbitalStore
+              .getState()
+              .select(selectionFromHits(hitsAt(map, event.point, layers)));
           });
           for (const layer of [AIRCRAFT_LAYER, AIRCRAFT_LABEL_LAYER]) {
             map.on('mouseenter', layer, () => {
@@ -334,14 +401,43 @@ export function PlanetView() {
           // Positions are interpolated between polls, so the source is rewritten
           // on a frame loop rather than only when a poll lands -- the same
           // reason the globe rebuilt its marker buffers every frame.
+          // Tracks the last mode the layers were switched to, so visibility is
+          // set on the transition rather than on every frame.
+          let lastSatelliteMode: boolean | null = null;
+
           const tick = () => {
             frame = requestAnimationFrame(tick);
             const source = map?.getSource(AIRCRAFT_SOURCE);
             if (!source || !('setData' in source)) return;
             const state = useOrbitalStore.getState();
+            const satelliteMode = state.activeLayer.id === 'satellite';
+            const objects = Array.from(state.objects.values());
+
+            // Only the active layer is fed. The other is emptied rather than
+            // left holding its last frame: a stale aircraft under a satellite
+            // view is a claim that the aircraft is still there.
             (source as { setData: (data: unknown) => void }).setData(
-              aircraftFeatures(Array.from(state.objects.values()), Date.now(), state.selectedId),
+              aircraftFeatures(satelliteMode ? [] : objects, Date.now(), state.selectedId),
             );
+            const satelliteSource = map?.getSource(SATELLITE_SOURCE);
+            if (satelliteSource && 'setData' in satelliteSource) {
+              (satelliteSource as { setData: (data: unknown) => void }).setData(
+                satelliteFeatures(satelliteMode ? objects : [], state.selectedId),
+              );
+            }
+
+            // Satellite mode is a different subject, not the same map with
+            // extra dots (D96). Airport markers and the receiver-coverage
+            // annotation are both aircraft furniture, and leaving them up
+            // while the user is looking at orbits mixes two unrelated things.
+            if (satelliteMode !== lastSatelliteMode) {
+              lastSatelliteMode = satelliteMode;
+              for (const layer of AIRCRAFT_FURNITURE) {
+                if (map?.getLayer(layer)) {
+                  map.setLayoutProperty(layer, 'visibility', satelliteMode ? 'none' : 'visible');
+                }
+              }
+            }
 
             // The leader is redrawn on the same frame as the marker it joins,
             // from the same interpolated position, so the two cannot disagree

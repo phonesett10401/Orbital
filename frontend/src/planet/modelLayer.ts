@@ -72,6 +72,13 @@ export interface ModelTarget {
  */
 export function modelTarget(object: RenderableObject | null | undefined): ModelTarget | null {
   if (!object || object.heading === null) return null;
+  // **A satellite gets no model, even though it has a heading.** This mesh is
+  // an airframe - fuselage, wings, tailplane, engines, proportioned by ICAO
+  // type (D91). Drawing a satellite with it would be a detailed, confident
+  // claim about a shape we do not have, which is worse than drawing nothing.
+  // Same reasoning as the no-heading case above, and the same guard the globe
+  // applies (D96).
+  if (object.type === 'satellite') return null;
   return {
     lon: object.renderLon,
     lat: object.renderLat,

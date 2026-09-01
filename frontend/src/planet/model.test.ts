@@ -366,6 +366,18 @@ describe('modelTarget', () => {
     expect(modelTarget(undefined)).toBeNull();
   });
 
+  it('refuses a satellite even though it has a heading', () => {
+    // The mesh is an airframe: fuselage, wings, tailplane, engines, sized by
+    // ICAO type (D91). A satellite has a perfectly good heading, so the
+    // no-heading rule above would let one through - and it would be drawn as
+    // an airliner in orbit, which is a detailed claim about a shape we do not
+    // have (D96).
+    expect(modelTarget(object({ type: 'satellite' }))).toBeNull();
+    // The same object as an aircraft still gets its model, so this is the type
+    // check doing the work rather than something else about the fixture.
+    expect(modelTarget(object({ type: 'aircraft' }))).not.toBeNull();
+  });
+
   it('takes the interpolated position, not the reported one', () => {
     // The symbol layer draws renderLat/renderLon; taking lat/lon here would
     // leave the model a poll behind the marker it is replacing.

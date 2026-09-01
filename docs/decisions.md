@@ -4881,3 +4881,72 @@ subjects with nothing to do with each other. Country and city names stay:
 The suppressed set is part of the label layer's cache key, or a mode switch
 would keep serving the candidate list built for the other mode until the zoom
 happened to change - present, correct, and invisible until you moved.
+
+---
+
+## D97 - Satellites on the map show where, not how high
+
+**Decision:** the planet view draws satellites as their **sub-satellite point**
+- the spot on the ground each one is directly over - as coloured circles, with
+altitude carried by colour and orbit regime by size. Aircraft furniture is
+hidden while the mode is active.
+
+### Why the globe's answer cannot be reused
+
+D96 draws satellites at a log-compressed *height*, because on a globe height is
+available and it is the information. **A map has no room above it.** MapLibre's
+symbol and circle layers draw on the surface, and its camera sits roughly
+10,000 km up at world zoom - a geostationary satellite at 35,786 km would be
+behind the camera, not above the map.
+
+So the map answers a different question, and should answer it well rather than
+answering the globe's question badly. "What is passing over me right now" is a
+real question and the sub-satellite point is exactly its answer. "How high is
+it" is not available here, and the panel is where that number lives.
+
+Phone chose the planet view over the globe for a reason worth recording: **the
+globe has no imagery, roads or place names**, so a satellite over it is a dot
+over an unidentifiable patch of ground. On the map you can see what it is
+passing over, which is most of the value of a ground track.
+
+### Colour by regime, not a continuous ramp
+
+97% of the catalogue is in low orbit - 1,389 of 1,432 in the measured sample.
+A continuous altitude ramp would render almost everything the same shade and
+waste the only channel available. Four regime colours running cool to warm with
+altitude keep the ordering readable without a legend, and give the 43 objects
+above low orbit somewhere distinct to sit.
+
+Size follows the same reasoning in reverse: the high orbits are drawn slightly
+larger not because they are bigger but because there are forty of them among
+fourteen hundred, and they need to stay findable.
+
+### Circles, not silhouettes, and no airframe
+
+A satellite is not an aeroplane. The aircraft sprite is a silhouette and the
+3D selection mesh is a full airframe proportioned by ICAO type (D91); either
+one applied to a satellite is a detailed, confident claim about a shape we do
+not have. `modelTarget` refuses satellites outright, which matters because the
+existing no-heading guard would *not* have caught it - a satellite has a
+perfectly good heading.
+
+### The toggle had to be gated before it was built
+
+Wiring the layer switch globally while the drawing existed in one renderer only
+created a real defect for a few minutes: selecting satellites on the map would
+have fetched 1,432 objects and handed them to the aircraft symbol layer, filling
+the screen with airliners at each sub-satellite point. `layersForView` was added
+to withhold a layer a renderer cannot draw, and now returns everything because
+both can.
+
+The lesson is small and generalisable: **a control that offers a capability the
+renderer lacks is not a missing feature, it is a wrong answer** - the data still
+arrives and something still draws it.
+
+### What is hidden in satellite mode
+
+Airport markers, the receiver-coverage annotation, and the observed track with
+its leader line. The first two are statements about aircraft tracking (D89,
+D92). The third is subtler and matters more: a track drawn for an aircraft is
+the path *we watched it fly*, and a satellite's path is computed rather than
+observed - drawing the same line would claim something nothing here supports.

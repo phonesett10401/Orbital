@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { ObjectListResponse, TrackedObject, TrackedObjectDetail } from '../types';
-import { LAYERS, useOrbitalStore } from './store';
+import { LAYERS, layersForView, useOrbitalStore } from './store';
 
 const NOW = 1_800_000_000_000;
 
@@ -230,6 +230,22 @@ describe('layers', () => {
   it('every layer has a distinct resource, or one would shadow the other', () => {
     const resources = LAYERS.map((layer) => layer.resource);
     expect(new Set(resources).size).toBe(resources.length);
+  });
+
+  it('offers satellites on the globe, which can draw them', () => {
+    expect(layersForView('globe').map((l) => l.id)).toContain('satellite');
+  });
+
+  it('offers satellites on the planet view too, now that it draws them', () => {
+    expect(layersForView('planet').map((l) => l.id)).toContain('satellite');
+  });
+
+  it('never offers a layer the backend does not serve', () => {
+    for (const view of ['globe', 'planet'] as const) {
+      for (const layer of layersForView(view)) {
+        expect(LAYERS).toContainEqual(layer);
+      }
+    }
   });
 
   it('switching layers clears objects and selection', () => {

@@ -46,6 +46,25 @@ export const LAYERS: LayerDescriptor[] = [
   { id: 'satellite', label: 'Satellites', resource: 'satellites' },
 ];
 
+/**
+ * Which layers a given renderer can actually draw.
+ *
+ * `LAYERS` declares what the *backend* serves; this says what a renderer knows
+ * how to put on screen. The two were briefly different, and the gap mattered:
+ * offering a layer a renderer cannot draw is worse than omitting it, because
+ * the objects still arrive and get handed to whatever layer is there. A
+ * satellite toggle on a map with no satellite layer would have filled the
+ * screen with aeroplane silhouettes at each sub-satellite point — the same
+ * wrong claim the airframe guards prevent (D96), by a different route.
+ *
+ * Both renderers draw both layers now, so this returns everything. It is kept
+ * as the place that answers the question, because the next renderer-specific
+ * layer will need it again.
+ */
+export function layersForView(_view: 'globe' | 'planet'): LayerDescriptor[] {
+  return LAYERS;
+}
+
 export interface FeedStatus {
   stale: boolean;
   /**
