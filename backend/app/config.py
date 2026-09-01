@@ -171,6 +171,15 @@ class Settings(BaseSettings):
 
     #: Satellites need no credentials at all -- there is no metered upstream
     #: anywhere in that path (D93), so these are the only two knobs it has.
+    satellite_layer_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether the satellite layer runs beside the aircraft one. On by "
+            "default because it costs nothing to run: no credentials, no quota, "
+            "no store and no poll interval. Turn it off for a deployment that "
+            "should make no outbound calls at all (D95)."
+        ),
+    )
     satellite_timeout_seconds: float = Field(default=60.0, gt=0)
     satellite_element_cache_path: Path = Field(
         default=Path(".cache") / "orbital-elements.json",

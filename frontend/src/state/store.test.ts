@@ -217,7 +217,19 @@ describe('layers', () => {
     // question is no longer "is there more than one kind?" but "is every kind
     // on screen one somebody decided to add?" - so this asserts the exact set,
     // which fails on an addition as loudly as the length check it replaces.
-    expect(LAYERS.map((layer) => layer.id).sort()).toEqual(['aircraft']);
+    expect(LAYERS.map((layer) => layer.id).sort()).toEqual(['aircraft', 'satellite']);
+  });
+
+  it('the satellite layer points at its own endpoint', () => {
+    // The polling hook builds its URL from `resource` alone, so this string is
+    // the entire wiring between the toggle and the backend (D95).
+    const satellites = LAYERS.find((layer) => layer.id === 'satellite');
+    expect(satellites?.resource).toBe('satellites');
+  });
+
+  it('every layer has a distinct resource, or one would shadow the other', () => {
+    const resources = LAYERS.map((layer) => layer.resource);
+    expect(new Set(resources).size).toBe(resources.length);
   });
 
   it('switching layers clears objects and selection', () => {

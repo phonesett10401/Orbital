@@ -195,6 +195,11 @@ class SatelliteProvider(Provider):
             logger.warning("could not read the element cache: %s", exc)
             return []
         logger.info("loaded %d element sets from %s", len(elements), self._cache_path)
+        # Named so the response envelope can say where the data came from. It
+        # is the honest answer while a refresh has not yet succeeded, and it
+        # tells a reader looking at /api/satellites that these are a previous
+        # run's elements rather than a live pull.
+        self._source_used = f"cache ({self._cache_path.name})"
         return elements
 
     def _write_cache(self, elements: Iterable[ElementSet]) -> None:
@@ -267,8 +272,31 @@ class SatelliteProvider(Provider):
 
     # ---- the interface -----------------------------------------------------
 
+    async def refresh(self) -> int:
+        """Fetch elements if they are due. Returns how many are held.
+
+        Split out from ``fetch`` so the API can keep its strongest property:
+        **no route performs I/O**. A request that might block on CelesTrak is a
+        request that can 5xx because CelesTrak is down, which is exactly what
+        the aircraft layer was built to avoid. The refresh runs on its own task
+        instead, and the request path only ever does arithmetic.
+        """
+        await self._elements_for(utcnow())
+        return len(self._elements)
+
+    def positions(self, bbox: BBox | None = None) -> list[TrackedObjectRecord]:
+        """Where every satellite is *now*, from the elements already held.
+
+        Synchronous and network-free by construction. Propagating the whole
+        catalogue measured 21 ms for 1,432 objects, which is why this can be
+        done per request rather than polled into a store: a stored snapshot
+        would be a position that was true a moment ago, when an exact one is
+        available for the cost of some arithmetic (D95).
+        """
+        return self._propagate(utcnow(), self._elements, bbox)
+
     async def fetch(self, bbox: BBox | None = None) -> list[TrackedObjectRecord]:
-        """Where every satellite is, right now.
+        """Refresh if due, then propagate. The ``Provider`` interface entry point.
 
         ``bbox`` is applied after propagation. It cannot be pushed upstream the
         way an aircraft bounding box can -- knowing which satellites are inside
@@ -277,7 +305,14 @@ class SatelliteProvider(Provider):
         """
         now = utcnow()
         elements = await self._elements_for(now)
+        return self._propagate(now, elements, bbox)
 
+    def _propagate(
+        self,
+        now: datetime,
+        elements: Sequence[ElementSet],
+        bbox: BBox | None,
+    ) -> list[TrackedObjectRecord]:
         records: list[TrackedObjectRecord] = []
         refused = 0
         for element in elements:
@@ -315,8 +350,16 @@ class SatelliteProvider(Provider):
             )
 
         if refused:
-            logger.info("refused %d element sets as too old or unusable", refused)
+            logger.debug("refused %d element sets as too old or unusable", refused)
         return records
+
+    @property
+    def element_count(self) -> int:
+        return len(self._elements)
+
+    @property
+    def element_source(self) -> str | None:
+        return self._source_used
 
     async def aclose(self) -> None:
         if self._client is not None:

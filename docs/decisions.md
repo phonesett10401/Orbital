@@ -4729,3 +4729,84 @@ An `elementEpoch` on the universal shape would be a satellite-specific field on
 a contract whose entire discipline is that it has none (D4). `meta` is exactly
 where the aircraft layer already puts `originCountry` for the same reason. The
 rule holds in both directions or it is not a rule.
+
+---
+
+## D95 - The satellite layer has no poller, no store and no cache validator
+
+**Decision:** satellites are **computed per request** from elements held in
+memory. There is no poll interval, no `ObjectStore`, no staleness flag, no
+eviction TTL and no ETag. Elements are refreshed by a background task so the
+request path still performs no I/O. Both layers run at once; `ORBITAL_PROVIDER`
+continues to select the *aircraft* source only.
+
+### Why the aircraft machinery does not carry over
+
+Every piece of the ingestion layer exists because nobody can compute where an
+aircraft is. You ask an upstream, you get an answer that was true a moment ago,
+and everything downstream manages the consequences: the poll interval buys
+freshness, the credit ladder pays for it (D21), the store holds the last good
+snapshot so an outage does not empty the map (D24), the TTL evicts what stopped
+being reported (D86), and the client dead-reckons between polls so the display
+does not stutter at the poll rate (D71).
+
+**A satellite position is computable.** Propagating the entire catalogue
+measured **21 ms for 1,432 objects**, against elements that stay usable for
+days. So the request can simply answer where things are *now*, exactly, and
+every mechanism above becomes something that would make the answer worse:
+
+| Aircraft machinery | Why it is absent here |
+|---|---|
+| Poll interval | Nothing to poll. Positions are made, not received |
+| `ObjectStore` snapshot | Would serve a position that *was* true, when an exact one costs arithmetic |
+| `stale` / `ageSeconds` | A computed position has no age. Both are null and `stale` is always false |
+| Eviction TTL | Satellites do not stop being reported |
+| Client dead reckoning | Linear extrapolation of a 7.6 km/s curved path, when the exact answer is free |
+| Credit ladder, throttle | No metered upstream anywhere in the path |
+
+### No ETag, and this one is a trap worth naming
+
+The aircraft list is conditional (D47) and it works because the response only
+changes when a poll lands, so `store.updates_applied` is a genuine version.
+
+A satellite list changes **on every request, by design**. A validator therefore
+has exactly two possible outcomes: a 200 that it did not help with, or a 304
+that hands the client back its own older body - which freezes the sky. That
+second outcome is not a hypothetical: it is **defect #14**, where a 304 froze
+the status bar's data age at a few seconds because the cached body was returned
+instead of a current one. Adding an ETag here would rebuild that defect on
+purpose, in a place where its symptom (satellites that stop moving) looks like
+a rendering bug rather than a caching one.
+
+### The request path still does no I/O
+
+That property is what makes an upstream outage degrade freshness instead of
+producing 5xx, and it is worth more than the small simplification of fetching
+inline. So the provider is split: `refresh()` may touch the network and runs on
+its own task; `positions()` is synchronous, network-free, and is what the route
+calls. The invariant holds by construction rather than by timing.
+
+This is not a theoretical concern either. CelesTrak returned 503 for the entire
+day this was built, and at one point both it and the SatNOGS fallback were
+failing within the same minute. The layer kept serving 1,432 satellites.
+
+### Both layers at once
+
+The toggle has to switch between two things that are already there, so the
+satellite catalogue is created beside the aircraft provider rather than instead
+of it. It can afford to be always-on precisely because of everything above: one
+background task and a few hundred kilobytes of elements, no credentials and no
+quota. `ORBITAL_SATELLITE_LAYER_ENABLED=false` turns it off for a deployment
+that should make no outbound calls at all.
+
+`ORBITAL_PROVIDER=satellites` still exists in the registry, and is now only
+useful for running the layer standalone.
+
+### What the frontend needed
+
+One line. `LAYERS` gained an entry, and the polling hook builds its URL from
+`resource` without knowing what is behind it - so the toggle, the viewport
+query and the selection all worked unchanged. D19 kept that abstraction
+deliberately thin on the grounds that a richer one built before a second layer
+existed would be fitted to an imagined use case. The second layer arrived four
+months later and the thin version fitted it.

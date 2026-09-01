@@ -31,12 +31,19 @@ import { toRenderable } from '../globe/interpolate';
 /**
  * The available layers.
  *
- * One entry. The abstraction is deliberately this thin: a richer layer system
- * built before a second layer exists would be fitted to an imagined use case
- * rather than a real one (D19).
+ * Two entries. The abstraction was kept deliberately thin while there was only
+ * one, on the grounds that a richer layer system built before a second layer
+ * existed would be fitted to an imagined use case rather than a real one (D19).
+ * The second arrived four months later (D93) and it cost one line here, one in
+ * `ObjectType`, and nothing at all in the polling hook — which reads
+ * `resource` and does not know or care what is behind it.
+ *
+ * Order is the order the toggle draws them. Aircraft first because it is the
+ * layer the app opens on.
  */
 export const LAYERS: LayerDescriptor[] = [
   { id: 'aircraft', label: 'Aircraft', resource: 'aircraft' },
+  { id: 'satellite', label: 'Satellites', resource: 'satellites' },
 ];
 
 export interface FeedStatus {

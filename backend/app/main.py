@@ -8,13 +8,15 @@ other module depends only on interfaces.
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api import aircraft, health, search
+from app.api import satellites as satellites_api
 from app.config import Settings, get_settings
 from app.ingestion.poller import Poller
 from app.ingestion.flights import FlightHistory
@@ -22,9 +24,30 @@ from app.ingestion.flightroutes import FlightRoutes
 from app.ingestion.store import ObjectStore
 from app.logging_config import configure_logging
 from app.providers import registry
+from app.providers.satellites import SatelliteProvider
 from app.providers.base import Provider
 
 logger = logging.getLogger(__name__)
+
+
+async def _refresh_elements(provider: "SatelliteProvider", interval: float) -> None:
+    """Keep the orbital elements current, off the request path.
+
+    Failures are logged and retried rather than raised. Losing a refresh is not
+    losing the layer: elements stay usable for days, so the correct response to
+    an outage is to carry on with what we have and try again later. That is the
+    opposite of the aircraft poller, where a failed poll means the data really
+    is getting older.
+    """
+    while True:
+        try:
+            held = await provider.refresh()
+            logger.info("orbital elements refreshed: %d sets held", held)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("orbital element refresh failed, keeping what we have: %s", exc)
+        await asyncio.sleep(interval)
 
 
 def create_app(
@@ -65,6 +88,23 @@ def create_app(
         # (D88).
         route_lookup = routes or FlightRoutes()
 
+        # The satellite layer runs *beside* the aircraft one rather than
+        # instead of it, because the toggle in the UI has to switch between two
+        # things that are both already there. It can afford to: it spends no
+        # quota, holds no store, and needs no poll interval, so "always on"
+        # costs one background task and a few hundred kilobytes of elements
+        # (D93, D95). ORBITAL_PROVIDER still selects the aircraft source only.
+        satellites: SatelliteProvider | None = None
+        satellite_task: asyncio.Task | None = None
+        if settings.satellite_layer_enabled:
+            satellites = SatelliteProvider(
+                timeout_seconds=settings.satellite_timeout_seconds,
+                user_agent=settings.adsblol_user_agent,
+                refresh_seconds=settings.satellite_element_refresh_seconds,
+                cache_path=settings.satellite_element_cache_path,
+            )
+
+        app.state.satellites = satellites
         app.state.settings = settings
         app.state.store = store
         app.state.flights = flights
@@ -72,13 +112,26 @@ def create_app(
         app.state.poller = poller
 
         await poller.start()
+        if satellites is not None:
+            satellite_task = asyncio.create_task(
+                _refresh_elements(satellites, settings.satellite_element_refresh_seconds)
+            )
         logger.info(
-            "Orbital ready: provider=%s preset=%s", active_provider.name, settings.quota_preset
+            "Orbital ready: provider=%s preset=%s satellites=%s",
+            active_provider.name,
+            settings.quota_preset,
+            "on" if satellites else "off",
         )
         try:
             yield
         finally:
             await poller.stop()
+            if satellite_task is not None:
+                satellite_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await satellite_task
+            if satellites is not None:
+                await satellites.aclose()
             await route_lookup.aclose()
 
     app = FastAPI(
@@ -112,6 +165,7 @@ def create_app(
     app.add_middleware(GZipMiddleware, minimum_size=settings.gzip_min_bytes)
 
     app.include_router(aircraft.router)
+    app.include_router(satellites_api.router)
     app.include_router(health.router)
     app.include_router(search.router)
     return app
