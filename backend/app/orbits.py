@@ -67,6 +67,15 @@ class Position:
     speed_m_s: float
     heading_deg: float
     element_age_days: float
+    #: Orbital plane tilt against the equator. Bounds the latitudes the object
+    #: can ever reach, which is the single most descriptive number about an
+    #: orbit after its height - 51.6 for the ISS, ~0 for geostationary, ~98 for
+    #: the sun-synchronous imaging satellites.
+    inclination_deg: float
+    #: One revolution, in minutes. Derived from the mean motion in the elements
+    #: rather than from the altitude, so it stays right for eccentric orbits
+    #: where "altitude" is only true at the instant it was computed.
+    period_minutes: float
 
 
 def parse_epoch(epoch: str) -> datetime:
@@ -219,4 +228,7 @@ def propagate(
         speed_m_s=math.sqrt(sum(c * c for c in velocity_km_s)) * 1000.0,
         heading_deg=_ground_heading(position_km, velocity_km_s, lat, lon, theta),
         element_age_days=age_days,
+        inclination_deg=math.degrees(satellite.inclo),
+        # no_kozai is the mean motion in radians per minute.
+        period_minutes=(2.0 * math.pi / satellite.no_kozai) if satellite.no_kozai else 0.0,
     )

@@ -4950,3 +4950,65 @@ its leader line. The first two are statements about aircraft tracking (D89,
 D92). The third is subtler and matters more: a track drawn for an aircraft is
 the path *we watched it fly*, and a satellite's path is computed rather than
 observed - drawing the same line would claim something nothing here supports.
+
+---
+
+## D98 - The satellite panel answers different questions, and omits the ones that do not apply
+
+**Decision:** selecting a satellite renders its own set of rows - catalogue
+number, orbit regime, true altitude, speed, period, inclination, element age
+and source - rather than the aircraft panel with blanks in it. Rows that cannot
+be filled are **left out**, not shown empty.
+
+### Why not reuse the aircraft panel
+
+It asks for airline, aircraft type, wingspan, registration, departure airport
+and scheduled route. A satellite answers none of them, and there is no version
+of it that could. Rendering those labels with empty values would say *we are
+missing this data*, when the truthful statement is *that question does not
+apply here*. Those are different claims and the second one is made by leaving
+the row out.
+
+### This is where the true altitude lives
+
+Both renderers distort altitude deliberately: the globe compresses it
+logarithmically so geostationary fits inside the camera's reach (D96), and the
+map drops it to colour because a map has no height at all (D97). Those were
+defensible only on the condition that the real number stays somewhere, and this
+is that somewhere. The row says so in as many words - "true altitude; the view
+compresses it to fit" - because a reader comparing the number against the
+picture is entitled to know which one is the measurement.
+
+That is the third time this project has taken the legibility side of that trade
+(D91, D92, D96) and the first time the accurate value has had a place to be
+displayed rather than merely retained in the data.
+
+### Numbers are converted to the form their readers use
+
+Speed becomes km/s: 7,658 m/s is unrecognisable, 7.66 km/s is a figure anybody
+can check. Altitude becomes kilometres with thousands separated, because it
+runs to six digits. Period reads as minutes below two hours and hours above.
+
+### Inclination is given with what it means
+
+51.6 degrees tells most readers nothing. What it *tells* you is the band of
+latitudes the object can ever be over, so the row carries "never passes north
+of 52° or south of -52°" beside it. Retrograde orbits are handled properly: a
+sun-synchronous satellite at 98 degrees reaches 82, not 98, and reporting the
+raw figure would claim it passes over a latitude that does not exist.
+
+### The most important row is the least obvious
+
+**Element age.** SGP4 degrades by roughly a kilometre a day from epoch and does
+so *silently* - the position stays precisely formatted while becoming wrong.
+The ingestion layer already refuses anything past seven days (D94), so what
+reaches the panel is usable; this row says how usable, in kilometres of drift
+rather than in days, because the drift is the thing the reader actually cares
+about.
+
+### One list owns every key it renders
+
+`SATELLITE_META_SHOWN` names the meta keys the rows above already display, so
+the generic renderer skips them. That is defect #33 exactly: registration and
+aircraft type had labelled rows *and* came back four rows later from the
+generic list, and one fact read as two.

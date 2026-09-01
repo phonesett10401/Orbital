@@ -33,6 +33,7 @@ import type { Airport } from '../types';
 import { wingspanFor } from '../wingspan';
 import { generalMetaRows } from './panelFields';
 import { legLabel, summariseRoute } from './routeSummary';
+import { SATELLITE_META_SHOWN, satelliteRows } from './satelliteFacts';
 import { useOrbitalStore } from '../state/store';
 
 const MS_PER_SECOND = 1000;
@@ -112,14 +113,58 @@ export function DetailPanel() {
     airline ?? null,
   );
 
+  const header = (
+    <header className="panel__header">
+      <h2 className="panel__title">{detail.label}</h2>
+      <button className="panel__close" onClick={() => select(null)} aria-label="Close">
+        ×
+      </button>
+    </header>
+  );
+
+  // A satellite answers none of the questions below - no airline, no type, no
+  // departure airport, no scheduled route - and blank rows for them would read
+  // as missing data rather than as questions that do not apply. So it gets its
+  // own set of rows entirely (D98).
+  if (detail.type === 'satellite') {
+    return (
+      <aside className="panel" aria-label={`Details for ${detail.label}`}>
+        {header}
+        <div className="panel__age">
+          Computed for now &mdash; a satellite position is calculated, not observed
+        </div>
+        <dl className="panel__fields">
+          {satelliteRows(detail).map((row) => (
+            <div key={row.label}>
+              <dt>{row.label}</dt>
+              <dd>
+                {row.value}
+                {row.note && <span className="panel__note">{row.note}</span>}
+              </dd>
+            </div>
+          ))}
+          {Object.entries(detail.meta ?? {})
+            .filter(([key]) => !SATELLITE_META_SHOWN.has(key))
+            .map(([key, value]) => (
+              <div key={key}>
+                <dt>{formatMetaKey(key)}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          <div>
+            <dt>Position</dt>
+            <dd className="mono">
+              {detail.lat.toFixed(3)}, {detail.lon.toFixed(3)}
+            </dd>
+          </div>
+        </dl>
+      </aside>
+    );
+  }
+
   return (
     <aside className="panel" aria-label={`Details for ${detail.label}`}>
-      <header className="panel__header">
-        <h2 className="panel__title">{detail.label}</h2>
-        <button className="panel__close" onClick={() => select(null)} aria-label="Close">
-          ×
-        </button>
-      </header>
+      {header}
 
       <div className={`panel__age ${isStale ? 'panel__age--stale' : ''}`}>
         Last reported {formatAge(ageSec)}

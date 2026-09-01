@@ -333,6 +333,18 @@ body {
   font-size: 13px;
 }
 
+/* Inside a field list the note qualifies the value directly above it, so it
+   sits under rather than beside, and reads as quieter than the number it is
+   about. Scoped to the list so the block-level notes elsewhere in the panel
+   keep their own sizing. */
+.panel__fields .panel__note {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0.7;
+}
+
 /* The route caveat is deliberately legible rather than fine print: "route"
    meaning the observed path is a real limitation, not a footnote (D6). */
 .panel__caveat {

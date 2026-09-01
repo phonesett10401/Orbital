@@ -90,6 +90,16 @@ class TestPropagatingTheISS:
         # bound above would pass for a satellite stuck on the equator.
         assert max(abs(lat) for lat in lats) > 45.0
 
+    def test_inclination_matches_the_iss(self):
+        # 51.6 degrees is the ISS's inclination and the reason it passes over
+        # most of the inhabited world but never the poles.
+        assert 51.0 < self.pos.inclination_deg < 52.0
+
+    def test_period_matches_the_iss(self):
+        # Ninety-three minutes, which is why it appears roughly sixteen times a
+        # day. Derived from the mean motion, not from the altitude.
+        assert 92.0 < self.pos.period_minutes < 94.0
+
     def test_heading_is_present_and_in_range(self):
         # An object with no heading gets no oriented model (D18, D40, D42).
         assert 0.0 <= self.pos.heading_deg < 360.0
@@ -134,6 +144,13 @@ class TestTheEarthRotationAngle:
             for h in range(0, 25, 3)
         ]
         assert max(abs(lat) for lat in lats) < 1.0
+
+    def test_a_geostationary_period_is_one_sidereal_day(self):
+        # 1,436 minutes, not 1,440: it keeps pace with the stars, not the Sun,
+        # which is the whole reason it holds a longitude.
+        pos = propagate(GEO_1, GEO_2, tle_epoch(GEO_1), epoch=tle_epoch(GEO_1))
+        assert 1430 < pos.period_minutes < 1442
+        assert pos.inclination_deg < 0.1
 
     def test_geostationary_altitude_is_the_textbook_figure(self):
         epoch = tle_epoch(GEO_1)

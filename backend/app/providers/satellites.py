@@ -342,6 +342,15 @@ class SatelliteProvider(Provider):
                     last_seen=now,
                     type=ObjectType.SATELLITE,
                     meta={
+                        # The orbit itself, which the universal shape has no
+                        # room for and which is most of what a satellite panel
+                        # has to say (D98).
+                        "inclinationDeg": f"{position.inclination_deg:.2f}",
+                        "periodMinutes": f"{position.period_minutes:.1f}",
+                        # How much to trust the position above. It is here
+                        # rather than in lastSeen because that field means
+                        # "when was this current", and a computed position is
+                        # current now (D94).
                         "elementEpoch": element.epoch.isoformat(),
                         "elementAgeDays": f"{position.element_age_days:.2f}",
                         "elementSource": self._source_used or "unknown",
