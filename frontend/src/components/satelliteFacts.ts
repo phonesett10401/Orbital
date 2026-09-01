@@ -18,6 +18,7 @@
  * that is the bargain those decisions were made under.
  */
 
+import { FAMILY_LABEL, familyFor } from '../satelliteFamily';
 import { regimeFor, type OrbitRegime } from '../satelliteShell';
 import type { TrackedObjectDetail } from '../types';
 
@@ -134,6 +135,12 @@ export function satelliteRows(detail: TrackedObjectDetail): Row[] {
   const rows: Row[] = [
     { label: 'Catalogue number', value: `NORAD ${detail.id}` },
   ];
+
+  // What kind of machine it is, from its name - the same classification the
+  // silhouette on the map is drawn from, so the panel and the picture agree
+  // (D101). "Unidentified object" is a real and common answer.
+  const family = familyFor(detail.label);
+  rows.push({ label: 'Type', value: FAMILY_LABEL[family] });
 
   const regime = regimeName(detail.altitude);
   if (regime) rows.push({ label: 'Orbit', value: regime });

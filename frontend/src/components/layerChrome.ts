@@ -89,8 +89,14 @@ export function chromeFor(layer: ObjectType, gradientStops: string[]): LayerChro
       // sits in the bottom 6% of the range.
       scale: { kind: 'bands', bands: satelliteBands() },
       shapes: [
-        { glyph: 'dot', text: 'Position is computed from its orbit, not observed' },
-        { glyph: 'disc', text: 'Larger dots are higher orbits, which are far rarer' },
+        {
+          glyph: 'disc',
+          text: 'Shape shows what kind of spacecraft it is — station, constellation, navigation, observation, geostationary, science',
+        },
+        {
+          glyph: 'dot',
+          text: 'A plain dot means the catalogue has not identified the object',
+        },
       ],
       // A computed position has no age. "Data age never" is what a null age
       // rendered as, which reads as a fault rather than as inapplicable.

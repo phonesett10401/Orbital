@@ -123,12 +123,26 @@ describe('formatElementAge', () => {
 });
 
 describe('satelliteRows', () => {
-  it('leads with the identity and the orbit', () => {
-    expect(labels(detail()).slice(0, 3)).toEqual([
+  it('leads with the identity, what it is, and where it orbits', () => {
+    expect(labels(detail()).slice(0, 4)).toEqual([
       'Catalogue number',
+      'Type',
       'Orbit',
       'Altitude',
     ]);
+  });
+
+  it('names the kind of spacecraft, matching the silhouette on the map', () => {
+    // The panel and the picture read the same classification, so they cannot
+    // disagree about what the object is (D101).
+    expect(valueOf(detail(), 'Type')).toBe('Crewed station');
+    expect(valueOf(detail({ label: 'STARLINK-4621' }), 'Type')).toBe(
+      'Communications constellation',
+    );
+  });
+
+  it('says an unidentified object is unidentified, rather than guessing', () => {
+    expect(valueOf(detail({ label: 'OBJECT AN' }), 'Type')).toBe('Unidentified object');
   });
 
   it('says the altitude shown is the true one, because the view distorts it', () => {

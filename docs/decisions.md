@@ -5146,3 +5146,68 @@ way `routeSummary`, `panelFields` and `satelliteFacts` are.
 The strongest test is the blunt one - **no string shown in satellite mode may
 contain "aircraft", "callsign", "airport" or "heading"** - which would have
 caught every row of the table above in one assertion.
+
+---
+
+## D101 - Satellites are drawn as the machines they are, and unidentified ones are not
+
+**Decision:** each satellite is drawn with a silhouette chosen by its
+**spacecraft family**, matched from its name. Colour still carries orbit
+regime, so **shape says what it is and colour says how high it is** - two
+channels, two facts. An object the catalogue has not identified gets a plain
+dot and no invented machine.
+
+### What a circle was costing
+
+The first map layer drew every satellite as a circle (D97), which says an
+object is here and nothing else. But the differences are real and visible in
+the names the catalogue already gives us: a Starlink has one flat panel, a
+navigation satellite a symmetric pair, the ISS a truss with four arrays, and
+Cluster II is a spin-stabilised drum with none at all. Those are genuinely
+different machines, and the silhouette is how a viewer tells them apart without
+clicking anything.
+
+Six families, plus one for the unidentified:
+
+| Family | Silhouette | Why that shape |
+|---|---|---|
+| Crewed station | truss, four arrays | the largest thing up there, and the only paired-axis layout |
+| Communications constellation | body plus one array | Starlink's defining asymmetry |
+| Navigation | symmetric pair plus nadir mast | built to point at a whole hemisphere |
+| Earth observation | body, one array, downward instrument | nadir-pointing in low orbit |
+| Geostationary comms | two arrays plus a dish | the dish is what separates it from navigation |
+| Science mission | drum with booms, no arrays | spin-stabilised, body-mounted |
+
+### Matched on the name, because that is all there is
+
+`model` is null for every satellite by decision (D94): the catalogue's own type
+field reads `PAY` for everything we draw, so it carries no information. The
+name does - `STARLINK-4621`, `NOAA 19`, `ISS (ZARYA)` - and it is what the
+label already shows, so the picture and the text agree by construction.
+
+### The unidentified case is the point, not the leftover
+
+The live catalogue is full of `OBJECT AN`, `OBJECT C`, `OBJECT W` - objects
+tracked but never identified. Drawing one with panels and a dish would be
+**inventing a machine**. They keep a neutral dot, which claims only that
+something is there.
+
+The explicit `OBJECT` prefix beats every family pattern, deliberately: debris
+from a Starlink launch is catalogued as an `OBJECT` and is not a Starlink. An
+unmatched name falls through to unidentified rather than being guessed at, so
+the shapes stay informative instead of decorative.
+
+This is the third instance of one rule in this project. An aircraft with no
+heading gets a disc rather than a silhouette (D18, D40). A satellite is refused
+the airframe mesh even though it has a heading (D96). And now an unidentified
+object gets a marker rather than a spacecraft. **A shape that commits to
+something unknown is worse than one that does not** - it is a claim the viewer
+has no way to check.
+
+### Where the classification lives
+
+`satelliteFamily.ts` sits beside `satelliteShell.ts` in the shared layer, not
+in `src/planet`, for the same reason `wingspan.ts` is shared while
+`airframe.ts` is not: *which family this is* is a fact about the object, while
+*how to draw it* belongs to a renderer. The detail panel reads the same
+function the sprites do, so the panel and the picture cannot disagree.

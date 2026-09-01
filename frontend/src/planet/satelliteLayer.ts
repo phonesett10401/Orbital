@@ -23,6 +23,9 @@
 
 import type { LayerSpecification } from 'maplibre-gl';
 
+import { familyFor, type SatelliteFamily } from '../satelliteFamily';
+import { iconFor } from './satelliteSprite';
+
 import {
   REGIME_RGB,
   UNKNOWN_RGB,
@@ -88,6 +91,9 @@ export interface SatelliteFeatureCollection {
       colour: string;
       radius: number;
       regime: OrbitRegime | null;
+      /** Which silhouette to draw - what kind of spacecraft this is. */
+      icon: string;
+      family: SatelliteFamily;
       selected: boolean;
     };
   }>;
@@ -112,6 +118,11 @@ export function satelliteFeatures(
         colour: colourForRegime(object.altitude),
         radius: radiusForRegime(object.altitude),
         regime: regimeFor(object.altitude),
+        // Shape says what it is; colour says how high. Two channels, two
+        // facts. The family comes from the name because `model` is null for
+        // every satellite by decision (D94, D101).
+        icon: iconFor(object.label),
+        family: familyFor(object.label),
         selected: object.id === selectedId,
       },
     })),
@@ -132,31 +143,33 @@ export function satelliteLayers(): LayerSpecification[] {
   return [
     {
       id: SATELLITE_LAYER,
-      type: 'circle',
+      type: 'symbol',
       source: SATELLITE_SOURCE,
-      paint: {
-        'circle-color': ['get', 'colour'],
-        // The per-feature radius multiplies each zoom stop rather than the
-        // whole curve. **The multiply must be inside the interpolate**: a
-        // `zoom` expression is only valid as the direct input of a top-level
+      layout: {
+        'icon-image': ['get', 'icon'],
+        // The per-feature factor multiplies each zoom stop rather than the
+        // curve. **The multiply must be inside the interpolate**: a `zoom`
+        // expression is only valid as the direct input of a top-level
         // interpolate, and MapLibre discards an invalid layer silently, which
         // has cost this project two separate outages (defect #25, defect #36).
-        'circle-radius': [
+        'icon-size': [
           'interpolate',
           ['linear'],
           ['zoom'],
-          0, ['*', 0.75, ['get', 'radius']],
-          3, ['*', 1.0, ['get', 'radius']],
-          6, ['*', 1.6, ['get', 'radius']],
+          0, ['*', 0.055, ['get', 'radius']],
+          3, ['*', 0.075, ['get', 'radius']],
+          6, ['*', 0.115, ['get', 'radius']],
         ],
-        'circle-opacity': 0.92,
-        'circle-stroke-width': ['case', ['get', 'selected'], 2.2, 0.8],
-        'circle-stroke-color': [
-          'case',
-          ['get', 'selected'],
-          'rgb(255, 255, 255)',
-          'rgba(8, 12, 20, 0.75)',
-        ],
+        // A satellite icon must always draw. Hiding one because another is
+        // near it would be losing a satellite, which is a different thing from
+        // dropping a label.
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+      paint: {
+        'icon-color': ['get', 'colour'],
+        'icon-halo-color': ['case', ['get', 'selected'], 'rgb(255,255,255)', 'rgba(8,12,20,0.85)'],
+        'icon-halo-width': ['case', ['get', 'selected'], 2.4, 1.1],
       },
     },
     {

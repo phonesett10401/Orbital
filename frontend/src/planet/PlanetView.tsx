@@ -48,6 +48,7 @@ import {
   airportFeature,
   airportLayers,
 } from './airportLayer';
+import { createSatelliteIconCanvases } from './satelliteSprite';
 import {
   SATELLITE_LABEL_LAYER,
   SATELLITE_LAYER,
@@ -234,7 +235,11 @@ export function PlanetView() {
           for (const [id, canvas] of [
             [ICON_AIRCRAFT, createAircraftIconCanvas()],
             [ICON_UNKNOWN, createUnknownIconCanvas()],
-          ] as const) {
+            // One silhouette per spacecraft family, SDF like the aircraft so
+            // each is tinted by its orbit regime rather than baked per colour
+            // (D101).
+            ...createSatelliteIconCanvases(),
+          ] as Array<readonly [string, HTMLCanvasElement]>) {
             const context = canvas.getContext('2d');
             if (!context || map.hasImage(id)) continue;
             map.addImage(id, context.getImageData(0, 0, canvas.width, canvas.height), {

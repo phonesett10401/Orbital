@@ -100,12 +100,24 @@ describe('satelliteFeatures', () => {
 });
 
 describe('satelliteLayers', () => {
-  it('draws circles, never the aircraft silhouette', () => {
-    // A satellite is not an aeroplane. Drawing one as an aircraft would be a
-    // confident claim about a shape we do not have (D96).
-    const [dots] = satelliteLayers();
-    expect(dots.type).toBe('circle');
-    expect(JSON.stringify(satelliteLayers())).not.toContain('icon-image');
+  it('draws satellite silhouettes, never the aircraft one', () => {
+    // A satellite is not an aeroplane. The shapes are per spacecraft family
+    // (D101); what must never appear is the airframe.
+    const [icons] = satelliteLayers();
+    expect(icons.type).toBe('symbol');
+    expect(JSON.stringify(satelliteLayers())).not.toContain('orbital-aircraft-icon');
+  });
+
+  it('lets every feature choose its own silhouette', () => {
+    const layout = satelliteLayers()[0].layout as Record<string, unknown>;
+    expect(layout['icon-image']).toEqual(['get', 'icon']);
+  });
+
+  it('never hides a satellite to avoid a collision', () => {
+    // Dropping a label is a readability trade; dropping a satellite would be
+    // losing one.
+    const layout = satelliteLayers()[0].layout as Record<string, unknown>;
+    expect(layout['icon-allow-overlap']).toBe(true);
   });
 
   it('holds the names back until only a handful are on screen', () => {
@@ -113,23 +125,22 @@ describe('satelliteLayers', () => {
     expect(label?.minzoom).toBe(SATELLITE_LABEL_ZOOM);
   });
 
-  it('lets names drop out but never the dots', () => {
+  it('lets names drop out but never the icons', () => {
     const label = satelliteLayers().find((l) => l.id === SATELLITE_LABEL_LAYER);
     // Losing a name is a readability trade. Losing a satellite would be a lie.
     const layout = label?.layout as Record<string, unknown> | undefined;
     expect(layout?.['text-optional']).toBe(true);
-    expect(satelliteLayers().find((l) => l.id === SATELLITE_LAYER)?.type).toBe('circle');
   });
 
   it('keeps every zoom expression as the direct input of its interpolate', () => {
     // Defect #25 and defect #36 were both this: a zoom expression nested
     // inside a multiply. MapLibre discards such a layer *silently*, so the
     // symptom is an empty map and a green test suite.
-    const dots = satelliteLayers().find((l) => l.id === SATELLITE_LAYER);
-    const paint = dots?.paint as Record<string, unknown> | undefined;
-    const radius = paint?.['circle-radius'] as unknown[];
-    expect(radius[0]).toBe('interpolate');
-    expect(radius[2]).toEqual(['zoom']);
+    const icons = satelliteLayers().find((l) => l.id === SATELLITE_LAYER);
+    const layout = icons?.layout as Record<string, unknown> | undefined;
+    const size = layout?.['icon-size'] as unknown[];
+    expect(size[0]).toBe('interpolate');
+    expect(size[2]).toEqual(['zoom']);
   });
 
   it('validates against the style spec', async () => {
