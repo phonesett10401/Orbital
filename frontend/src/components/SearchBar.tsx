@@ -18,6 +18,7 @@
 import { useEffect, useState } from 'react';
 
 import { AIRPORT_ZOOM } from '../planet/airportLayer';
+import { SATELLITE_ZOOM } from '../planet/satelliteLayer';
 import { chromeFor } from './layerChrome';
 import { useOrbitalStore } from '../state/store';
 import type { Airport, TrackedObject } from '../types';
@@ -77,8 +78,11 @@ export function SearchBar() {
   );
 
   const chooseSatellite = (object: TrackedObject) => {
+    // Selected as well as flown to, unlike an airport: a satellite *is* a
+    // tracked object, so the panel has something honest to say and the
+    // selection ring marks which dot was asked for (D103).
     select(object.id);
-    requestFlyTo(object.lat, object.lon);
+    requestFlyTo(object.lat, object.lon, SATELLITE_ZOOM);
     keep(satelliteEntry(object));
     setSearchQuery('');
   };
@@ -120,7 +124,19 @@ export function SearchBar() {
   };
 
   const trimmed = query.trim();
-  const nothingFound = !searching && results.length === 0 && airports.length === 0;
+  // In satellite mode the box answers with satellites and nothing else. The
+  // backend still returns all three lists - "ISS" matches WISCASSET airport,
+  // and offering that here would answer a question the user did not ask
+  // (D103).
+  const satelliteMode = activeLayer.id === 'satellite';
+  const shownAircraft = satelliteMode ? [] : results;
+  const shownAirports = satelliteMode ? [] : airports;
+  const shownSatellites = satelliteMode ? satellites : [];
+  const nothingFound =
+    !searching &&
+    shownAircraft.length === 0 &&
+    shownAirports.length === 0 &&
+    shownSatellites.length === 0;
   const showRecent = trimmed.length === 0 && focused && recent.length > 0;
 
   return (
@@ -143,9 +159,9 @@ export function SearchBar() {
             // Whichever group the active layer can actually act on comes
             // first, so Enter never jumps the user out of the layer they are
             // looking at (D103).
-            if (satellites.length > 0) chooseSatellite(satellites[0]);
-            else if (results.length > 0) chooseAircraft(results[0]);
-            else if (airports.length > 0) chooseAirport(airports[0]);
+            if (shownSatellites.length > 0) chooseSatellite(shownSatellites[0]);
+            else if (shownAircraft.length > 0) chooseAircraft(shownAircraft[0]);
+            else if (shownAirports.length > 0) chooseAirport(shownAirports[0]);
           }
         }}
       />
@@ -169,12 +185,14 @@ export function SearchBar() {
           {searching && <li className="search__hint">Searching…</li>}
           {nothingFound && (
             <li className="search__hint">
-              No match. Aircraft are only findable while the backend is tracking them.
+              {satelliteMode
+                ? 'No match. Try a satellite name or its catalogue number.'
+                : 'No match. Aircraft are only findable while the backend is tracking them.'}
             </li>
           )}
 
-          {satellites.length > 0 && <li className="search__group">Satellites</li>}
-          {satellites.map((object) => (
+          {shownSatellites.length > 0 && <li className="search__group">Satellites</li>}
+          {shownSatellites.map((object) => (
             <li key={`sat-${object.id}`}>
               <button className="search__result" onClick={() => chooseSatellite(object)}>
                 <span className="search__callsign">{object.label}</span>
@@ -187,8 +205,8 @@ export function SearchBar() {
             </li>
           ))}
 
-          {results.length > 0 && <li className="search__group">Aircraft</li>}
-          {results.map((object) => (
+          {shownAircraft.length > 0 && <li className="search__group">Aircraft</li>}
+          {shownAircraft.map((object) => (
             <li key={object.id}>
               <button className="search__result" onClick={() => chooseAircraft(object)}>
                 <span className="search__callsign">{object.label}</span>
@@ -201,8 +219,8 @@ export function SearchBar() {
             </li>
           ))}
 
-          {airports.length > 0 && <li className="search__group">Airports</li>}
-          {airports.map((airport) => (
+          {shownAirports.length > 0 && <li className="search__group">Airports</li>}
+          {shownAirports.map((airport) => (
             <li key={airport.icao}>
               <button className="search__result" onClick={() => chooseAirport(airport)}>
                 <span className="search__callsign">{airport.iata ?? airport.icao}</span>

@@ -140,6 +140,21 @@ export function satelliteFeatures(
  */
 export const SATELLITE_LABEL_ZOOM = 3.5;
 
+/**
+ * Where the camera goes when a satellite is chosen from search.
+ *
+ * **Not the airport's zoom 11.** An airport does not move, so the camera can
+ * sit right on top of it. A low-orbit satellite crosses the ground at about
+ * 7.6 km per second: at zoom 11 the viewport is roughly 20 km across, so it
+ * would leave the screen in under three seconds and the search would appear to
+ * have flown somewhere empty.
+ *
+ * Zoom 4 is about 5,000 km across, so the satellite stays in view for around
+ * ten minutes - long enough to watch it move, and close enough to see which
+ * part of the world it is over, which is the question the map answers (D97).
+ */
+export const SATELLITE_ZOOM = 4;
+
 export function satelliteLayers(): LayerSpecification[] {
   return [
     {

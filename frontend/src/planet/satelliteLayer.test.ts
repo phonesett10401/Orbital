@@ -4,6 +4,7 @@ import type { RenderableObject } from '../types';
 import {
   REGIME_COLOURS,
   SATELLITE_SELECTION_LAYER,
+  SATELLITE_ZOOM,
   SATELLITE_LABEL_LAYER,
   SATELLITE_LABEL_ZOOM,
   SATELLITE_LAYER,
@@ -210,5 +211,24 @@ describe('the selection marker', () => {
     const stops = radius.slice(3).filter((_, i) => i % 2 === 1) as number[];
     expect(Math.min(...stops)).toBeGreaterThanOrEqual(8);
     expect(Math.max(...stops)).toBeLessThanOrEqual(24);
+  });
+});
+
+describe('SATELLITE_ZOOM', () => {
+  it('is far wider than the airport zoom, because a satellite moves', () => {
+    // An airport does not move, so the camera sits on top of it at zoom 11. A
+    // low-orbit satellite crosses the ground at 7.6 km/s and would leave a
+    // zoom-11 viewport in under three seconds (D103).
+    expect(SATELLITE_ZOOM).toBeLessThan(6);
+  });
+
+  it('is close enough to show which part of the world it is over', () => {
+    // The question a map answers is "where", so flying to zoom 0 would be
+    // arriving nowhere in particular.
+    expect(SATELLITE_ZOOM).toBeGreaterThanOrEqual(3);
+  });
+
+  it('is past the zoom where names start drawing, so the target is labelled', () => {
+    expect(SATELLITE_ZOOM).toBeGreaterThan(SATELLITE_LABEL_ZOOM);
   });
 });

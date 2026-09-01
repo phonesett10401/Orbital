@@ -5335,6 +5335,32 @@ They stay in one stored list, filtered at the point of display. Splitting the
 storage would lose entries on a layer switch and make the "last few things you
 searched for" claim false in a different way.
 
+### Only the layer's own results are shown, and choosing one goes there
+
+Two follow-ons, both reported by Phone after the first pass.
+
+**The backend returns all three lists; the box shows one.** Adding satellites
+was not enough while aircraft and airports were still rendered beside them -
+`ISS` still offered WISCASSET, just further down. In satellite mode the box now
+shows satellites only, `Enter` picks from that group, and the "no match"
+wording asks for a satellite name or catalogue number rather than explaining
+how aircraft tracking works. The endpoint is left returning everything: it is
+cheap, and a `kinds` parameter would couple the API to which layer a client
+happens to be showing.
+
+**A chosen satellite is flown to, at a zoom that suits something moving.** The
+airport fix (D89) flies to zoom 11 so the runways are visible, and reusing that
+here would be wrong: an airport does not move, while a low-orbit satellite
+crosses the ground at 7.6 km/s and would leave a zoom-11 viewport in under
+three seconds - the search would appear to have flown somewhere empty.
+`SATELLITE_ZOOM` is 4, about 5,000 km across, so it stays in view for roughly
+ten minutes.
+
+It is also **selected**, which an airport deliberately is not: an airport is
+not a tracked object and a panel opened on one would have nothing honest in it,
+whereas a satellite is, so the panel fills and the selection ring marks which
+dot was asked for.
+
 ### The rule underneath
 
 This is D100 again, one level deeper. That entry fixed the chrome *describing*
