@@ -5260,6 +5260,23 @@ Redrawn with nothing thinner than a tenth of the cell, no interior cut-outs,
 and at least 10 px between parts. What has to survive the downscale is the
 *arrangement* - how many panels, which side, is there a dish.
 
+### The selection marker had the same cause
+
+Selecting a satellite at low zoom drew a **solid white square** behind it.
+Same root: `icon-halo-width` on an SDF icon needs a real distance field to fall
+off through, and with a plain mask there is no gradient, so the halo floods the
+whole icon cell. The smaller the icon, the more of the cell was square - which
+is why it showed at z1-z5 and not close in.
+
+Selection is now a **ring drawn underneath** the icon: a circle layer filtered
+to the selected feature, hollow so the silhouette shows through, sized by zoom.
+Geometry rather than a shader trick, so it behaves identically at every zoom.
+
+The general lesson is the one the halo and the blurred silhouettes share:
+**an SDF icon is not an image with a colour applied.** Anything that relies on
+the alpha channel meaning *distance* - halos, thin detail, sharp corners - will
+misbehave when the alpha channel actually means *inside or outside*.
+
 ### A tooling note worth keeping
 
 The fix was briefly defeated by a **literal backspace character**. Writing

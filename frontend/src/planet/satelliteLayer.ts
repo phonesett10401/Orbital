@@ -37,6 +37,7 @@ import type { RenderableObject } from '../types';
 
 export const SATELLITE_SOURCE = 'orbital-satellites';
 export const SATELLITE_LAYER = 'orbital-satellites';
+export const SATELLITE_SELECTION_LAYER = 'orbital-satellites-selection';
 export const SATELLITE_LABEL_LAYER = 'orbital-satellites-label';
 
 /**
@@ -142,6 +143,20 @@ export const SATELLITE_LABEL_ZOOM = 3.5;
 export function satelliteLayers(): LayerSpecification[] {
   return [
     {
+      // Under the icons, so the silhouette is never obscured by its own
+      // selection marker.
+      id: SATELLITE_SELECTION_LAYER,
+      type: 'circle',
+      source: SATELLITE_SOURCE,
+      filter: ['==', ['get', 'selected'], true],
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 9, 4, 13, 8, 18],
+        'circle-color': 'rgba(0, 0, 0, 0)',
+        'circle-stroke-width': 2,
+        'circle-stroke-color': 'rgb(255, 255, 255)',
+      },
+    },
+    {
       id: SATELLITE_LAYER,
       type: 'symbol',
       source: SATELLITE_SOURCE,
@@ -168,8 +183,13 @@ export function satelliteLayers(): LayerSpecification[] {
       },
       paint: {
         'icon-color': ['get', 'colour'],
-        'icon-halo-color': ['case', ['get', 'selected'], 'rgb(255,255,255)', 'rgba(8,12,20,0.85)'],
-        'icon-halo-width': ['case', ['get', 'selected'], 2.4, 1.1],
+        // **No icon halo.** MapLibre's SDF halo needs a real distance field to
+        // fall off through, and these sprites are plain alpha masks (see
+        // satelliteSprite.ts). With no gradient the halo floods the whole icon
+        // cell, which drew a solid white square behind the selected satellite
+        // at low zoom - the smaller the icon, the more of it was square.
+        // Selection is a ring underneath instead, which is geometry rather
+        // than a shader trick and behaves the same at every zoom.
       },
     },
     {

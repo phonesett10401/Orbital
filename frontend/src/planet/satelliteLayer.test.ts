@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { RenderableObject } from '../types';
 import {
   REGIME_COLOURS,
+  SATELLITE_SELECTION_LAYER,
   SATELLITE_LABEL_LAYER,
   SATELLITE_LABEL_ZOOM,
   SATELLITE_LAYER,
@@ -103,20 +104,22 @@ describe('satelliteLayers', () => {
   it('draws satellite silhouettes, never the aircraft one', () => {
     // A satellite is not an aeroplane. The shapes are per spacecraft family
     // (D101); what must never appear is the airframe.
-    const [icons] = satelliteLayers();
-    expect(icons.type).toBe('symbol');
+    const icons = satelliteLayers().find((l) => l.id === SATELLITE_LAYER);
+    expect(icons?.type).toBe('symbol');
     expect(JSON.stringify(satelliteLayers())).not.toContain('orbital-aircraft-icon');
   });
 
   it('lets every feature choose its own silhouette', () => {
-    const layout = satelliteLayers()[0].layout as Record<string, unknown>;
+    const icons = satelliteLayers().find((l) => l.id === SATELLITE_LAYER);
+    const layout = icons?.layout as Record<string, unknown>;
     expect(layout['icon-image']).toEqual(['get', 'icon']);
   });
 
   it('never hides a satellite to avoid a collision', () => {
     // Dropping a label is a readability trade; dropping a satellite would be
     // losing one.
-    const layout = satelliteLayers()[0].layout as Record<string, unknown>;
+    const icons = satelliteLayers().find((l) => l.id === SATELLITE_LAYER);
+    const layout = icons?.layout as Record<string, unknown>;
     expect(layout['icon-allow-overlap']).toBe(true);
   });
 
@@ -159,5 +162,53 @@ describe('satelliteLayers', () => {
     };
     const errors = validateStyleMin(style as never);
     expect(errors.map((e) => `${e.message}`)).toEqual([]);
+  });
+});
+
+describe('the selection marker', () => {
+  it('is a ring, not an icon halo', () => {
+    // MapLibre's SDF halo needs a real distance field to fall off through, and
+    // these sprites are plain alpha masks. With no gradient the halo floods
+    // the icon cell, which drew a white square behind the selected satellite
+    // at low zoom (D102).
+    const paint = satelliteLayers().find((l) => l.id === SATELLITE_LAYER)
+      ?.paint as Record<string, unknown> | undefined;
+    expect(paint?.['icon-halo-width']).toBeUndefined();
+    expect(paint?.['icon-halo-color']).toBeUndefined();
+
+    const ring = satelliteLayers().find((l) => l.id === SATELLITE_SELECTION_LAYER);
+    expect(ring?.type).toBe('circle');
+  });
+
+  it('draws the ring under the icons, so it never hides the silhouette', () => {
+    const ids = satelliteLayers().map((l) => l.id);
+    expect(ids.indexOf(SATELLITE_SELECTION_LAYER)).toBeLessThan(ids.indexOf(SATELLITE_LAYER));
+  });
+
+  it('draws a ring for the selected satellite only', () => {
+    const ring = satelliteLayers().find((l) => l.id === SATELLITE_SELECTION_LAYER) as
+      | { filter?: unknown }
+      | undefined;
+    expect(ring?.filter).toEqual(['==', ['get', 'selected'], true]);
+  });
+
+  it('is a hollow outline, so the satellite shows through it', () => {
+    const paint = satelliteLayers().find((l) => l.id === SATELLITE_SELECTION_LAYER)
+      ?.paint as Record<string, unknown> | undefined;
+    expect(paint?.['circle-color']).toBe('rgba(0, 0, 0, 0)');
+    expect(paint?.['circle-stroke-width']).toBe(2);
+  });
+
+  it('stays a sensible size from world zoom to close in', () => {
+    // The failure was zoom-dependent - the smaller the icon, the more of it
+    // was square - so the ring is pinned across the range it broke at.
+    const paint = satelliteLayers().find((l) => l.id === SATELLITE_SELECTION_LAYER)
+      ?.paint as Record<string, unknown> | undefined;
+    const radius = paint?.['circle-radius'] as unknown[];
+    expect(radius[0]).toBe('interpolate');
+    expect(radius[2]).toEqual(['zoom']);
+    const stops = radius.slice(3).filter((_, i) => i % 2 === 1) as number[];
+    expect(Math.min(...stops)).toBeGreaterThanOrEqual(8);
+    expect(Math.max(...stops)).toBeLessThanOrEqual(24);
   });
 });
