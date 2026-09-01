@@ -5012,3 +5012,137 @@ about.
 the generic renderer skips them. That is defect #33 exactly: registration and
 aircraft type had labelled rows *and* came back four rows later from the
 generic list, and one fact read as two.
+
+---
+
+## D99 - The two renderers stop chasing parity, and the globe stops being a deletion candidate
+
+**Decision:** the **map is the primary view** and the **globe is kept for what
+only it can do** - altitude as a real axis. Feature parity between them is
+**explicitly abandoned as a goal**. The airport marker is *not* ported to the
+globe, and the globe is no longer scheduled for deletion.
+
+### What this replaces
+
+D54 introduced the MapLibre view beside the globe with the stated intent of
+reaching parity and then deleting `src/globe/`. Every session since has
+recorded the gap between them as a debt, and this entry was very nearly one
+more instalment of that: "port the airport marker to the globe" sat in the
+handoff's open list for two sessions as though it were obviously owed.
+
+Phone asked why. There is no good answer, and the question exposed that the
+premise had quietly stopped being true.
+
+### Why the debt was not real
+
+**The globe was going to be deleted**, so anything ported into it is written
+once and thrown away once.
+
+**And in satellite mode the globe hides airports on purpose** (D96) - Phone's
+own instruction not to mix satellites with airport furniture. So the marker is
+not a missing feature there; it is a thing that would be suppressed the moment
+the view is used for its purpose.
+
+Both arguments point the same way, and neither was noticed while "the globe is
+behind" was being repeated as though it were a fact rather than a leftover.
+
+### What changed underneath
+
+Yesterday the globe's only distinguishing property was being the older one.
+Satellites gave it a real one: **altitude is a real axis on a globe and does
+not exist on a map.** Measured against the live catalogue, true orbital
+altitudes span 0.010 to 16.39 Earth radii; the map answers a different question
+entirely, showing the sub-satellite point with altitude reduced to colour
+(D97).
+
+Phone's reason for preferring the map is equally real and pulls the other way:
+*"with globe, we cant see any info of our planet locations"* - the globe has no
+imagery, roads or place names, so an object over it sits above unidentifiable
+ground.
+
+Neither view is better. They answer different questions, and each is
+**worse at the other's question in a way no amount of porting fixes.**
+
+### So parity was the wrong goal
+
+Two renderers converging on the same feature set means every feature is built
+twice and the pair is never finished. Two renderers that have *stopped* doing
+the same job need no parity at all - the question "is the globe behind?"
+dissolves rather than being answered.
+
+The map is where the work goes, because it is the view being used and the one
+that can say where something is. The globe stays for the orbit picture. What
+each lacks of the other's furniture is now a **property of the split**, not a
+backlog.
+
+### What this does not license
+
+It is not permission to let them drift arbitrarily. Anything in the **shared**
+layer below the renderers - the data contract, `wingspan.ts`, `airframe.ts`,
+`satelliteShell.ts` - stays shared and stays consistent, because that is where
+correctness lives. This is about *furniture*: airport markers, coverage
+overlays, basemap controls. Divergence there is now expected and does not need
+recording as a defect.
+
+**Revisit if:** the globe stops being used at all for a whole phase, at which
+point deleting it becomes the honest move again.
+
+---
+
+## D100 - The chrome names the layer, because chrome is where a viewer finds out what they are looking at
+
+**Decision:** the wordmark subtitle, the search placeholder, the object count,
+the key, and the freshness line all follow the active layer. They are built
+from one table (`layerChrome.ts`) rather than branched inside five components.
+
+### What it looked like when they did not
+
+Phone's screenshot of the working satellite layer, 2026-09-01. The dots were
+right. Everything around them was still describing aircraft:
+
+| On screen | Actually |
+|---|---|
+| "LIVE AIRCRAFT" | satellites |
+| "Search callsign or airport, e.g. UAL1234 or LHR" | neither exists in orbit |
+| altitude ramp: ground / 6 km / 12 km | objects at 420 km to 35,786 km |
+| "Heading known - nose points along the track" | no aeroplanes present |
+| "364 aircraft" | 364 satellites |
+| "data age never" | a computed position has no age |
+
+**This is not cosmetic.** Chrome is where somebody looks to find out what they
+are looking at, so chrome describing the wrong subject is a false statement in
+the place a viewer is most likely to believe it. "364 aircraft" over a field of
+satellites is simply wrong, and "data age never" reads as a fault rather than
+as a question that does not apply.
+
+### The key had a substantive problem, not just wrong words
+
+The altitude ramp spans ground to 12 km. A satellite is three orders of
+magnitude past its top, so `altitudeColor` saturated and **every satellite on
+the globe was drawn the same cyan** - a whole visual channel spent saying
+nothing. Rescaling the ramp would not have helped either: 97% of the catalogue
+is in low orbit, so a continuous scale still lands almost everything on one
+colour.
+
+So satellites get **discrete bands** by orbit regime, and the colours moved
+into `satelliteShell.ts` where the globe, the map and the key all read the same
+table. Three places show these colours; if they disagree, the key is lying
+about the picture.
+
+Each band is labelled with an altitude rather than an abbreviation. "GEO" tells
+a reader nothing; "Geostationary - 35,786 km" tells them what they are seeing.
+
+### Why one table rather than five conditionals
+
+Five components each testing the layer is five places to forget. The table also
+makes the whole set readable at once, which is how the missing pieces were
+found - the count noun and the freshness line were not in the original request
+and turned up only because everything was written down together.
+
+And it is testable without rendering: this project has no component-render
+harness, so presentation judgements are extracted and tested as data, the same
+way `routeSummary`, `panelFields` and `satelliteFacts` are.
+
+The strongest test is the blunt one - **no string shown in satellite mode may
+contain "aircraft", "callsign", "airport" or "heading"** - which would have
+caught every row of the table above in one assertion.

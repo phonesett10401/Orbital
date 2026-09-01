@@ -19,7 +19,7 @@
 import * as THREE from 'three';
 
 import type { ObjectType, RenderableObject } from '../types';
-import { shellFor } from '../satelliteShell';
+import { regimeRgb, shellFor } from '../satelliteShell';
 import { ATLAS_CELLS, SPRITE_AIRCRAFT, SPRITE_UNKNOWN, createMarkerAtlas } from './aircraftSprite';
 import { STALE_AFTER_SECONDS, ageSeconds, positionAt } from './interpolate';
 import { latLonToVector3 } from './earth';
@@ -496,7 +496,16 @@ export function createMarkerLayer(globeRadius: number, capacity = 4096): MarkerL
         const stale = ageSeconds(object, nowMs) > STALE_AFTER_SECONDS;
         const selected = object.id === selectedId;
 
-        const [r, g, b] = selected ? [1, 1, 1] : altitudeColor(object.altitude);
+        // A satellite's altitude is three orders of magnitude past the top of
+        // the aircraft ramp, so `altitudeColor` saturates and every one of
+        // them comes out the same cyan - a channel spent saying nothing. The
+        // regime colours are shared with the map and the key so all three
+        // agree on what a colour means (D99).
+        const [r, g, b] = selected
+          ? [1, 1, 1]
+          : object.type === 'satellite'
+            ? (regimeRgb(object.altitude).map((c) => c / 255) as [number, number, number])
+            : altitudeColor(object.altitude);
         colors[drawn * 3] = r;
         colors[drawn * 3 + 1] = g;
         colors[drawn * 3 + 2] = b;

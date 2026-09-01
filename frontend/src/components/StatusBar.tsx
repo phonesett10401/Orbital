@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { chromeFor } from './layerChrome';
 import { useOrbitalStore } from '../state/store';
 
 function formatAge(seconds: number | null): string {
@@ -23,6 +24,7 @@ function formatAge(seconds: number | null): string {
 }
 
 export function StatusBar() {
+  const activeLayer = useOrbitalStore((s) => s.activeLayer);
   const feed = useOrbitalStore((s) => s.feed);
   const count = useOrbitalStore((s) => s.objects.size);
 
@@ -44,6 +46,8 @@ export function StatusBar() {
     feed.fetchedAtMs !== null ? (Date.now() - feed.fetchedAtMs) / 1000 : null;
 
   const thinned = feed.total > feed.returned;
+  // What this footer is counting, and whether it has an age to report at all.
+  const chrome = chromeFor(activeLayer.id, []);
 
   let severity = 'ok';
   if (feed.error) severity = 'error';
@@ -52,7 +56,7 @@ export function StatusBar() {
   return (
     <footer className={`status status--${severity}`} aria-live="polite">
       <span className="status__count">
-        <strong>{count.toLocaleString()}</strong> aircraft
+        <strong>{count.toLocaleString()}</strong> {chrome.countNoun[count === 1 ? 0 : 1]}
       </span>
 
       {thinned && (
@@ -61,8 +65,12 @@ export function StatusBar() {
         </span>
       )}
 
+      {/* A computed position has no age, and a null one was rendering as
+          "data age never" - which reads as a fault rather than as a question
+          that does not apply here (D95, D100). The source still shows: which
+          element set the satellites came from is worth knowing. */}
       <span className="status__item">
-        data age {formatAge(localAge)}
+        {chrome.freshness === 'age' ? `data age ${formatAge(localAge)}` : 'positions computed now'}
         {feed.source ? ` · ${feed.source}` : ''}
       </span>
 

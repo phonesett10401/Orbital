@@ -103,3 +103,39 @@ export function regimeFor(altitudeM: number | null): OrbitRegime | null {
   if (km < 37_500) return 'GEO';
   return 'HEO';
 }
+
+/**
+ * Colour per orbit regime, as RGB 0-255.
+ *
+ * Shared by both renderers and the key, so the three cannot disagree about
+ * what a colour means. It lives here rather than in either renderer because
+ * `src/globe` and `src/planet` must not import from each other.
+ *
+ * **Why regimes and not the altitude ramp.** The aircraft ramp
+ * (`altitudeColor`) spans ground to 12 km and saturates above that, so every
+ * satellite from the ISS to geostationary came out the same shade of cyan -
+ * a channel spent to say nothing. And a continuous scale would not help
+ * either: 97% of the catalogue is in low orbit, so almost everything would
+ * still land on one colour. Four bands, running cool to warm with altitude,
+ * keep the ordering readable and give the 3% somewhere distinct to sit.
+ */
+export const REGIME_RGB: Record<OrbitRegime, [number, number, number]> = {
+  LEO: [120, 200, 255],
+  MEO: [140, 245, 190],
+  GEO: [255, 208, 110],
+  HEO: [255, 140, 160],
+};
+
+/** What an unknown altitude draws as. Grey claims nothing. */
+export const UNKNOWN_RGB: [number, number, number] = [170, 178, 190];
+
+export function regimeRgb(altitudeM: number | null): [number, number, number] {
+  const regime = regimeFor(altitudeM);
+  return regime ? REGIME_RGB[regime] : UNKNOWN_RGB;
+}
+
+/** The same colour as a CSS string, for MapLibre and the DOM key. */
+export function regimeCss(altitudeM: number | null): string {
+  const [r, g, b] = regimeRgb(altitudeM);
+  return `rgb(${r}, ${g}, ${b})`;
+}

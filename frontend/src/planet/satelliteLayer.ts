@@ -23,7 +23,13 @@
 
 import type { LayerSpecification } from 'maplibre-gl';
 
-import { regimeFor, type OrbitRegime } from '../satelliteShell';
+import {
+  REGIME_RGB,
+  UNKNOWN_RGB,
+  regimeCss,
+  regimeFor,
+  type OrbitRegime,
+} from '../satelliteShell';
 import type { RenderableObject } from '../types';
 
 export const SATELLITE_SOURCE = 'orbital-satellites';
@@ -37,20 +43,17 @@ export const SATELLITE_LABEL_LAYER = 'orbital-satellites-label';
  * without consulting the legend, and to stay distinguishable over both the
  * satellite imagery and the flat basemap.
  */
-export const REGIME_COLOURS: Record<OrbitRegime, string> = {
-  LEO: 'rgb(120, 200, 255)',
-  MEO: 'rgb(140, 245, 190)',
-  GEO: 'rgb(255, 208, 110)',
-  HEO: 'rgb(255, 140, 160)',
-};
+export const REGIME_COLOURS: Record<OrbitRegime, string> = Object.fromEntries(
+  (Object.keys(REGIME_RGB) as OrbitRegime[]).map((regime) => {
+    const [r, g, b] = REGIME_RGB[regime];
+    return [regime, `rgb(${r}, ${g}, ${b})`];
+  }),
+) as Record<OrbitRegime, string>;
 
 /** What an unknown altitude draws as. Grey claims nothing. */
-export const UNKNOWN_COLOUR = 'rgb(170, 178, 190)';
+export const UNKNOWN_COLOUR = `rgb(${UNKNOWN_RGB.join(', ')})`;
 
-export function colourForRegime(altitudeM: number | null): string {
-  const regime = regimeFor(altitudeM);
-  return regime ? REGIME_COLOURS[regime] : UNKNOWN_COLOUR;
-}
+export const colourForRegime = regimeCss;
 
 /**
  * Radius in pixels, per regime.

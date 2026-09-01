@@ -806,3 +806,40 @@ body {
   background: rgba(207, 227, 255, 0.16);
   border-color: rgba(207, 227, 255, 0.5);
 }
+
+/* ---- Key: satellite bands ----
+   Discrete swatches rather than a ramp, because orbit altitude spans three
+   orders of magnitude and 97% of the catalogue sits in the lowest band, so a
+   continuous scale would render almost everything one colour (D99). */
+.legend__bands {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.legend__bands li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.legend__swatch {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+
+/* Names what the colour scale is measuring, so "Key" alone never has to carry
+   the whole explanation. */
+.legend__subject {
+  margin-left: 8px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}

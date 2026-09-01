@@ -17,6 +17,8 @@ import { Legend } from './components/Legend';
 import { SearchBar } from './components/SearchBar';
 import { StatusBar } from './components/StatusBar';
 import { config } from './config';
+import { chromeFor } from './components/layerChrome';
+import { useOrbitalStore } from './state/store';
 import { GlobeView } from './globe/GlobeView';
 import { PlanetView } from './planet/PlanetView';
 import { useObjectPolling, useSearch, useSelectedDetail } from './hooks/usePolling';
@@ -26,6 +28,10 @@ export function App() {
   useSelectedDetail();
   useSearch();
 
+  // The wordmark's subtitle names what is on screen, so it has to follow the
+  // layer rather than being written once for aircraft (D100).
+  const activeLayer = useOrbitalStore((s) => s.activeLayer);
+
   return (
     <div className="app">
       {config.view === 'planet' ? <PlanetView /> : <GlobeView />}
@@ -33,7 +39,7 @@ export function App() {
       <header className="app__header">
         <div className="app__brand">
           <span className="app__title">Orbital</span>
-          <span className="app__subtitle">live aircraft</span>
+          <span className="app__subtitle">{chromeFor(activeLayer.id, []).subtitle}</span>
         </div>
         <SearchBar />
         <LayerToggle />

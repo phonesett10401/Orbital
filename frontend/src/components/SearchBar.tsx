@@ -18,6 +18,7 @@
 import { useEffect, useState } from 'react';
 
 import { AIRPORT_ZOOM } from '../planet/airportLayer';
+import { chromeFor } from './layerChrome';
 import { useOrbitalStore } from '../state/store';
 import type { Airport, TrackedObject } from '../types';
 import {
@@ -30,6 +31,9 @@ import {
 } from './recentSearches';
 
 export function SearchBar() {
+  // The example in the placeholder has to be something the active layer
+  // could actually match: there are no callsigns or airports in orbit.
+  const activeLayer = useOrbitalStore((s) => s.activeLayer);
   const query = useOrbitalStore((s) => s.searchQuery);
   const results = useOrbitalStore((s) => s.searchResults);
   const airports = useOrbitalStore((s) => s.searchAirports);
@@ -107,7 +111,7 @@ export function SearchBar() {
         className="search__input"
         type="search"
         value={query}
-        placeholder="Search callsign or airport, e.g. UAL1234 or LHR"
+        placeholder={chromeFor(activeLayer.id, []).searchPlaceholder}
         aria-label="Search by callsign, aircraft address, or airport"
         onChange={(event) => setSearchQuery(event.target.value)}
         onFocus={() => setFocused(true)}
