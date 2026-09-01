@@ -13,11 +13,13 @@
 /**
  * Which layer an object belongs to.
  *
- * A union of one. It exists so the renderer can discriminate if the backend
- * ever serves more than one kind of object — retrofitting that into a contract
- * spanning three layers is far worse than carrying it from the start.
+ * A union of two. It was carried as a union of one so the renderer could
+ * discriminate if the backend ever served more than one kind of object —
+ * retrofitting that into a contract spanning three layers is far worse than
+ * carrying it from the start. Satellites arrived later (D93) and it cost one
+ * line here. Adding a third member is a scope decision, not a code change.
  */
-export type ObjectType = 'aircraft';
+export type ObjectType = 'aircraft' | 'satellite';
 
 /** One moving object at one instant. Source-agnostic by design (D4). */
 export interface TrackedObject {
@@ -29,7 +31,11 @@ export interface TrackedObject {
   lon: number;
   /** Metres above mean sea level. `null` means unknown, never zero. */
   altitude: number | null;
-  /** Ground speed in metres per second. `null` means unknown. */
+  /**
+   * Speed in metres per second. `null` means unknown. Ground speed for an
+   * aircraft; orbital speed for a satellite, which is what every source quotes
+   * and what a reader expects to see (D94).
+   */
   velocity: number | null;
   /** Degrees clockwise from TRUE north. `null` means unknown. */
   heading: number | null;
@@ -38,10 +44,21 @@ export interface TrackedObject {
   /**
    * What the source says this is, in its own words. For aircraft, the ICAO
    * type designator such as `B789`. `null` for about a quarter of a live map,
-   * because OpenSky's `/states/all` carries no type at all.
+   * because OpenSky's `/states/all` carries no type at all — and always `null`
+   * for a satellite, whose catalogue answer is identical for every row we draw
+   * (D94).
    */
   model: string | null;
-  /** RFC 3339 UTC. When the SOURCE last observed it, not when we polled. */
+  /**
+   * RFC 3339 UTC. When this position was current.
+   *
+   * For an aircraft, when the SOURCE observed it — never when we polled. For a
+   * satellite there is no observation: the position is computed, so this is the
+   * instant it was propagated for. That distinction matters here, because the
+   * renderer fades an object as this value ages (D71); putting the orbital
+   * element epoch in this field would draw a kilometre-accurate satellite as a
+   * ghost. Element age lives in `meta` instead (D94).
+   */
   lastSeen: string;
   type: ObjectType;
 }

@@ -18,12 +18,12 @@ Returned by `GET /api/aircraft`. Serialized as camelCase JSON.
 | `lat` | number | degrees, `[-90, 90]` | no | Latitude north, WGS84. |
 | `lon` | number | degrees, `[-180, 180)` | no | Longitude east, WGS84. `+180` is normalized to `-180`. |
 | `altitude` | number | **metres** above mean sea level | **yes** | `null` means unknown, not zero. |
-| `velocity` | number | **metres per second**, `>= 0` | **yes** | Ground speed, not airspeed. `null` means unknown. |
+| `velocity` | number | **metres per second**, `>= 0` | **yes** | Ground speed, not airspeed, for an aircraft. **Orbital speed** for a satellite (~7,660 m/s) - not the speed of the sub-satellite point, because the orbital figure is what every source quotes and what a reader expects (D94). `null` means unknown. |
 | `heading` | number | degrees, `[0, 360)` | **yes** | Clockwise from **true** north, not magnetic. Direction of travel over the ground. |
 | `label` | string | — | no | Short display name. For aircraft, the callsign, trimmed. Falls back to `id` when upstream has no callsign. |
-| `model` | string | ICAO type designator | **yes** | What the source says this object *is*, in its own vocabulary — for an aircraft, `B789`. `null` where the source does not say, which is about a quarter of a live map because OpenSky's `/states/all` carries no type. The frontend reads it to size a marker by wingspan; that reading is the frontend's, and this contract promises only the designator. |
-| `lastSeen` | string | RFC 3339, UTC, `Z` suffix | no | When the **upstream source** last observed the object — not when we polled. |
-| `type` | string | `"aircraft"` | no | Which layer the object belongs to. |
+| `model` | string | ICAO type designator | **yes** | What the source says this object *is*, in its own vocabulary — for an aircraft, `B789`. `null` where the source does not say, which is about a quarter of a live map because OpenSky's `/states/all` carries no type. The frontend reads it to size a marker by wingspan; that reading is the frontend's, and this contract promises only the designator. Always `null` for a satellite: the catalogue's answer is identical for every row we draw, and orbit class is something we derive rather than something the source says (D94). |
+| `lastSeen` | string | RFC 3339, UTC, `Z` suffix | no | **When this position was current** - never when we polled. For an aircraft that is when the upstream source observed it. A satellite is never observed: its position is computed, so this is the instant it was propagated for, and is exact rather than an extrapolation. The age of the orbital elements behind it is a different fact and lives in `meta`; putting it here would make the store evict every satellite on the poll that created it (D94). |
+| `type` | string | `"aircraft"` \| `"satellite"` | no | Which layer the object belongs to. A third value is a scope decision, not a code change (D93). |
 
 ### Rules that hold for every object
 

@@ -44,13 +44,18 @@ class OrbitalModel(BaseModel):
 class ObjectType(str, Enum):
     """Which layer an object belongs to.
 
-    One value today. It exists because the shape is deliberately source-
-    agnostic (D4): a renderer that receives mixed object kinds needs to be able
-    to tell them apart, and retrofitting a discriminator into a contract three
-    layers deep is far more painful than carrying one from the start.
+    Two values. It was carried from the start with one, because the shape is
+    deliberately source-agnostic (D4) and retrofitting a discriminator into a
+    contract three layers deep is far more painful than carrying one - and it
+    was carried for that reason rather than as satellite groundwork (D37).
+    Satellites arrived four months later (D93) and it cost one line.
+
+    Adding a third value is a scope decision, not a code change. See D93 for
+    where the boundary now sits and the tests that hold it there.
     """
 
     AIRCRAFT = "aircraft"
+    SATELLITE = "satellite"
 
 
 Latitude = Annotated[float, Field(ge=-90.0, le=90.0)]
@@ -81,7 +86,13 @@ class TrackedObject(OrbitalModel):
         default=None, description="Metres above mean sea level. None if unknown."
     )
     velocity: float | None = Field(
-        default=None, ge=0.0, description="Ground speed in metres per second."
+        default=None,
+        ge=0.0,
+        description=(
+            "Speed in metres per second. Ground speed for an aircraft; orbital "
+            "speed for a satellite, which is the figure every source quotes and "
+            "the one a reader expects (D94)."
+        ),
     )
     heading: float | None = Field(
         default=None,
@@ -93,11 +104,22 @@ class TrackedObject(OrbitalModel):
         description=(
             "What the source says this object *is*, in its own vocabulary - for "
             "an aircraft, the ICAO type designator such as B789. None where the "
-            "source does not say, which is most of them."
+            "source does not say, which is most of them - and always None for a "
+            "satellite, where the catalogue's answer is the same for every row "
+            "we draw. Orbit class would be informative but is something we "
+            "derive rather than something the source says, so it is not put "
+            "here (D94)."
         ),
     )
     last_seen: datetime = Field(
-        description="When the upstream source last observed this object (UTC)."
+        description=(
+            "When this position was current (UTC). For an aircraft, when the "
+            "upstream source observed it - never when we polled. For a satellite "
+            "there is no observation: the position is computed, so this is the "
+            "instant it was propagated for, and is exact rather than an "
+            "extrapolation. The age of the orbital elements behind it is a "
+            "different fact and lives in ``meta`` (D94)."
+        )
     )
     type: ObjectType = Field(description="Which layer this object belongs to.")
 

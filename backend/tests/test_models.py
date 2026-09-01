@@ -113,6 +113,83 @@ class TestTrackedObject:
             make_object().lat = 1.0
 
 
+class TestObjectTypeBoundary:
+    """The discriminator, and what D93 says may be in it."""
+
+    def test_exactly_the_two_declared_kinds(self):
+        # Mirrors the frontend's LAYERS guard. A third value is a scope
+        # decision (D93), and this fails until that decision is written down.
+        assert sorted(t.value for t in ObjectType) == ["aircraft", "satellite"]
+
+    def test_a_satellite_fits_the_universal_shape(self):
+        # D94: nine of the ten fields map without argument. Altitude is the one
+        # whose magnitude changes by three orders - geostationary is 35,786 km -
+        # and the contract carries it in metres either way.
+        sat = make_object(
+            id="25544",
+            label="ISS (ZARYA)",
+            altitude=422_800.0,
+            velocity=7658.0,
+            type=ObjectType.SATELLITE,
+        )
+        assert sat.type is ObjectType.SATELLITE
+        assert sat.model is None
+
+    def test_geostationary_altitude_is_accepted(self):
+        assert make_object(altitude=35_786_000.0, type=ObjectType.SATELLITE).altitude
+
+
+class TestWhyLastSeenIsThePropagationInstant:
+    """The constraint that decided D94, kept executable.
+
+    `last_seen` could plausibly have carried the orbital element epoch - it is
+    the honest answer to "how old is the information behind this position". It
+    does not, and this is why: the store evicts on that field.
+    """
+
+    def _store(self):
+        from app.ingestion.store import ObjectStore
+
+        return ObjectStore(
+            object_ttl_seconds=300.0,
+            track_history_points=50,
+            snapshot_ttl_seconds=600.0,
+            object_type=ObjectType.SATELLITE,
+        )
+
+    def _record(self, last_seen):
+        return TrackedObjectRecord(
+            id="25544",
+            lat=0.0,
+            lon=0.0,
+            altitude=422_800.0,
+            velocity=7658.0,
+            heading=45.0,
+            label="ISS (ZARYA)",
+            last_seen=last_seen,
+            type=ObjectType.SATELLITE,
+        )
+
+    def test_an_element_epoch_in_last_seen_would_be_evicted_immediately(self):
+        # Element sets are hours to days old by design. Six hours is an
+        # ordinary, healthy epoch - and it is 72x the 300 s TTL, so the object
+        # is gone on the poll that created it.
+        epoch = NOW - timedelta(hours=6)
+        store = self._store()
+        store.apply([self._record(epoch)], source="test", fetched_at=NOW)
+        # Gone already: apply() evicts as part of the write, so the object does
+        # not survive even until the next poll. Nothing later gets a chance to
+        # notice, which is what makes this failure mode so quiet.
+        assert store.object_count == 0
+
+    def test_the_propagation_instant_survives(self):
+        # The same satellite, same elements, timestamped the way D94 decided.
+        store = self._store()
+        store.apply([self._record(NOW)], source="test", fetched_at=NOW)
+        assert store.evict(now=NOW) == 0
+        assert store.object_count == 1
+
+
 class TestRecordAndDetail:
     def test_record_carries_meta_that_the_core_shape_omits(self):
         record = TrackedObjectRecord(

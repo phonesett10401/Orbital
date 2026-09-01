@@ -4642,3 +4642,90 @@ neither of which had anything to do with satellites.
 
 The discriminator is about to gain its second value. It was still right to carry
 it for its own reasons rather than for this one.
+
+---
+
+## D94 - A satellite fits the shape, and `lastSeen` is where it nearly did not
+
+**Decision:** satellites use the same ten-field `TrackedObject` as aircraft.
+`type` gains its second value. **`lastSeen` carries the instant the position is
+valid for**, which for a satellite is the moment it was propagated - not the
+epoch of the orbital elements it was propagated from. The element epoch is a
+different fact and lives in `meta`.
+
+### Nine fields map without argument
+
+| Field | Aircraft | Satellite |
+|---|---|---|
+| `id` | ICAO24 address | NORAD catalogue number |
+| `lat` / `lon` | observed | computed for the instant asked |
+| `altitude` | metres, about 12 km | metres, 400 km to 35,786 km |
+| `velocity` | ground speed | orbital speed, about 7,660 m/s |
+| `heading` | reported course | ground-track direction from the velocity vector |
+| `label` | callsign | satellite name |
+| `model` | ICAO type designator | **null** - see below |
+| `type` | `aircraft` | `satellite` |
+
+`velocity` is the one small departure worth naming: the contract calls it
+ground speed, and for a satellite this is speed in orbit rather than the speed
+of the sub-satellite point across the ground. The orbital figure is the one a
+reader expects to see and the one every other source quotes.
+
+### `model` stays null, on purpose
+
+`model` is "what the source says this object *is*, in its own vocabulary". The
+catalogue's answer is `PAY`, `R/B` or `DEB` - and since D93 excludes the last
+two, every satellite we draw would carry the identical value. A field that is
+constant across every row carries no information.
+
+The tempting move is to put the orbit class there instead, so the renderer can
+size a satellite the way `model` sizes an aircraft. That would be wrong for a
+reason worth stating: **orbit class is something we derive, not something the
+source says.** Filling a "what the source says" field with our own arithmetic
+is how a contract stops meaning what it claims. Orbit regime is computed from
+altitude at the point of drawing, and the operator and object type go in `meta`.
+
+### `lastSeen` is the field that nearly did not fit
+
+The contract says: *when the SOURCE last observed this object, not when we
+polled*. A satellite is never observed. Its position is calculated, from
+elements that were measured hours or days ago. So there are two candidate
+meanings, and they are not close together.
+
+**Putting the element epoch there does not survive contact with the store.**
+`store.py` evicts any object where `now - last_seen` exceeds
+`object_ttl_seconds`, which is 300 s (D86). Element sets are hours to days old
+by design - that is the whole point of orbital elements. Every satellite would
+be evicted on the poll that created it, and the layer would render an empty
+sky. The frontend would have failed the same way independently: it fades an
+object toward a ghost as `lastSeen` ages (D71), so a satellite with a
+six-hour-old epoch would be drawn as barely-there while sitting at a position
+accurate to a kilometre.
+
+**So `lastSeen` carries the propagation instant**, and the field's real meaning
+is the one both consumers already rely on: *how current is this position?* For
+an aircraft that is when somebody saw it. For a satellite the position was
+computed for right now, so the answer is now - and unlike the aircraft case, it
+is exact rather than an extrapolation.
+
+### The fact that gets displaced, and why it still matters
+
+Element age does not disappear; it moves to `meta` and is shown in the detail
+panel as when the orbit was last measured. It matters more than it sounds:
+SGP4 degrades by roughly a kilometre a day from epoch, and it degrades
+**silently**. Given a set from 1975 it returns a confident, precisely formatted,
+entirely wrong position.
+
+That is not hypothetical. The SatNOGS feed measured on 2026-09-01 carried 1,670
+element sets of which **87 were over a year old and the oldest was from 1975**.
+So a freshness cut at ingestion is part of this decision rather than a later
+refinement: elements older than 7 days are dropped, which on that sample keeps
+1,436 of 1,670. What reaches the client is never dangerously stale, and the
+panel shows the age of what did.
+
+### Why not an eleventh field
+
+An `elementEpoch` on the universal shape would be a satellite-specific field on
+a contract whose entire discipline is that it has none (D4). `meta` is exactly
+where the aircraft layer already puts `originCountry` for the same reason. The
+rule holds in both directions or it is not a rule.
