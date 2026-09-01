@@ -49,6 +49,7 @@ import {
   airportLayers,
 } from './airportLayer';
 import { createSatelliteIconCanvases } from './satelliteSprite';
+import { SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
 import {
   SATELLITE_LABEL_LAYER,
   SATELLITE_LAYER,
@@ -155,6 +156,7 @@ export function PlanetView() {
     let unsubscribe: (() => void) | null = null;
     let diagnostics: ReturnType<typeof createDiagnosticsPanel> | null = null;
     let model: ReturnType<typeof createModelLayer> | null = null;
+    let shell: ShellLayer | null = null;
     let terminator: ReturnType<typeof createTerminatorLayer> | null = null;
     let cleanUpResize: (() => void) | null = null;
     let frame = 0;
@@ -182,6 +184,14 @@ export function PlanetView() {
           style,
           center: [100.5, 13.75],
           zoom: 2,
+          // **Below zero on purpose.** The default floor is 0, where the globe
+          // fills the frame - and an orbital shell standing 1.35 radii off the
+          // surface needs the planet to shrink so there is room around it
+          // (D105). Phone established that MapLibre permits this by dragging a
+          // zoom slider to -2, which is where the globe becomes a speck; -1.6
+          // is enough to hold the whole constellation with the planet still
+          // recognisable.
+          minZoom: -1.6,
           attributionControl: { compact: true },
         });
 
@@ -364,6 +374,17 @@ export function PlanetView() {
           // the aircraft is moving between polls and the symbol it replaces is
           // redrawn on the same schedule, so anything slower would leave the
           // model lagging behind the callsign attached to it.
+          // Satellites at height, standing off the planet (D105). A custom
+          // layer, because MapLibre's symbols have no z - the same mechanism
+          // the aircraft model uses, with a much larger lift.
+          shell = createShellLayer(() => {
+            const state = useOrbitalStore.getState();
+            return state.activeLayer.id === 'satellite'
+              ? { objects: Array.from(state.objects.values()), selectedId: state.selectedId }
+              : { objects: [], selectedId: null };
+          });
+          map.addLayer(shell);
+
           model = createModelLayer(() => {
             const state = useOrbitalStore.getState();
             return state.selectedId ? modelTarget(state.objects.get(state.selectedId)) : null;
@@ -382,6 +403,15 @@ export function PlanetView() {
           // query, one decision, no ordering to get right (D69).
           map.on('click', (event) => {
             if (!map) return;
+            // The shell is a custom layer, so MapLibre does not hit-test it.
+            // Ask it first: when it is drawing, it *is* the satellite view.
+            if (map && shell && shell.drawnCount() > 0) {
+              const hit = shell.pick(event.point.x, event.point.y);
+              if (hit) {
+                useOrbitalStore.getState().select(hit);
+                return;
+              }
+            }
             const active = useOrbitalStore.getState().activeLayer.id;
             // One handler for both modes, querying only the layer that is
             // actually drawn. Two handlers could disagree about what was
@@ -409,6 +439,7 @@ export function PlanetView() {
           // Tracks the last mode the layers were switched to, so visibility is
           // set on the transition rather than on every frame.
           let lastSatelliteMode: boolean | null = null;
+          let lastShellShowing: boolean | null = null;
 
           const tick = () => {
             frame = requestAnimationFrame(tick);
@@ -435,6 +466,20 @@ export function PlanetView() {
             // extra dots (D96). Airport markers and the receiver-coverage
             // annotation are both aircraft furniture, and leaving them up
             // while the user is looking at orbits mixes two unrelated things.
+            // The shell and the ground symbols are two drawings of the same
+            // objects, so exactly one is on at a time (D105). The shell owns
+            // the view while the whole planet is in frame; past that the
+            // sub-satellite points do.
+            const shellShowing = satelliteMode && (map?.getZoom() ?? 99) <= SHELL_MAX_ZOOM;
+            if (shellShowing !== lastShellShowing) {
+              lastShellShowing = shellShowing;
+              for (const layer of [SATELLITE_LAYER, SATELLITE_LABEL_LAYER]) {
+                if (map?.getLayer(layer)) {
+                  map.setLayoutProperty(layer, 'visibility', shellShowing ? 'none' : 'visible');
+                }
+              }
+            }
+
             if (satelliteMode !== lastSatelliteMode) {
               lastSatelliteMode = satelliteMode;
               for (const layer of AIRCRAFT_FURNITURE) {
@@ -550,6 +595,7 @@ export function PlanetView() {
       window.clearTimeout(stallTimer);
       diagnostics?.dispose();
       model?.dispose();
+      shell?.dispose();
       terminator?.dispose();
       map?.remove();
     };

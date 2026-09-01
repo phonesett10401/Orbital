@@ -5458,3 +5458,71 @@ matter.
 The parity worry that ran through four sessions - the globe is behind, the
 globe needs the airport marker, should features be built twice - is not
 resolved, it is **dissolved**. There is one renderer. Nothing can be behind.
+
+---
+
+## D105 - The altitude shell, rebuilt on MapLibre
+
+**Decision:** satellites are drawn at height as a custom layer in MapLibre's own
+GL context, standing off the planet on the log-compressed shell from D96. The
+sub-satellite symbols and the shell are two drawings of the same objects, so
+exactly one is on at a time: the shell while the whole planet is in frame
+(zoom <= 3.2), the ground points past that.
+
+### Why this is possible, given D97 said it was not
+
+D97 claimed "a map has no room above it". The planet view is not a map:
+`basemap.ts` sets `projection: { type: 'globe' }`. Two facts make the shell
+work, and both were already true when D97 was written:
+
+- **The globe frame projects a unit sphere.** `modelFrame.ts` documents this
+  from MapLibre's own vertex shader: a vertex is a direction from the centre,
+  and altitude is a radial scale of `1 + metres / 6371008.8`. `shellFor`
+  already returns globe radii above the surface, so the conversion is **one
+  addition** - `up * (1 + shell)`. Nothing had to be derived.
+- **The camera goes below zoom 0.** The default floor is 0, where the globe
+  fills the frame and there is no room around it. Phone tested a negative
+  minimum in thirty seconds: at -2 the globe is a speck. The floor is now -1.6.
+
+Neither needed research. The first is written in a file in this repository and
+the second is a slider. D99 and D104 both turned on this and I had reasoned
+about it twice instead of looking.
+
+### What it costs: picking
+
+A symbol layer is hit-tested by MapLibre for free. A custom layer is not, and
+that is the real price of drawing at height.
+
+`pick()` answers from the positions **the last frame projected**, not from
+positions re-derived at click time. Those would disagree: satellites move at
+7.6 km/s and the frame loop runs between clicks, so re-deriving would hit-test
+against a position that was never on screen.
+
+The tolerance has a floor of 8 px regardless of the drawn size. Defect #5 was
+exactly this failure on the globe - a pick radius so tight that clicking a
+marker did nothing - and a 3 px dot at world zoom is unclickable at its own
+radius.
+
+### Occlusion is deliberately conservative
+
+A satellite behind the planet is culled with the same clipping plane
+`modelLayer` uses. That plane cuts the far hemisphere at the *surface* horizon,
+so an elevated point is hidden slightly before the planet truly covers it.
+
+Wrong in the safe direction. The alternative error - a satellite showing
+through the Earth - reads as a rendering bug, while a satellite disappearing a
+fraction early at the limb reads as it going round the back, which is what it
+is doing.
+
+### What is verified and what is not
+
+Verified: the geometry, the handover zoom, the frame selection, and that all
+three fail when broken. The radial ordering matches the orbits, the whole
+catalogue including Cluster II at 16.4 true radii lands inside 2.4 drawn radii,
+and a latitude/longitude swap fails the direction tests.
+
+**Not verified: anybody has looked at it.** No test in this project can render
+MapLibre, so the shell is pinned by arithmetic and nothing else. That is the
+same position the globe's version was in when D99 defended it - and the reason
+that decision was wrong. This entry should not be read as evidence the picture
+is good, only that the geometry is right.
