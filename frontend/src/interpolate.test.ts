@@ -9,8 +9,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { RenderableObject, TrackedObject } from '../types';
-import { STALE_AFTER_SECONDS as PLANET_STALE } from '../planet/aircraftLayer';
+import type { RenderableObject, TrackedObject } from './types';
+import { STALE_AFTER_SECONDS as PLANET_STALE } from './planet/aircraftLayer';
 import {
   EARTH_RADIUS_M,
   EASE_DURATION_MS,

@@ -21,7 +21,7 @@
  * visual.
  */
 
-import type { RenderableObject, TrackedObject } from '../types';
+import type { RenderableObject, TrackedObject } from './types';
 
 /** Mean Earth radius in metres (IUGG). Matches the backend's app/geo.py. */
 export const EARTH_RADIUS_M = 6_371_008.8;

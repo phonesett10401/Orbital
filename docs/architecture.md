@@ -14,12 +14,11 @@ it. A user can rotate and zoom, search for a flight by callsign or an airport
 by name or code, click an aircraft to see its details, and view the path that
 aircraft has been observed to fly.
 
-**There are two renderers over the same data**, and `VITE_VIEW` picks one: a
-three.js globe (`src/globe/`) and a MapLibre map on satellite imagery
-(`src/planet/`). They are not two products. The globe was built first and is
-still the default in code; the map was built to go past the zoom the globe can
-hold (D53, D54) and is where the newer work has landed. Everything below the
-render layer is shared, and neither renderer knows the other exists.
+**One renderer**, `src/planet/`, drawing with MapLibre: a globe when you are
+far out, a street map when you are close in. A three.js globe (`src/globe/`)
+came first and ran beside it through the migration; it was deleted once the map
+could do everything it did, including altitude as a real axis for satellites
+(D53, D54, D104).
 
 **Out of scope:** user accounts, native mobile apps, historical playback, and
 delay and disruption data — see §8, which also covers where the satellite layer
@@ -69,9 +68,9 @@ direction, and each layer knows only the layer directly beneath it.**
   +-------------------------------------------------------------+
   |  3. FRONTEND             frontend/src                        |
   |                                                              |
-  |  src/globe (three.js)  |  src/planet (MapLibre)  |  shared UI  |
-  |  Interpolates positions between polls; both renderers read    |
-  |  the same store and the same wingspan/airframe tables         |
+  |  src/planet (MapLibre)          |  shared UI components       |
+  |  Interpolates positions between polls; reads the store and    |
+  |  the shared wingspan / airframe / orbit tables                 |
   +-------------------------------------------------------------+
 ```
 
@@ -100,7 +99,7 @@ Summary:
 
 | Layer | Choice | One-line reason |
 |---|---|---|
-| Globe rendering | **Globe.gl** (over three.js) | Days to learn instead of weeks; CesiumJS's accuracy is invisible at this scale |
+| Globe rendering | **Globe.gl**, since removed | Days to learn instead of weeks (D1); deleted with the renderer it powered (D104). `three` remains, for the airframe mesh MapLibre draws in its own context |
 | Map rendering | **MapLibre GL** | The globe turns to mush past about z9 (D53); MapLibre goes from orbit to sub-metre on real imagery, and its custom-layer hook lets the same three.js airframe be drawn inside it (D54, D67) |
 | Backend | **FastAPI** (Python) | Pydantic makes the cross-layer contract executable and self-documenting |
 | Frontend | **React + Vite + TypeScript** | The contract is enforced at compile time on both sides of the wire |
@@ -254,10 +253,9 @@ with its reasoning in [decisions.md](decisions.md).
   a pipeline of ours — which is also the one place the app is not offline.
 - **Localhost only.** No Docker, no hosting. CORS is configured permissively
   for local development and is flagged as the change point if that ever changes.
-- **The two renderers are not at parity.** The map has airport markers and the
-  coverage overlay; the globe does not. This is drift rather than a decision,
-  and the intended resolution is to adopt the map as the default and delete the
-  globe, not to port each feature twice.
+- **There is one renderer.** The parity question that ran through several
+  sessions is gone with the globe (D104): the map answers both "where is it"
+  and "how high is it", so nothing has to be built twice.
 
 ---
 
@@ -368,25 +366,21 @@ orbital/
 └── frontend/                                                 (M4)
     ├── scripts/
     │   ├── copy-textures.mjs    Earth imagery out of node_modules  (D30)
-    │   ├── build-geography.mjs  borders and label anchors          (D44)
     │   └── build-airlines.mjs   ICAO designator lookup             (D46)
     ├── public/
     │   ├── textures/            generated, gitignored
-    │   ├── geo/                 generated, gitignored
     │   └── data/                generated, gitignored
     └── src/
         ├── airlines.ts          callsign -> airline, in the client (D46)
         ├── wingspan.ts          ICAO type -> wingspan and draw scale (D90)
         ├── airframeShape.ts     ICAO type -> proportions, by size class (D91)
-        ├── airframe.ts          the 3D airframe geometry, shared by both
-        ├── globe/               renderer 1: three.js               (M4)
-        │   ├── earth.ts             the lit planet, atmosphere, stars
-        │   ├── borders.ts           country boundaries, one line layer (D44)
-        │   ├── labels.ts            country/city/airport names, DOM    (D45)
-        │   ├── markers.ts           every tracked object, one Points
-        │   ├── route.ts             the observed track of the selection
-        │   └── selectedAircraft.ts  the selection as a 3D airframe     (D42)
-        └── planet/              renderer 2: MapLibre                (D54)
+        ├── airframe.ts          the 3D airframe geometry (three.js)
+        ├── altitudeColor.ts     the aircraft altitude ramp (D28)
+        ├── interpolate.ts       dead reckoning between polls (D71)
+        ├── sun.ts               subsolar point, for the terminator
+        ├── satelliteShell.ts    orbit regime, colour, draw height (D96, D99)
+        ├── satelliteFamily.ts   name -> spacecraft family (D101, D102)
+        └── planet/              the renderer (D54, D104)
             ├── basemap.ts           the style: imagery, roads, buildings (D56-D59)
             ├── aircraftLayer.ts     every tracked object, one SDF sprite atlas
             ├── routeLayer.ts        the observed track, and what is guessed (D82)
@@ -396,14 +390,19 @@ orbital/
             ├── airportLayer.ts      the searched-for airport, ringed and named (D89)
             ├── coverageLayer.ts     where nobody is listening, drawn on (D92)
             ├── terminatorLayer.ts   day and night, behind a toggle (D68, D73, D74)
+            ├── satelliteLayer.ts    satellites, by regime and family (D97, D101)
+            ├── satelliteSprite.ts   the family silhouettes, drawn in code (D101)
+            ├── aircraftSprite.ts    the aircraft silhouette and disc
             └── diagnostics.ts       what the map says about itself (D57)
 ```
 
-Three asset directories under `public/` are generated rather than committed:
+Two asset directories under `public/` are generated rather than committed:
 `npm install` brings the source data, `npm run assets` reduces it, and both
 run before `npm run dev` and `npm run build`. Nothing in them is fetched from
-a third party at runtime, so the app stays as offline as the fixture provider
-makes the backend.
+a third party at runtime. **The basemap tiles are**, so the frontend is no
+longer offline the way the globe was; the backend still is, on the fixture
+provider. That trade was made when the map became the only renderer (D104) and
+it is the one real thing lost with the globe.
 
 ---
 

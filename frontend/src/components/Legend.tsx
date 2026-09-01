@@ -19,7 +19,7 @@
 
 import { useState } from 'react';
 
-import { altitudeColor } from '../globe/markers';
+import { altitudeColor } from '../altitudeColor';
 import { useOrbitalStore } from '../state/store';
 import { chromeFor } from './layerChrome';
 

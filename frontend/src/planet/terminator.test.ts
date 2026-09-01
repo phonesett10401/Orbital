@@ -19,7 +19,7 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 
-import { subsolarPoint } from '../globe/sun';
+import { subsolarPoint } from '../sun';
 import { mercatorX, mercatorY, sphereVector } from './modelFrame';
 import { createTerminatorControl } from './terminatorControl';
 import {

@@ -4,8 +4,10 @@ Live aircraft positions plotted on the Earth in the browser. Rotate and zoom,
 search for a flight by callsign or for an airport by name or code, click an
 aircraft for its details, and see the path it has been observed to fly.
 
-There are **two renderers over the same data**: a 3D globe drawn with three.js,
-and a map drawn with MapLibre on satellite imagery. `VITE_VIEW` picks one.
+The world is drawn with **MapLibre** on satellite imagery, as a globe when you
+are far out and a street map when you are close in. A second renderer — a
+three.js globe — existed alongside it during the migration and was deleted once
+the map could do everything it did (D104).
 
 CSC480 team project.
 
@@ -38,19 +40,14 @@ cd frontend && npm install && npm run dev
 Then open http://localhost:5173. The dev server proxies `/api` to the backend,
 so the browser sees a single origin.
 
-That starts the globe. To get the map instead, put `VITE_VIEW=planet` in
-`frontend/.env.local` (git-ignored, and works in any shell), or set it inline:
+`npm run dev` first runs `npm run assets`, which copies the night-lights
+texture and reduces the airline dataset out of `node_modules` into `public/`.
+Those directories are generated rather than committed.
 
-```bash
-cd frontend && VITE_VIEW=planet npm run dev
-```
-
-`npm run dev` first runs `npm run assets`, which copies the Earth textures and
-reduces the geography and airline datasets out of `node_modules` into `public/`.
-Those directories are generated rather than committed, so after `npm install`
-**the globe is fully self-contained offline** — no CDN, no tile server, no API
-key. The map is the exception: it fetches basemap tiles, and is where the
-airport markers and the receiver-coverage overlay are drawn.
+**The map fetches basemap tiles**, so the frontend is not offline — the backend
+still is, on the fixture provider. Four more textures and a geography pipeline
+were dropped along with the globe renderer (D104), taking the generated assets
+from 4.5 MB to 852 KB and the app bundle from 2.1 MB to 774 KB.
 
 ## Using live data
 

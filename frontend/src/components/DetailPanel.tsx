@@ -26,7 +26,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { STALE_AFTER_SECONDS } from '../globe/interpolate';
+import { STALE_AFTER_SECONDS } from '../interpolate';
 
 import { useAirline } from '../airlines';
 import type { Airport } from '../types';

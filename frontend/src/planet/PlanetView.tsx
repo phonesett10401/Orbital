@@ -114,7 +114,7 @@ import {
   routeFeatures,
   routeLayers,
 } from './routeLayer';
-import { createAircraftIconCanvas, createUnknownIconCanvas } from '../globe/aircraftSprite';
+import { createAircraftIconCanvas, createUnknownIconCanvas } from './aircraftSprite';
 import { whenRenderable } from './container';
 import { createDiagnosticsPanel } from './diagnostics';
 import {

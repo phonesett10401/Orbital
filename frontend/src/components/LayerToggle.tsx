@@ -7,8 +7,7 @@
  * exist (D19).
  */
 
-import { config } from '../config';
-import { layersForView, useOrbitalStore } from '../state/store';
+import { LAYERS, useOrbitalStore } from '../state/store';
 
 export function LayerToggle() {
   const activeLayer = useOrbitalStore((s) => s.activeLayer);
@@ -16,7 +15,7 @@ export function LayerToggle() {
 
   return (
     <div className="layers" role="group" aria-label="Data layer">
-      {layersForView(config.view).map((layer) => (
+      {LAYERS.map((layer) => (
         <button
           key={layer.id}
           className={`layers__button ${

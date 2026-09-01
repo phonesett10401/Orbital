@@ -40,7 +40,7 @@
 import * as THREE from 'three';
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 
-import { subsolarPoint } from '../globe/sun';
+import { subsolarPoint } from '../sun';
 import type { Mat4, Vec3 } from './modelFrame';
 import { mercatorX, mercatorY, multiplyMat4, sphereVector, usesGlobeFrame } from './modelFrame';
 

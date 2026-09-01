@@ -23,8 +23,8 @@
 
 import type { LayerSpecification } from 'maplibre-gl';
 
-import { altitudeColor } from '../globe/markers';
-import { STALE_AFTER_SECONDS } from '../globe/interpolate';
+import { altitudeColor } from '../altitudeColor';
+import { STALE_AFTER_SECONDS } from '../interpolate';
 import type { RenderableObject } from '../types';
 import { scaleFor } from '../wingspan';
 

@@ -16,10 +16,8 @@ import { LayerToggle } from './components/LayerToggle';
 import { Legend } from './components/Legend';
 import { SearchBar } from './components/SearchBar';
 import { StatusBar } from './components/StatusBar';
-import { config } from './config';
 import { chromeFor } from './components/layerChrome';
 import { useOrbitalStore } from './state/store';
-import { GlobeView } from './globe/GlobeView';
 import { PlanetView } from './planet/PlanetView';
 import { useObjectPolling, useSearch, useSelectedDetail } from './hooks/usePolling';
 
@@ -34,7 +32,7 @@ export function App() {
 
   return (
     <div className="app">
-      {config.view === 'planet' ? <PlanetView /> : <GlobeView />}
+      <PlanetView />
 
       <header className="app__header">
         <div className="app__brand">

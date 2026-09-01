@@ -14,11 +14,7 @@
  */
 
 const TEXTURE_DIR = '/textures';
-const earthDay = `${TEXTURE_DIR}/earth-blue-marble.jpg`;
 const earthNight = `${TEXTURE_DIR}/earth-night.jpg`;
-const earthTopology = `${TEXTURE_DIR}/earth-topology.png`;
-const earthWater = `${TEXTURE_DIR}/earth-water.png`;
-const nightSky = `${TEXTURE_DIR}/night-sky.png`;
 
 function str(value: string | undefined, fallback: string): string {
   return value && value.length > 0 ? value : fallback;
@@ -40,16 +36,16 @@ export const config = {
   maxObjects: num(import.meta.env.VITE_MAX_OBJECTS, 2000),
 
   textures: {
-    /** Equirectangular colour map. NASA Blue Marble by default. */
-    day: str(import.meta.env.VITE_EARTH_DAY_TEXTURE, earthDay),
-    /** City lights, blended in on the unlit side by sun angle. */
+    /**
+     * City lights, used by the map's night overlay (D68).
+     *
+     * The only survivor of the five textures the globe needed: it drew a lit
+     * sphere from a day image, a bump map, a specular water mask and a
+     * starfield, and none of those exist once the imagery comes from tiles
+     * (D104). This one does, because "which places are lit at night" is not
+     * something a daytime satellite basemap can answer.
+     */
     night: str(import.meta.env.VITE_EARTH_NIGHT_TEXTURE, earthNight),
-    /** Height map, used to perturb normals so terrain catches light. */
-    topology: str(import.meta.env.VITE_EARTH_BUMP_TEXTURE, earthTopology),
-    /** Water mask, driving specular reflection so oceans shine and land does not. */
-    water: str(import.meta.env.VITE_EARTH_SPECULAR_TEXTURE, earthWater),
-    /** Star field on the inside of a large background sphere. */
-    stars: str(import.meta.env.VITE_STARFIELD_TEXTURE, nightSky),
   },
 
   /**
@@ -112,15 +108,6 @@ export const config = {
    */
   cityMode: str(import.meta.env.VITE_CITY_MODE, 'on') !== 'off',
 
-  /**
-   * Which renderer draws the world.
-   *
-   * `globe` is globe.gl and everything built on it; `planet` is the MapLibre
-   * view being migrated to (D54). Two entry points rather than a rewrite in
-   * place: the working globe is untouched while the new one reaches parity,
-   * and abandoning the direction costs deleting a folder.
-   */
-  view: str(import.meta.env.VITE_VIEW, 'globe') === 'planet' ? 'planet' : 'globe',
 
   /**
    * Globe altitude, in radii, at which city mode takes over.

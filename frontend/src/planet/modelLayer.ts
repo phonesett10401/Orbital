@@ -28,7 +28,7 @@ import * as THREE from 'three';
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 
 import { aircraftGeometryFor } from '../airframe';
-import { altitudeColor } from '../globe/markers';
+import { altitudeColor } from '../altitudeColor';
 import type { RenderableObject } from '../types';
 import { scaleFor, wingspanFor } from '../wingspan';
 import {

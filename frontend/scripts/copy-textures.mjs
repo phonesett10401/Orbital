@@ -23,11 +23,16 @@ const source = join(here, '..', 'node_modules', 'three-globe', 'example', 'img')
 const target = join(here, '..', 'public', 'textures');
 
 const TEXTURES = [
-  'earth-blue-marble.jpg', // day colour map
-  'earth-night.jpg', // city lights
-  'earth-topology.png', // height map, for relief shading
-  'earth-water.png', // water mask, for specular highlight
-  'night-sky.png', // star field
+  // City lights, and nothing else. The other four -- day colour, height map,
+  // water mask and star field -- existed to light a three.js sphere, and that
+  // renderer is gone (D104). The imagery now comes from tiles; what tiles
+  // cannot supply is which places are lit at night.
+  //
+  // `three-globe` is kept as a devDependency purely as the source of this one
+  // file. That looks odd now that nothing renders with it, and the alternative
+  // is worse: committing a 700 KB binary, which this project deliberately does
+  // not do for generated assets (D30).
+  'earth-night.jpg',
 ];
 
 async function sizeOf(path) {

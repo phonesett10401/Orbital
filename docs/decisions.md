@@ -5371,3 +5371,90 @@ takes the user somewhere they did not ask to go, which is worse.
 **Everything the active layer offers should be something that layer can
 answer.** The layer toggle, the key, the panel and now the search box all
 follow from that.
+
+---
+
+## D104 - The globe is deleted
+
+**Decision:** `src/globe/` and `src/city/` are removed. MapLibre is the only
+renderer. `VITE_VIEW` is gone; there is nothing left to choose between.
+
+This reverses D99, which was three hours old.
+
+### D99 was wrong, and it is worth being precise about how
+
+D99 kept the globe on the grounds that **altitude is a real axis on a globe and
+does not exist on a map**. The premise was false. The planet view is not a map:
+`basemap.ts` sets `projection: { type: 'globe' }`, so it is a sphere at low
+zoom. And it already draws 3D geometry standing off the surface -
+`modelLayer.ts` puts the selected aircraft's mesh into MapLibre's own GL
+context, lifted on a tangent frame by `modelFrame.ts`.
+
+So the geometry was never the obstacle. The remaining question was the
+**camera**: MapLibre's zoom floor is 0, where the globe fills the frame, and an
+orbital shell needs the sphere to shrink so there is room around it.
+
+Phone tested it in thirty seconds by setting a negative minimum zoom. At z-2
+the globe is a speck; at z0.8 it sits small in an empty frame. There is room.
+
+**The thing I called decisive was answerable by looking, and I had written a
+decision around it instead.** That is the same error as D99's other half -
+keeping a feature whose value had never been observed - and it is the error
+this project has a standing practice against.
+
+### What the globe was actually offering
+
+Nothing the map cannot do, and several things it did worse: no imagery, no
+roads, no place names, mush past z9 (D53), no family silhouettes for
+satellites, and a fly-to that landed on anonymous ground because the label
+budget draws no airports at that altitude.
+
+Phone's summary was the whole argument: *"with globe, we cant see any info of
+our planet locations."* An object over an unidentifiable patch of ground is a
+worse answer to "where is it" than the same object over Nigeria.
+
+### What it cost to remove, and what it saved
+
+Six things in `src/globe/` were genuinely shared and had to be lifted out
+first - the deletion was never `rm -rf`:
+
+| Moved to | What |
+|---|---|
+| `src/interpolate.ts` | dead reckoning, `toRenderable`, `STALE_AFTER_SECONDS` |
+| `src/sun.ts` | the subsolar point, for the terminator |
+| `src/altitudeColor.ts` | the altitude ramp, read by the symbols, the model and the key |
+| `src/planet/aircraftSprite.ts` | the silhouette and disc canvases |
+
+Then removed: **7,235 lines** of renderer, four of the five Earth textures, the
+whole geography pipeline, and five packages (`globe.gl`, `d3-geo`,
+`topojson-client`, `all-the-cities`, `@nwpr/airport-codes`, `world-atlas`).
+
+| | Before | After |
+|---|---|---|
+| Generated assets | 4.5 MB | 852 KB |
+| App bundle | 2.1 MB | 774 KB |
+
+`three` **stays**: the airframe mesh and the terminator both use it, drawn
+inside MapLibre. `three-globe` stays as a devDependency for one reason - it is
+where the night-lights texture comes from - which looks odd and is still better
+than committing a 700 KB binary against D30.
+
+### What was really lost
+
+**The frontend is no longer offline.** The globe drew a sphere from committed
+textures and needed no network at all; the map fetches basemap tiles. The
+backend is still fully offline on the fixture provider, so development without
+credentials still works, but the claim in the README had to be narrowed rather
+than restated. That is the one genuine cost, and self-hosting tiles (D7) is
+still the answer if it ever matters.
+
+**And the satellite altitude view does not exist right now.** Deleting before
+building the shell leaves a window with no altitude picture at all. Phone chose
+that deliberately after being told; git has the globe if it turns out to
+matter.
+
+### What stops being a question
+
+The parity worry that ran through four sessions - the globe is behind, the
+globe needs the airport marker, should features be built twice - is not
+resolved, it is **dissolved**. There is one renderer. Nothing can be behind.

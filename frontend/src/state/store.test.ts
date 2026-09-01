@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { ObjectListResponse, TrackedObject, TrackedObjectDetail } from '../types';
-import { LAYERS, layersForView, useOrbitalStore } from './store';
+import { LAYERS, useOrbitalStore } from './store';
 
 const NOW = 1_800_000_000_000;
 
@@ -232,21 +232,11 @@ describe('layers', () => {
     expect(new Set(resources).size).toBe(resources.length);
   });
 
-  it('offers satellites on the globe, which can draw them', () => {
-    expect(layersForView('globe').map((l) => l.id)).toContain('satellite');
+  it('offers both declared layers, since one renderer draws both', () => {
+    // The per-renderer filter is gone with the renderer that needed it (D104).
+    expect(LAYERS.map((layer) => layer.id).sort()).toEqual(['aircraft', 'satellite']);
   });
 
-  it('offers satellites on the planet view too, now that it draws them', () => {
-    expect(layersForView('planet').map((l) => l.id)).toContain('satellite');
-  });
-
-  it('never offers a layer the backend does not serve', () => {
-    for (const view of ['globe', 'planet'] as const) {
-      for (const layer of layersForView(view)) {
-        expect(LAYERS).toContainEqual(layer);
-      }
-    }
-  });
 
   it('switching layers clears objects and selection', () => {
     const store = useOrbitalStore.getState();
