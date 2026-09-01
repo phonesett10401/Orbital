@@ -1,13 +1,20 @@
 # Orbital
 
-Live aircraft positions plotted on the Earth in the browser. Rotate and zoom,
-search for a flight by callsign or for an airport by name or code, click an
-aircraft for its details, and see the path it has been observed to fly.
+Live aircraft and satellite positions plotted on the Earth in the browser.
+Rotate and zoom, search for a flight by callsign, an airport by name or code, or
+a satellite by name or catalogue number, click one for its details, and see the
+path it has been observed to fly.
 
 The world is drawn with **MapLibre** on satellite imagery, as a globe when you
 are far out and a street map when you are close in. A second renderer — a
 three.js globe — existed alongside it during the migration and was deleted once
 the map could do everything it did (D104).
+
+**Two layers, one toggle.** *Aircraft* are observed: a feed reports where they
+are, and the display is only ever as current as the last report. *Satellites*
+are **computed**: published orbital elements are propagated to the instant you
+are looking, so that layer spends no quota, needs no credentials, and keeps
+working for days if every upstream goes down.
 
 CSC480 team project.
 
@@ -98,16 +105,28 @@ an API credit.
 
 ## Status
 
-All the completion criteria in [docs/test-plan.md](docs/test-plan.md) §1 are
-met, including a verification run against the live OpenSky API (§9). Ongoing
-work deepens the aircraft globe rather than adding new scope.
+All the phase 1 completion criteria in
+[docs/test-plan.md](docs/test-plan.md) §1 are met, including a verification run
+against the live OpenSky API (§9).
+
+**Phase 2 — satellites — is built** (D93–D107). It was out of scope for most of
+the project's life and deliberately so; the reversal is recorded rather than
+quietly applied, and the tests that guarded the old boundary were re-aimed at
+the new one rather than deleted. What stays out: debris and rocket bodies, and
+any prediction of conjunctions, collisions or re-entry.
 
 ## Performance
 
-At the 2,000-marker target the browser spends 0.8 ms per frame updating markers
-— under 5% of a 60 fps budget — and draws the entire scene, all 2,000 markers
-included, in **5 draw calls**. The backend handles 10,000 objects with a 7.4 ms
-poll and 9.1 ms of thinning.
+The backend handles 10,000 objects with a **7.4 ms poll** and **9.1 ms** of
+thinning, and propagates the whole satellite catalogue — 1,432 objects — in
+**21 ms**, which is why satellite positions are computed per request rather
+than polled into a store.
+
+The frontend figures previously quoted here (0.8 ms per frame, 5 draw calls)
+were measured on the three.js globe and are **not** carried over: that renderer
+was deleted in D104 and MapLibre's own draw path has not been measured the same
+way. Removing it took the app bundle from 2.1 MB to 774 KB and the generated
+assets from 4.5 MB to 852 KB.
 
 Numbers and method are in [docs/test-plan.md](docs/test-plan.md) §4, and the
 benchmark is committed:

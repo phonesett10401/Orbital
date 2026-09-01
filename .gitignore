@@ -60,20 +60,16 @@ pnpm-debug.log*
 Thumbs.db
 desktop.ini
 
-# Earth textures, copied out of node_modules by scripts/copy-textures.mjs.
-# Kept out of git so ~4 MB of binaries do not live in history; they arrive with
-# npm install and are copied before dev and build.
+# The night-lights texture, copied out of node_modules by
+# scripts/copy-textures.mjs. Kept out of git so a 700 KB binary does not live in
+# history; it arrives with npm install and is copied before dev and build. It
+# was five files until the globe renderer was deleted (D104) -- the other four
+# lit a three.js sphere that no longer exists.
 frontend/public/textures/
 
 # Session handoff notes. Local working state that tracks in-progress status and
 # open bugs, not a committed artifact — it goes stale the moment it is shared.
 HANDOFF.md
-
-# Country borders and label anchors, generated out of node_modules by
-# scripts/build-geography.mjs. Same bargain as the textures: derived data with
-# a deterministic input, so it is rebuilt before dev and build rather than
-# committed.
-frontend/public/geo/
 
 # ICAO airline designators, reduced out of node_modules by
 # scripts/build-airlines.mjs. Generated, for the same reason.

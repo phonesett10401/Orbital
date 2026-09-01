@@ -227,6 +227,12 @@ itself a finding.
 | 12 | Specular highlight is far too strong — reads as a white blob rather than sun glint: 18° of arc across, 9.6% of the visible disc, 17× the brightness of the ocean under it | Low, visual | Looking at the running app (D48, D49, §17) | Fixed on the **second** attempt. The first retune improved every measured number and was still rejected on sight — see §17.5 |
 | 13 | **Every geography label stacked in the top-left corner** through a camera whose container reported zero width: aspect `0/0` made each projection NaN, and NaN passed both bounds tests because every comparison against it is false | Medium | Running the app (D45, §14.5) | Fixed |
 | 14 | **The status bar's data age froze at a few seconds** once the list endpoint became conditional: a 304 returns the client's own cached body, whose `ageSeconds` was measured on first fetch, while the arrival time reset every poll. Backend said 107.6 s, the bar said 1 s | Medium | Running the app (D47, §16.4) | Fixed |
+| 44 | **The satellite search box answered with airports** — "ISS" matched WISCASSET, a Maine airfield whose IATA code is ISS, so searching for the space station returned an aerodrome; the recent list underneath still offered BKK, DMK and Yangon | Medium | Phone's screenshot of the satellite search (D103, §19.52) | Fixed |
+| 43 | **The selected satellite sat on a solid white square** at z1–z5 — `icon-halo-width` on an SDF icon needs a real distance field to fall off through, and these sprites are plain alpha masks, so the halo had no gradient and flooded the whole icon cell; the smaller the icon, the more of it was square | Low, visual | Phone's screenshot at world zoom (D102, §19.51) | Fixed — selection is a ring drawn underneath instead |
+| 42 | **70% of a named catalogue was labelled "Unidentified object"** — the family classifier returned `unidentified` for anything outside its pattern list, so CUBEBUG 1, NEMO-HD, ES'HAIL 2 and 1,005 others were reported as unidentified when the catalogue names them perfectly well; a claim about the world made from a fact about our code | Medium | Phone clicked one and asked what it was (D102, §19.50) | Fixed — `satellite` and `unidentified` are now separate answers |
+| 41 | **The family silhouettes rendered as identical grey rectangles** — drawn as SDF images, where the shader reads alpha as a *distance field*; a 10 px truss and 4 px panel slots blur into one blob at the ~25 px they draw at | Low, visual | Phone's screenshot of the satellite layer (D102, §19.50) | Fixed — redrawn with nothing thinner than a tenth of the cell |
+| 40 | **Every word around the map still described aircraft** while satellites were on screen — "LIVE AIRCRAFT", "Search callsign or airport, e.g. UAL1234 or LHR", an altitude ramp ending at 12 km beside objects 35,786 km up, "364 aircraft", and "data age never" where a computed position has no age | Medium | Phone's screenshot of the working satellite layer (D100, §19.49) | Fixed |
+| 39 | **Every satellite was drawn the same cyan** — `altitudeColor` spans ground to 12 km and saturates above it, and a satellite is three orders of magnitude past the top, so the whole catalogue came out one shade and a visual channel said nothing | Low, visual | Phone's screenshot of the working satellite layer (D99, §19.49) | Fixed — discrete orbit-regime bands, shared by the map, the shell and the key |
 | 38 | **The basemap printed its own place name through the airport label** — `text-ignore-placement: true` was set alongside `text-allow-overlap: true` on the assumption they were the same switch; the first lets our label draw regardless, the second lets *other* labels draw over ours, and the result read "Don Mueang Internatio**DMK**rport" | Low, visual | Phone's screenshot after searching DMK (D89, §19.47) | Fixed |
 | 37 | **The coverage overlay was invisible over the region it described** — a 10% wash and a thin dashed edge, drawn over satellite imagery of a pale desert, is a photograph of a pale desert; it was present, correct and unreadable | Low, visual | Phone: "the no coverage display borderline are not obvious" (D92, §19.46) | Fixed on the **second** attempt, like defect #12 — the first was measured right and rejected on sight |
 | 36 | **Every aircraft disappeared from the map** — `icon-size` was written as `['*', ['interpolate', ['zoom'], ...], ['get','scale']]`, but a `zoom` expression may only be the direct input of a top-level `step`/`interpolate`; MapLibre dropped the layer **silently** while the label layer kept drawing, so the callsigns floated over nothing and the suite stayed green | **High** | Phone: "cant see the planes anymore" (D90, §19.45) | Fixed |
@@ -2946,3 +2952,168 @@ good one while the code is right, which is the entire problem.
 Final drawn widths, for the record: C172 0.094, A320 0.114, B763 0.153,
 B789 and A388 0.193 - and a widebody is 2.05x a light aircraft, which is the
 number Phone was asking for when they said big aircraft should be "2-3x fatter".
+
+---
+
+### 19.49 The satellite layer worked and everything around it lied
+
+Phase 2 shipped and Phone ran it. The dots were right; one screenshot produced
+two defects, and neither was a broken function.
+
+**Every satellite was the same cyan** (defect #39). `altitudeColor` spans
+ground to 12 km and saturates above it. A satellite is three orders of
+magnitude past that, so the whole catalogue came out one shade — a visual
+channel spent saying nothing. Rescaling the ramp would not have helped either:
+97% of the objects are in low orbit, so a continuous scale still lands almost
+everything on one colour. Fixed with **discrete orbit-regime bands**, moved
+into `satelliteShell.ts` where the map, the shell and the key all read one
+table. Three places show these colours; if they disagree, the key lies.
+
+**Every word around the map still described aircraft** (defect #40):
+
+| On screen | Actually |
+|---|---|
+| "LIVE AIRCRAFT" | satellites |
+| "Search callsign or airport, e.g. UAL1234 or LHR" | neither exists in orbit |
+| ramp: ground / 6 km / 12 km | objects at 420 km to 35,786 km |
+| "364 aircraft" | 364 satellites |
+| "data age never" | a computed position has no age |
+
+Chrome is where somebody looks to find out what they are looking at, so chrome
+describing the wrong subject is a false statement in the place a viewer is most
+likely to believe it. **657 tests passed while the header lied.**
+
+The strongest test written for it is the blunt one: no string shown in
+satellite mode may contain "aircraft", "callsign", "airport" or "heading". That
+single assertion would have caught every row of the table above.
+
+---
+
+### 19.50 Three defects with one root cause: SDF is not a picture
+
+Two of these came from the same screenshot, and the third from clicking one
+object in it.
+
+**The silhouettes rendered as identical grey rectangles** (defect #41). They
+are handed to MapLibre as SDF images so `icon-color` can tint each one by orbit
+regime. **An SDF shader reads the alpha channel as a *distance field*** — and
+what it was handed was a plain mask. A 10 px truss and 4 px slots cut into the
+solar panels have no gradient to reconstruct, so at the ~25 px they draw at
+every family blurred into the same blob. Redrawn with nothing thinner than a
+tenth of the cell and no interior cut-outs.
+
+**A selected satellite sat on a solid white square** at low zoom (defect #43).
+Same cause: `icon-halo-width` needs a distance field to fall off through, so
+with a plain mask the halo floods the entire icon cell. The smaller the icon,
+the more of the cell was square — which is why it showed at z1–z5 and not close
+in. Selection is now a **ring drawn underneath**: geometry rather than a shader
+trick, so it behaves the same at every zoom.
+
+**The lesson both share, and it has now cost three defects:** an SDF icon is
+not an image with a colour applied. Anything relying on alpha meaning
+*distance* — halos, thin detail, sharp corners — misbehaves when alpha actually
+means *inside or outside*.
+
+**And 70% of a named catalogue was called unidentified** (defect #42). Phone
+clicked one and asked what it was: CUBEBUG 1, NORAD 39153, an Argentine cubesat
+with a name, a catalogue number and a mission. The classifier returned
+`unidentified` for anything outside its pattern list, which on the live feed
+was **1,008 of 1,432 objects**. NEMO-HD, METEOR M2-2, ES'HAIL 2 and ALSAT 1N
+were all in that bucket.
+
+The label was making a claim about the world from a fact about our code. Split
+into two answers: `unidentified` for what the *catalogue* cannot name (`OBJECT`,
+`TBA`, `UNKNOWN` — 18.5%) and `satellite` with a generic body for a named
+object whose family we do not recognise (81.5%). The pattern list will always
+be partial, so the generic case is the normal case and has to look like one.
+
+**A tooling note that cost ten minutes.** The fix was defeated by a literal
+**backspace character**: writing `\b` into the source through a shell heredoc
+produced byte `0x08` rather than a regex word boundary, so the check matched
+"OBJECT" followed by a control character and therefore nothing. `grep` renders
+`0x08` invisibly and the line looked perfect; `cat -A` showed `OBJECT^H`. The
+check is now plain `startsWith` comparisons, and a sweep confirmed no other
+source file carries stray control characters. **When a regex looks right and
+behaves as though it is not there, check the bytes.**
+
+---
+
+### 19.51 What the shell is, and what is still unverified about it
+
+The altitude shell was built on the globe, deleted with it, and rebuilt as a
+MapLibre custom layer the same day (D96, D104, D105).
+
+**Two things made it possible, and both were already true** when D97 said a map
+had no room above it:
+
+- The planet view sets `projection: { type: 'globe' }` and the globe frame
+  projects a **unit sphere**, where altitude is a radial scale — documented in
+  `modelFrame.ts` from MapLibre's own vertex shader. `shellFor` already returns
+  globe radii, so the conversion is **one addition**.
+- The camera goes **below zoom 0**. Phone established this by dragging a slider
+  to −2, where the globe becomes a speck. The floor is now −1.6.
+
+Measured against the live catalogue: true altitudes span **0.010 to 16.39 Earth
+radii**, so true scale fails at both ends at once — everything past
+geostationary is outside the camera's reach and 1,390 of 1,432 objects collapse
+into a film on the surface. Compressed, everything sits within 2.27 R.
+
+**What is verified:** the radial ordering matches the orbits, Cluster II at 16.4
+true radii lands inside 2.4 drawn radii, a latitude/longitude swap fails the
+direction tests, and the layer refuses to draw in the mercator frame. All
+checked by breaking them.
+
+**What is not:** nothing in this project can render MapLibre in a test, so the
+shell, the silhouettes on it and the eight spacecraft models are pinned by
+arithmetic and nothing else. Phone has seen the shell itself; the rest has
+never been on a screen.
+
+---
+
+### 19.52 A control wired to the wrong layer
+
+Typing in satellite mode returned airports (defect #44). Worse than untidy:
+**"ISS" matched WISCASSET**, a Maine airfield whose IATA code happens to be
+ISS, so searching for the space station returned an aerodrome — and the recent
+list underneath still offered BKK, DMK and Yangon.
+
+`/api/search` gained a third list rather than folding satellites into
+`aircraft`, for the reason those two were already separate: a single ranking
+across different kinds of thing invents a comparison, and here it demonstrably
+did, putting an airport above the ISS.
+
+Satellites are matched against the **held element sets** by name and catalogue
+number, then only the matches are propagated — a keystroke costs a string scan
+over 1,670 names rather than propagating the catalogue. Tiered like the
+airports: exact, then prefix, then substring. `ISS` now returns `ISS (ZARYA)`
+and `ISS (NAUKA)` ahead of `SWISSCUBE`.
+
+**This is 19.49 one level deeper.** That was chrome *describing* the wrong
+subject; this was a control *acting on* it. Words that name the wrong layer
+mislead; a control wired to the wrong layer takes the user somewhere they did
+not ask to go.
+
+---
+
+### 19.53 A variety of vacuous test worth naming
+
+The standing practice is to break the code and check the test notices. The
+satellite model work produced a kind that looks especially convincing:
+
+```ts
+expect(spacecraftGeometryFor(family)).not.toBe(aircraftGeometryFor(model));
+```
+
+It asserts that a satellite never receives the airframe. It reads correctly, it
+passes — and it is **worthless**: two different builders return different
+objects however the layer chooses between them, so deleting the fork entirely
+leaves it green. It was caught only by deleting the fork.
+
+**The tell is that the test never touches the thing it claims to be about.**
+The claim is about the layer's choice; the assertion is about two functions
+standing side by side. It now reads the geometry off the mesh the layer handed
+the renderer.
+
+Worth keeping separate from the four vacuous tests in 19.48, which failed by
+measuring the wrong *place*. This one measures a real thing correctly and still
+proves nothing about the code it names.
