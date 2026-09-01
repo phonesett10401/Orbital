@@ -18,6 +18,7 @@ export type SatelliteFamily =
   | 'observation'
   | 'geoComms'
   | 'probe'
+  | 'satellite'
   | 'unidentified';
 
 /** Human wording for the key and the detail panel. */
@@ -28,6 +29,7 @@ export const FAMILY_LABEL: Record<SatelliteFamily, string> = {
   observation: 'Earth observation / weather',
   geoComms: 'Geostationary communications',
   probe: 'Science mission',
+  satellite: 'Satellite',
   unidentified: 'Unidentified object',
 };
 
@@ -59,17 +61,37 @@ const PATTERNS: Array<[SatelliteFamily, RegExp]> = [
 /**
  * Which family a satellite name belongs to.
  *
- * `OBJECT xx` and anything unmatched are `unidentified` — see the note at the
- * top of this file about why that matters.
+ * **Two different unknowns, and conflating them was a real defect.** The first
+ * version returned `unidentified` for anything that did not match a pattern,
+ * which on the live catalogue meant **1,008 of 1,432 objects - 70%** were
+ * labelled "Unidentified object". CUBEBUG 1, NEMO-HD, METEOR M2-2, ES'HAIL 2
+ * and ALSAT 1N are all perfectly well identified: they have names, catalogue
+ * numbers and missions. What they lack is an entry in *our* pattern list,
+ * which is a fact about this code and not about the spacecraft.
+ *
+ * So there are two outcomes for a name we cannot place:
+ *
+ * - `unidentified` - the **catalogue** does not know what it is. `OBJECT AN`,
+ *   `TBA`, `UNKNOWN`. Drawing a machine here would invent one.
+ * - `satellite` - it is a named satellite whose family we have not recognised.
+ *   A generic spacecraft silhouette is honest: we know it is a satellite, we
+ *   just do not know which kind.
+ *
+ * The pattern list will always be partial - there are tens of thousands of
+ * names and no authority publishing a family for them - so `satellite` is the
+ * normal case rather than a failure, and it should look like one.
  */
 export function familyFor(name: string | null | undefined): SatelliteFamily {
   if (!name) return 'unidentified';
-  const upper = name.toUpperCase();
-  // Explicitly unidentified in the catalogue, whatever else the string
-  // happens to contain.
-  if (/^\s*OBJECT\b/.test(upper)) return 'unidentified';
+  const upper = name.toUpperCase().trim();
+  // The catalogue's own way of saying it does not know. These beat every
+  // pattern below: debris from a Starlink launch is catalogued as an OBJECT
+  // and is not a Starlink.
+  const UNNAMED = ['OBJECT', 'TBA', 'UNKNOWN'];
+  if (UNNAMED.some((word) => upper === word || upper.startsWith(word + ' ')))
+    return 'unidentified';
   for (const [family, pattern] of PATTERNS) {
     if (pattern.test(upper)) return family;
   }
-  return 'unidentified';
+  return 'satellite';
 }

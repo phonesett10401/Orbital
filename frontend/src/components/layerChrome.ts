@@ -94,8 +94,12 @@ export function chromeFor(layer: ObjectType, gradientStops: string[]): LayerChro
           text: 'Shape shows what kind of spacecraft it is — station, constellation, navigation, observation, geostationary, science',
         },
         {
+          glyph: 'disc',
+          text: 'A plain body means a named satellite whose kind we have not recognised',
+        },
+        {
           glyph: 'dot',
-          text: 'A plain dot means the catalogue has not identified the object',
+          text: 'A dot means the catalogue itself has not identified the object',
         },
       ],
       // A computed position has no age. "Data age never" is what a null age

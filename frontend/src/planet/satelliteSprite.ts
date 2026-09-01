@@ -40,6 +40,7 @@ export const ICON_NAVIGATION = 'orbital-sat-navigation';
 export const ICON_OBSERVATION = 'orbital-sat-observation';
 export const ICON_GEO_COMMS = 'orbital-sat-geocomms';
 export const ICON_PROBE = 'orbital-sat-probe';
+export const ICON_SATELLITE = 'orbital-sat-generic';
 export const ICON_UNIDENTIFIED = 'orbital-sat-unidentified';
 
 /** Family -> the image id its silhouette is registered under. */
@@ -50,6 +51,7 @@ export const FAMILY_ICON: Record<SatelliteFamily, string> = {
   observation: ICON_OBSERVATION,
   geoComms: ICON_GEO_COMMS,
   probe: ICON_PROBE,
+  satellite: ICON_SATELLITE,
   unidentified: ICON_UNIDENTIFIED,
 };
 
@@ -74,100 +76,95 @@ function blank(): { canvas: HTMLCanvasElement; ctx: Ctx } {
   return { canvas, ctx };
 }
 
-/** A solar array: a bar with a slot down the middle so it reads as a panel. */
-function panel(ctx: Ctx, x: number, y: number, w: number, h: number): void {
-  ctx.fillRect(x, y, w, h);
-  ctx.save();
-  ctx.globalCompositeOperation = 'destination-out';
-  if (w > h) {
-    ctx.fillRect(x + 2, y + h / 2 - 2, w - 4, 4);
-  } else {
-    ctx.fillRect(x + w / 2 - 2, y + 2, 4, h - 4);
-  }
-  ctx.restore();
-}
-
 /**
- * Each shape is drawn to read at about 14 px, which is the size these are
- * actually rendered at. That rules out detail: what survives the downscale is
- * the *arrangement* — how many arrays, which side, and whether there is a dish
- * — so each family differs in silhouette rather than in ornament.
+ * Shapes are drawn **bold on purpose**, and the first version was not.
+ *
+ * MapLibre renders these as SDF icons so `icon-color` can tint each one by its
+ * orbit regime. An SDF shader treats the alpha channel as a *distance field*,
+ * and what it is handed here is a plain mask — which works for a solid
+ * silhouette and destroys fine detail. The first attempt had a 10 px truss and
+ * 4 px slots inside the solar panels, and at the ~25 px these actually render
+ * at, every one of them blurred into an identical grey rectangle.
+ *
+ * So: no element thinner than about a tenth of the cell, no interior cut-outs,
+ * and at least 10 px between parts. What has to survive the downscale is the
+ * *arrangement* — how many panels, which side, is there a dish — because that
+ * is what tells the families apart.
  */
 const DRAW: Record<SatelliteFamily, (ctx: Ctx) => void> = {
-  // A truss with four arrays. The most complex outline, for the largest thing
-  // in orbit, and the only family where the panels are paired along an axis.
+  // A long truss with a panel block at each end. The widest silhouette, for
+  // the largest thing in orbit.
   station(ctx) {
-    ctx.fillRect(C - 46, C - 5, 92, 10); // truss
-    ctx.fillRect(C - 10, C - 16, 20, 32); // modules
-    panel(ctx, C - 44, C - 30, 26, 20);
-    panel(ctx, C - 44, C + 10, 26, 20);
-    panel(ctx, C + 18, C - 30, 26, 20);
-    panel(ctx, C + 18, C + 10, 26, 20);
+    ctx.fillRect(C - 50, C - 9, 100, 18);
+    ctx.fillRect(C - 52, C - 34, 30, 68);
+    ctx.fillRect(C + 22, C - 34, 30, 68);
   },
 
-  // One flat array off to a side. Starlink's defining feature, and the only
-  // asymmetric silhouette in the set.
+  // One panel, off to a side. Starlink's defining asymmetry, and the only
+  // lopsided shape in the set.
   constellation(ctx) {
-    ctx.fillRect(C - 34, C - 12, 24, 24); // bus
-    panel(ctx, C - 6, C - 22, 46, 44);
+    ctx.fillRect(C - 40, C - 15, 30, 30);
+    ctx.fillRect(C - 4, C - 30, 44, 60);
   },
 
-  // Symmetric pair plus a mast. Navigation satellites are built to point an
-  // antenna at the whole hemisphere below them.
+  // A body between two equal panels, plus a mast pointing down at the ground
+  // it is transmitting to.
   navigation(ctx) {
-    ctx.fillRect(C - 13, C - 13, 26, 26);
-    panel(ctx, C - 46, C - 15, 30, 30);
-    panel(ctx, C + 16, C - 15, 30, 30);
-    ctx.fillRect(C - 3, C + 13, 6, 18); // nadir mast
+    ctx.fillRect(C - 17, C - 22, 34, 34);
+    ctx.fillRect(C - 52, C - 18, 28, 26);
+    ctx.fillRect(C + 24, C - 18, 28, 26);
+    ctx.fillRect(C - 8, C + 14, 16, 26);
   },
 
-  // Body, one array, and an instrument looking down. Weather and imaging
-  // satellites fly nadir-pointing in low orbit.
+  // A tall body, one panel, and a wide instrument across the bottom: these fly
+  // nadir-pointing and look at the ground.
   observation(ctx) {
-    ctx.fillRect(C - 16, C - 20, 30, 40); // bus
-    panel(ctx, C + 16, C - 18, 30, 36);
-    ctx.beginPath(); // instrument
-    ctx.arc(C - 1, C + 27, 9, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(C - 26, C - 34, 34, 52);
+    ctx.fillRect(C + 16, C - 26, 30, 36);
+    ctx.fillRect(C - 34, C + 22, 50, 18);
   },
 
-  // Two arrays and a dish. The dish is what separates it from navigation, and
-  // it is the shape that belongs at geostationary altitude.
+  // Two panels and a dish on top. The dish is the whole difference from
+  // navigation, so it is drawn large enough to survive being shrunk.
   geoComms(ctx) {
-    ctx.fillRect(C - 14, C - 8, 28, 30);
-    panel(ctx, C - 48, C - 4, 32, 26);
-    panel(ctx, C + 16, C - 4, 32, 26);
-    ctx.beginPath(); // dish
-    ctx.arc(C, C - 20, 15, Math.PI, Math.PI * 2);
+    ctx.fillRect(C - 17, C - 6, 34, 34);
+    ctx.fillRect(C - 52, C - 2, 30, 28);
+    ctx.fillRect(C + 22, C - 2, 30, 28);
+    ctx.beginPath();
+    ctx.arc(C, C - 10, 24, Math.PI, Math.PI * 2);
     ctx.fill();
-    ctx.fillRect(C - 3, C - 20, 6, 14);
   },
 
-  // A spinning drum with no arrays at all. Cluster II and its siblings are
-  // spin-stabilised and body-mounted, which is why they look like nothing else.
+  // A drum with booms and no panels at all - spin-stabilised and
+  // body-mounted, which is why it looks like nothing else here.
   probe(ctx) {
     ctx.beginPath();
     for (let i = 0; i < 6; i += 1) {
       const angle = (Math.PI / 3) * i - Math.PI / 2;
-      const x = C + Math.cos(angle) * 24;
-      const y = C + Math.sin(angle) * 24;
+      const x = C + Math.cos(angle) * 30;
+      const y = C + Math.sin(angle) * 30;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     ctx.closePath();
     ctx.fill();
-    ctx.lineWidth = 6; // booms
-    ctx.beginPath();
-    ctx.moveTo(C - 44, C);
-    ctx.lineTo(C + 44, C);
-    ctx.stroke();
+    ctx.fillRect(C - 54, C - 7, 108, 14);
   },
 
-  // Claims nothing. A tracked object nobody has identified gets a marker, not
-  // a machine.
+  // A named satellite whose family we have not recognised - which is most of
+  // the catalogue, and a fact about this code rather than about the object. A
+  // plain body with two stubs: unmistakably a spacecraft, committing to
+  // nothing about which kind.
+  satellite(ctx) {
+    ctx.fillRect(C - 20, C - 20, 40, 40);
+    ctx.fillRect(C - 44, C - 11, 20, 22);
+    ctx.fillRect(C + 24, C - 11, 20, 22);
+  },
+
+  // Claims nothing at all. The catalogue does not know what this is.
   unidentified(ctx) {
     ctx.beginPath();
-    ctx.arc(C, C, 20, 0, Math.PI * 2);
+    ctx.arc(C, C, 22, 0, Math.PI * 2);
     ctx.fill();
   },
 };

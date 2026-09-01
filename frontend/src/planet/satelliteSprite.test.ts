@@ -53,10 +53,26 @@ describe('familyFor', () => {
     }
   });
 
-  it('treats a name it does not know as unidentified rather than guessing', () => {
-    expect(familyFor('SOME UNLISTED THING 7')).toBe('unidentified');
+  it('calls a named satellite a satellite, even when it knows no more', () => {
+    // The defect this replaced: 1,008 of 1,432 live objects - 70% - were
+    // labelled "Unidentified object" because they were not in the pattern
+    // list. CUBEBUG 1 has a name, a catalogue number and a mission; what it
+    // lacks is an entry here, which is a fact about this code.
+    for (const name of ['CUBEBUG 1', 'NEMO-HD', "ES'HAIL 2", 'ALSAT 1N', 'DIWATA 2B']) {
+      expect(familyFor(name)).toBe('satellite');
+    }
+  });
+
+  it('keeps unidentified for what the catalogue itself cannot name', () => {
+    expect(familyFor('OBJECT AN')).toBe('unidentified');
+    expect(familyFor('TBA - TO BE ASSIGNED')).toBe('unidentified');
     expect(familyFor('')).toBe('unidentified');
     expect(familyFor(null)).toBe('unidentified');
+  });
+
+  it('draws a satellite and an unidentified object differently', () => {
+    // They are different claims, so they must not be the same picture.
+    expect(iconFor('CUBEBUG 1')).not.toBe(iconFor('OBJECT AN'));
   });
 
   it('OBJECT wins even when the string contains a family word', () => {

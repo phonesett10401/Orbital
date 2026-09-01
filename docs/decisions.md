@@ -5211,3 +5211,63 @@ in `src/planet`, for the same reason `wingspan.ts` is shared while
 `airframe.ts` is not: *which family this is* is a fact about the object, while
 *how to draw it* belongs to a renderer. The detail panel reads the same
 function the sprites do, so the panel and the picture cannot disagree.
+
+---
+
+## D102 - "We have not classified it" is not "nobody knows what it is"
+
+**Decision:** a satellite whose family we cannot place from its name is drawn
+as a **generic spacecraft** and called a **Satellite**. `unidentified` is
+reserved for what the *catalogue* cannot name - `OBJECT`, `TBA`, `UNKNOWN`.
+
+### The defect
+
+D101 returned `unidentified` for every name that missed the pattern list. On
+the live catalogue that was **1,008 of 1,432 objects - 70.4%**. Phone clicked
+one and asked what it was: CUBEBUG 1, NORAD 39153, an Argentine cubesat with a
+name, a catalogue number and a mission. The panel said "Unidentified object".
+
+So did NEMO-HD, METEOR M2-2, ES'HAIL 2, DIWATA 2B and ALSAT 1N. Every one of
+them is identified. What they lacked was an entry in **our** list, which is a
+fact about this code and not about the spacecraft.
+
+**The label was making a claim about the world when it could only make one
+about itself.** After the split: 18.5% genuinely unidentified, 81.5% named -
+which is what the catalogue actually looks like.
+
+### The pattern list is permanently partial
+
+There are tens of thousands of satellite names and no authority publishing a
+family for them. So the generic case is the **normal** case, not a failure, and
+it has to look like one: a plain body with two stubs, unmistakably a
+spacecraft, committing to nothing about which kind. The dot stays for the
+objects nobody has named.
+
+This does not weaken D101's rule - it sharpens it. A shape that commits to
+something unknown is still worse than one that does not. The correction is that
+"a satellite of some kind" was *known* all along, and refusing to say it was
+its own kind of wrong answer.
+
+### The shapes were also unreadable, which the same screenshot showed
+
+Six silhouettes came back as identical grey rectangles. MapLibre renders these
+as SDF so `icon-color` can tint them, and an SDF shader treats alpha as a
+*distance field* while what it is handed here is a plain mask: fine detail does
+not survive. The first draw had a 10 px truss and 4 px slots cut into the solar
+panels, which at the ~25 px they render at blurred into one blob.
+
+Redrawn with nothing thinner than a tenth of the cell, no interior cut-outs,
+and at least 10 px between parts. What has to survive the downscale is the
+*arrangement* - how many panels, which side, is there a dish.
+
+### A tooling note worth keeping
+
+The fix was briefly defeated by a **literal backspace character**. Writing
+`\b` through the shell into the source produced `0x08` rather than a regex word
+boundary, so `/^(OBJECT|TBA|UNKNOWN)\b/` matched "OBJECT" followed by a control
+character and therefore nothing at all. `grep` renders `0x08` invisibly, so the
+line looked correct; `cat -A` showed `OBJECT^H`.
+
+The check is now plain `startsWith` comparisons with no escapes in it, and a
+sweep confirmed no other source file carries stray control characters. **When a
+regex looks right and behaves as though it is not there, check the bytes.**
