@@ -512,10 +512,9 @@ export function PlanetView() {
         // tier 2 poll (D21), and it is the map's bounds rather than a camera
         // frustum here -- the same information, already computed.
         let lastViewport = 0;
-        map.on('move', () => {
-          const now = performance.now();
-          if (now - lastViewport < VIEWPORT_UPDATE_MS || !map) return;
-          lastViewport = now;
+        const publishViewport = () => {
+          if (!map) return;
+          lastViewport = performance.now();
           const bounds = map.getBounds();
           // A viewport that is the entire planet is worse than none: it spends a
           // tier 2 credit on the widest box there is, which is what the cost
@@ -523,7 +522,23 @@ export function PlanetView() {
           useOrbitalStore
             .getState()
             .setViewport(coversWholeWorld(bounds) ? null : boundsToBBox(bounds));
+        };
+
+        // Throttled while the map is moving, so a drag does not publish a
+        // viewport per frame.
+        map.on('move', () => {
+          if (performance.now() - lastViewport < VIEWPORT_UPDATE_MS) return;
+          publishViewport();
         });
+
+        // **And once more when it stops, unthrottled.** Without this the final
+        // resting position waits out whatever is left of the throttle before it
+        // is published at all, and the refetch debounce then starts from there -
+        // so letting go of a drag could cost most of a second before the request
+        // was even sent. That is what Phone reported as objects being slow to
+        // appear when turning the globe (D110). `moveend` fires once, so it
+        // costs one publish rather than a stream of them.
+        map.on('moveend', publishViewport);
 
         unsubscribe = useOrbitalStore.subscribe((state, previous) => {
           // The route is redrawn only when the selected object's detail changes,

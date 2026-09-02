@@ -242,7 +242,7 @@ describe('layers', () => {
     const store = useOrbitalStore.getState();
     store.applySnapshot(response([object('a1')]), NOW);
     store.select('a1');
-    store.setActiveLayer({ id: 'aircraft', label: 'Other', resource: 'other' });
+    store.setActiveLayer({ id: 'aircraft', label: 'Other', resource: 'other', viewportScoped: true });
     const next = useOrbitalStore.getState();
     expect(next.objects.size).toBe(0);
     expect(next.selectedId).toBeNull();

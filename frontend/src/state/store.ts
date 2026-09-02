@@ -42,8 +42,8 @@ import { toRenderable } from '../interpolate';
  * layer the app opens on.
  */
 export const LAYERS: LayerDescriptor[] = [
-  { id: 'aircraft', label: 'Aircraft', resource: 'aircraft' },
-  { id: 'satellite', label: 'Satellites', resource: 'satellites' },
+  { id: 'aircraft', label: 'Aircraft', resource: 'aircraft', viewportScoped: true },
+  { id: 'satellite', label: 'Satellites', resource: 'satellites', viewportScoped: false },
 ];
 
 

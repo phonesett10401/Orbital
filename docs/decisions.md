@@ -5761,3 +5761,56 @@ glyph, the title and the cycle order live in one table so they cannot drift.
 A hatched lens over Xinjiang and a second over northern Russia, visible in
 every vector mode and in the light palette before this change, so it predates
 it. It is not a patterned fill - hiding those did not remove it. Untracked.
+
+---
+
+## D110 - Turning the globe should not be a network operation
+
+Phone, 2026-09-02, rotating the planet: *"the response time of aircraft and
+satellites showing up are delaying a lot."*
+
+Three delays in series, and only one of them was doing any work.
+
+**1. The viewport was never published when the map stopped.** `move` was
+throttled to 500 ms and there was no `moveend` handler at all, so the final
+resting position of a drag waited out whatever was left of the throttle before
+it was published. The refetch debounce - another 250 ms - then started from
+there. Up to three quarters of a second could pass after letting go before the
+request was *sent*. `moveend` now publishes once, unthrottled, and the debounce
+is 120 ms.
+
+**2. The satellite layer was sending a viewport, and had no use for one.** This
+is the real fault. The bounding box on an aircraft request is load-bearing: it
+is how the backend learns where to spend its fast tier 2 credits (D21). On a
+satellite request it aims nothing, because that layer has **no credit model at
+all** - positions are computed from held elements (D95). All it did was make
+the globe ask the server for objects it could already have been holding.
+
+Measured before changing anything: the whole catalogue is **350 KB and 108 ms,
+1,430 objects**. The viewport was cutting that to 592, and buying a round trip
+on every rotation to do it. The client now fetches all of them and a drag
+issues **zero requests** - confirmed by counting resource entries across two
+drags, before and after.
+
+### The flag says why, not just what
+
+`LayerDescriptor.viewportScoped` rather than a check on the resource name. The
+asymmetry is a fact about the two layers' data models - one is polled under a
+credit budget, the other is computed for free - and a name comparison would
+have recorded the conclusion while losing the reason.
+
+### Tested as data, because there is no hook harness
+
+There is no component-render harness in this project, so a judgement living
+inside an effect is a judgement nothing can check. The decision is extracted to
+`bboxFor(layer, viewport)` and tested directly, the same arrangement the
+presentation modules use. Confirmed by breaking all three: re-scoping
+satellites, making `bboxFor` ignore the flag, and restoring the old debounce
+each fail exactly one test.
+
+### What is still not covered
+
+The `moveend` publish itself. It is one line inside the imperative map setup,
+which has no harness - the same gap that has swallowed every MapLibre
+rendering defect in this project. It was verified by driving the real map and
+counting requests, which is evidence but not a regression test.

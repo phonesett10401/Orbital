@@ -11,14 +11,49 @@ import { useEffect, useRef } from 'react';
 import { fetchObjectDetail, fetchObjects, search, ApiError } from '../api/client';
 import { config } from '../config';
 import { useOrbitalStore } from '../state/store';
+import type { BoundingBox, LayerDescriptor } from '../types';
 
 /**
  * Keep the object set current for the active layer and viewport.
  *
- * Refetches on an interval, and immediately whenever the viewport changes
- * enough to matter — sending the viewport is also what tells the backend where
- * to spend its fast tier 2 credits (D21).
+ * Refetches on an interval, and — for a viewport-scoped layer — immediately
+ * whenever the viewport changes enough to matter. Sending the viewport is also
+ * what tells the backend where to spend its fast tier 2 credits (D21).
+ *
+ * **A layer that is not viewport-scoped never refetches on a map move**, which
+ * is the whole point of the flag: it already holds every object, so turning the
+ * globe reveals objects rather than requesting them (D110).
  */
+/**
+ * How long to wait after the viewport settles before refetching.
+ *
+ * Was 250 ms, which sat on top of the view's own 500 ms publish throttle - so
+ * up to three quarters of a second could pass after a drag ended before the
+ * request was even sent, and Phone reported exactly that as objects being slow
+ * to appear when turning the globe.
+ */
+export const VIEWPORT_REFETCH_DEBOUNCE_MS = 120;
+
+/**
+ * The bounding box a request for this layer should carry, if any.
+ *
+ * Pulled out of the hook so it can be tested as data: there is no
+ * component-render harness in this project, so a judgement that only exists
+ * inside an effect is a judgement nothing can check.
+ *
+ * The asymmetry is the point. A viewport on an aircraft request is load-bearing
+ * - it aims the backend's tier 2 credits (D21). A viewport on a satellite
+ * request aims nothing, because that layer computes positions and has no credit
+ * model at all (D95); all it does is make the globe ask the server for objects
+ * it could already have been holding.
+ */
+export function bboxFor(
+  layer: Pick<LayerDescriptor, 'viewportScoped'>,
+  viewport: BoundingBox | null,
+): BoundingBox | null {
+  return layer.viewportScoped ? viewport : null;
+}
+
 export function useObjectPolling(): void {
   const layer = useOrbitalStore((s) => s.activeLayer);
   const viewport = useOrbitalStore((s) => s.viewport);
@@ -37,7 +72,7 @@ export function useObjectPolling(): void {
       controller = new AbortController();
       try {
         const response = await fetchObjects(layer.resource, {
-          bbox: viewportRef.current,
+          bbox: bboxFor(layer, viewportRef.current),
           signal: controller.signal,
         });
         if (!cancelled) useOrbitalStore.getState().applySnapshot(response, Date.now());
@@ -63,8 +98,12 @@ export function useObjectPolling(): void {
 
   // A meaningful viewport change is worth an immediate refetch rather than
   // waiting out the interval, so panning to a new region fills in promptly.
+  //
+  // Skipped entirely for a layer that is not viewport-scoped: its snapshot
+  // already covers the globe, so a move has nothing to fetch and firing one
+  // would replace the whole set with an identical one mid-drag.
   useEffect(() => {
-    if (!viewport) return undefined;
+    if (!viewport || !layer.viewportScoped) return undefined;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       void fetchObjects(layer.resource, { bbox: viewport, signal: controller.signal })
@@ -75,13 +114,18 @@ export function useObjectPolling(): void {
           // The interval poll will report any persistent failure; a single
           // dropped viewport refresh is not worth an error banner.
         });
-    }, 250); // debounce, so a drag does not fire a request per frame
+      // Long enough that a drag does not fire a request per frame, short
+      // enough that letting go feels like the map filling in rather than
+      // waiting. The viewport itself is already throttled upstream of this, so
+      // this delay is measured from the last *published* move, not the last
+      // mouse event.
+    }, VIEWPORT_REFETCH_DEBOUNCE_MS);
 
     return () => {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [viewport, layer.resource]);
+  }, [viewport, layer.resource, layer.viewportScoped]);
 }
 
 /** Fetch the full record, including the observed track, for the selection. */

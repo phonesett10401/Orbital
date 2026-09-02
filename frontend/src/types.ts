@@ -223,6 +223,19 @@ export interface LayerDescriptor {
   label: string;
   /** Path segment on the API, e.g. `aircraft`. */
   resource: string;
+  /**
+   * Whether this layer's requests carry the viewport.
+   *
+   * For aircraft this is not an optimisation: the bounding box is how the
+   * backend learns where to spend its fast tier 2 credits (D21), and the
+   * response is filtered to it because a live global fetch is large.
+   *
+   * For satellites it is neither. There is no credit model to aim - positions
+   * are computed rather than fetched (D95) - and the whole catalogue is 350 KB.
+   * Sending a viewport would buy nothing and cost a round trip every time the
+   * globe turns, which is exactly what it did (D110).
+   */
+  viewportScoped: boolean;
 }
 
 /**
