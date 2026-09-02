@@ -5924,3 +5924,53 @@ All of this was diagnosed from outside the app, guessing at a style nobody could
 interrogate. `window.__orbitalMap` now exists under `import.meta.env.DEV`, which
 is how the gate was finally cleared of a fault it did not have. It is stripped
 from the production bundle by constant folding.
+
+---
+
+## D113 - A photograph is a layer over a ground, not the ground itself
+
+Phone, on black rectangles filling in as the earth renders: *"can you fix it
+for all zoom modes?"*
+
+D112 removed the wasted requests; this is the other half, and the more
+important one. **The black was never a stall. It was an empty substrate.**
+
+`withImagery` put the imagery first - `[far, near, ...cartography]` - on the
+reasoning from D56 that imagery is the ground at every zoom. That reasoning was
+right about *what should be seen* and wrong about *what should be drawn*,
+because being first means there is nothing underneath, and a raster tile that
+has not arrived yet is a hole onto nothing. Nothing is black.
+
+Everything needed to fix it was already being fetched. The vector tiles
+carrying land, water and the coastline between them are **a fraction of the
+size of the imagery and land first**, and D108 had just given them a dark
+palette that sits under a satellite photograph without arguing with it. They
+were simply in the wrong place - above the imagery, and therefore forced to
+zero opacity so the photograph could be seen at all.
+
+So the layers are now `[...ground, far, near, ...overlay]`: background and
+fills beneath the photograph, lines and labels above it. The ground draws in
+every mode rather than being switched off under imagery. GIBS and Esri tiles
+are opaque JPEG, so the moment one arrives it covers the fill beneath it
+completely and imagery mode looks exactly as it did - and until it arrives, the
+reader gets dark land and sea **in the right shapes** instead of a hole.
+
+Verified by jumping the camera and screenshotting mid-load: open ocean shows as
+water, Hawaii's islands are drawn before a single photograph of them exists, and
+the imagery dissolves in over the top.
+
+### Why this was worth reordering rather than tuning
+
+The alternatives all treat the symptom. A darker background colour makes the
+holes less obvious. A shorter `raster-fade-duration` makes them arrive sooner. A
+low-resolution earth image as a base costs a new asset and only helps at the
+zooms it covers. None of them make a missing tile *say* anything, and the
+substrate does: the coastline is information, and it is information we already
+have on screen a beat earlier than the photograph.
+
+### The rule
+
+**Anything drawn as "the ground" should have something under it.** If a layer
+can be absent for even a moment - because it comes off a network, at a
+resolution, on a schedule - then whatever is beneath it is not decoration, it
+is the fallback, and it should be chosen on purpose.

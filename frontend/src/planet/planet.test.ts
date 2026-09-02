@@ -162,13 +162,39 @@ describe('withImagery', () => {
     expect(style.projection).toEqual({ type: 'globe' });
   });
 
-  it('makes imagery the ground and puts cartography over it', () => {
+  it('lays the vector ground under the imagery, and the rest over it', () => {
+    // Imagery used to be first, which made it the ground - and made a tile
+    // that had not arrived a hole showing black. It is a layer over a ground
+    // now: fills and the background beneath it, lines and labels above (D113).
     const ids = style.layers.map((layer) => layer.id);
-    expect(ids.slice(0, 2)).toEqual(['orbital-imagery-far', 'orbital-imagery-near']);
-    // Everything the basemap brought, in the order its authors chose.
-    expect(ids.slice(2)).toEqual(style.layers.slice(2).map((l) => l.id));
+    const far = ids.indexOf('orbital-imagery-far');
+    const near = ids.indexOf('orbital-imagery-near');
+    expect(near).toBe(far + 1);
+
+    const typeOf = (id: string) => style.layers.find((l) => l.id === id)!.type;
+    const below = ids.slice(0, far).map(typeOf);
+    const above = ids.slice(near + 1).map(typeOf);
+
+    // Nothing but ground below, and no ground at all above.
+    expect(below.every((t) => t === 'background' || t === 'fill')).toBe(true);
+    expect(above.some((t) => t === 'background' || t === 'fill')).toBe(false);
     expect(ids).toContain('road');
     expect(ids).toContain('building-3d');
+  });
+
+  it('keeps each group in the order the basemap authors chose', () => {
+    // Splitting the layers must not reshuffle them. Cartographic order inside
+    // each group is a hundred layers of tuning worth keeping.
+    const source = withImagery(bareStyle);
+    const ids = source.layers.map((l) => l.id).filter((id) => !id.startsWith('orbital-'));
+    const original = bareStyle.layers
+      .filter((l) => l.type !== 'raster')
+      .map((l) => l.id);
+    const isGround = (id: string) => {
+      const t = bareStyle.layers.find((l) => l.id === id)!.type;
+      return t === 'background' || t === 'fill';
+    };
+    expect(ids).toEqual([...original.filter(isGround), ...original.filter((i) => !isGround(i))]);
   });
 
   it('drops the relief raster the basemap ships, which would paint over the imagery', () => {
@@ -190,14 +216,14 @@ describe('withImagery', () => {
     expect(types).toContain('background');
     expect(types).toContain('fill');
 
+    // And they are drawn in *every* mode now, not switched off under a
+    // photograph: they are the substrate it sits on, so a tile still in flight
+    // shows dark land and sea in the right shapes rather than nothing (D113).
+    // The photograph is opaque, so imagery mode looks unchanged once it lands.
     const background = style.layers.find((l) => l.type === 'background');
-    expect((background as { paint: Record<string, unknown> }).paint['background-opacity']).toEqual(
-      whenFlat(1, 0),
-    );
+    expect((background as { paint: Record<string, unknown> }).paint['background-opacity']).toBe(1);
     const fill = style.layers.find((l) => l.type === 'fill');
-    expect((fill as { paint: Record<string, unknown> }).paint['fill-opacity']).toEqual(
-      whenFlat(1, 0),
-    );
+    expect((fill as { paint: Record<string, unknown> }).paint['fill-opacity']).toBe(1);
   });
 
   it('turns the imagery off in the other direction', () => {
@@ -267,19 +293,22 @@ describe('withImagery', () => {
   });
 
   it('survives a style with nothing but fills', () => {
-    // They are kept now rather than dropped (D75), so what "survives" means
-    // is that they are drawn at zero opacity under a photograph, not that they
-    // are gone.
+    // They are kept rather than dropped (D75), and since D113 they are kept
+    // *on*: the ground is the substrate the photograph sits on, so "survives"
+    // now means the style still has a ground and the imagery still sits above
+    // it. Sliced by position, because the fixture's second layer is the
+    // shaded-relief raster and that is dropped.
     const fillsOnly = withImagery({ ...bareStyle, layers: bareStyle.layers.slice(0, 2) });
-    expect(fillsOnly.layers.slice(0, 2).map((l) => l.id)).toEqual([
+    const at = fillsOnly.layers.findIndex((l) => l.id === 'orbital-imagery-far');
+    expect(at).toBeGreaterThan(0);
+    expect(fillsOnly.layers.slice(at).map((l) => l.id)).toEqual([
       'orbital-imagery-far',
       'orbital-imagery-near',
     ]);
-    for (const layer of fillsOnly.layers.slice(2)) {
+    for (const layer of fillsOnly.layers.slice(0, at)) {
       const paint = (layer as { paint: Record<string, unknown> }).paint;
       const opacity = paint[layer.type === 'background' ? 'background-opacity' : 'fill-opacity'];
-      expect(forMode(opacity, 'imagery')).toBe(0);
-      expect(forMode(opacity, 'flat')).toBe(1);
+      expect(opacity).toBe(1);
     }
   });
 });

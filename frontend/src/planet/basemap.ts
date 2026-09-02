@@ -415,7 +415,9 @@ export function styleForImagery(layer: LayerSpecification): LayerSpecification {
           darkestFillColor(layer.id),
           darkFillColor(layer.id),
         ),
-        'fill-opacity': patterned ? 0 : whenFlat(fillOpacityOf(layer), 0),
+        // Drawn in every mode now, because this is the substrate the imagery
+        // sits on rather than an alternative to it (D113).
+        'fill-opacity': patterned ? 0 : fillOpacityOf(layer),
       },
     } as LayerSpecification;
   }
@@ -426,7 +428,9 @@ export function styleForImagery(layer: LayerSpecification): LayerSpecification {
       paint: {
         ...layer.paint,
         'background-color': whenBasemap(DARK_GROUND, DARKEST_GROUND, DARK_GROUND),
-        'background-opacity': whenFlat(1, 0),
+        // Always on: it is what a tile that has not arrived shows instead of
+        // black, and the photograph covers it the moment one does.
+        'background-opacity': 1,
       },
     } as LayerSpecification;
   }
@@ -475,6 +479,25 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
   const cartography = style.layers
     .filter((layer) => layer.type !== 'raster')
     .map(styleForImagery);
+
+  // **The vector ground goes underneath the photograph, not over it.**
+  //
+  // Imagery arrives as raster tiles, which are large and slow; the vector
+  // tiles carrying land, water and the coastline between them are a fraction
+  // of the size and land first. Drawn in the style's own order, every one of
+  // those fills sits *above* the imagery, so the only way to see a photograph
+  // was to take them to zero - and then a tile that had not arrived yet showed
+  // the one thing underneath it, which is nothing. That is the black
+  // rectangles: not a stall, an empty substrate (D113).
+  //
+  // Split here so the ground can be laid first. The photograph is opaque, so
+  // once a tile arrives it covers the fill under it completely and imagery
+  // mode looks exactly as it did; where a tile has not arrived, the reader
+  // gets dark land and sea in the right shapes instead of a hole.
+  const isGround = (layer: LayerSpecification) =>
+    layer.type === 'background' || layer.type === 'fill';
+  const ground = cartography.filter(isGround);
+  const overlay = cartography.filter((layer) => !isGround(layer));
 
   const far: LayerSpecification = {
     id: 'orbital-imagery-far',
@@ -533,9 +556,11 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
         attribution: CLOSE_IMAGERY_ATTRIBUTION,
       },
     },
-    // Imagery first so it is the ground; cartography over it, in the order the
-    // basemap's authors chose.
-    layers: [far, near, ...cartography],
+    // Ground, then the photograph over it, then the rest of the cartography in
+    // the order the basemap's authors chose. The photograph is no longer "the
+    // ground" - it is a layer over one, which is what stops a missing tile
+    // being a hole (D113).
+    layers: [...ground, far, near, ...overlay],
   };
 }
 
