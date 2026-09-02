@@ -50,6 +50,28 @@ export const IMAGERY_NEAR_MAX_ZOOM = config.imageryCloseMaxZoom;
 export const IMAGERY_CROSSFADE_START = 5;
 export const IMAGERY_CROSSFADE_END = 7;
 
+/**
+ * Below this the close imagery is not merely invisible - it is not requested.
+ *
+ * **`raster-opacity: 0` does not stop a tile being fetched.** MapLibre loads
+ * the tiles a layer covers regardless of what its paint does with them, so the
+ * close tier was pulling Esri tiles for the whole visible hemisphere at world
+ * zoom and drawing every one of them at zero. Measured in the running app at
+ * zoom 2.8: **72 far tiles and 76 close ones**, and only the 72 were on screen.
+ *
+ * A browser allows about six connections per host, so those requests were not
+ * free - they were competing with the tiles the user was waiting to see, which
+ * is exactly the "the earth takes ages to appear" complaint (D112).
+ *
+ * Half a zoom level below the crossfade rather than exactly on it, so the close
+ * tier still has headroom to load before it is needed and the seam stays a
+ * dissolve rather than a pop.
+ */
+export const IMAGERY_NEAR_MIN_ZOOM = IMAGERY_CROSSFADE_START - 0.5;
+
+/** The imagery layer ids, so a caller can hide both without naming them. */
+export const IMAGERY_LAYERS = ['orbital-imagery-far', 'orbital-imagery-near'] as const;
+
 export const GIBS_ATTRIBUTION =
   'Imagery <a href="https://earthdata.nasa.gov/gibs">NASA EOSDIS GIBS</a>';
 
@@ -465,6 +487,7 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
     id: 'orbital-imagery-near',
     type: 'raster',
     source: 'orbital-imagery-near',
+    minzoom: IMAGERY_NEAR_MIN_ZOOM,
     paint: {
       // Fades in over the far tier rather than replacing it, so the seam is a
       // dissolve between two photographs of the same ground rather than a cut.

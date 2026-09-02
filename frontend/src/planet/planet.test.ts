@@ -39,6 +39,8 @@ import {
   IMAGERY_NEAR_MAX_ZOOM,
   loadPlanetStyle,
   resolveVectorSources,
+  IMAGERY_LAYERS,
+  IMAGERY_NEAR_MIN_ZOOM,
   DARKEST_GROUND,
   DARKEST_WATER,
   DARK_GROUND,
@@ -791,6 +793,35 @@ describe('styling cartography for imagery', () => {
   });
 });
 
+
+describe('what the map is allowed to ask the network for', () => {
+  it('does not request close imagery at a zoom that draws it at zero', () => {
+    // `raster-opacity: 0` does not stop a tile being fetched. Measured in the
+    // running app at zoom 2.8: 72 far tiles and 76 close ones, and only the 72
+    // were on screen - competing for the same six connections per host as the
+    // tiles the user was waiting to see (D112).
+    const style = withImagery(bareStyle);
+    const near = style.layers.find((l) => l.id === 'orbital-imagery-near')!;
+    expect(near.minzoom).toBe(IMAGERY_NEAR_MIN_ZOOM);
+    expect(IMAGERY_NEAR_MIN_ZOOM).toBeLessThan(IMAGERY_CROSSFADE_START);
+  });
+
+  it('keeps headroom, so the close tier is loaded before it is needed', () => {
+    // Gating exactly on the crossfade would make the seam a pop instead of a
+    // dissolve: the tiles would start loading at the zoom they must already be
+    // visible at.
+    expect(IMAGERY_CROSSFADE_START - IMAGERY_NEAR_MIN_ZOOM).toBeGreaterThan(0);
+    expect(IMAGERY_CROSSFADE_START - IMAGERY_NEAR_MIN_ZOOM).toBeLessThanOrEqual(1);
+  });
+
+  it('names both imagery layers, so a caller can hide them without guessing', () => {
+    // `visibility` is layout and takes no expression, so hiding imagery on the
+    // vector maps has to be imperative - and it must not miss a layer.
+    const style = withImagery(bareStyle);
+    const raster = style.layers.filter((l) => l.type === 'raster').map((l) => l.id);
+    expect([...IMAGERY_LAYERS].sort()).toEqual(raster.sort());
+  });
+});
 
 describe('resolveVectorSources', () => {
   const tileJson = {

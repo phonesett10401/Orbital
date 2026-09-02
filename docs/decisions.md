@@ -5814,3 +5814,113 @@ The `moveend` publish itself. It is one line inside the imperative map setup,
 which has no harness - the same gap that has swallowed every MapLibre
 rendering defect in this project. It was verified by driving the real map and
 counting requests, which is evidence but not a regression test.
+
+---
+
+## D111 - The shape and its sentence are one statement
+
+For three sessions a hatched patch over western China and central Siberia was
+recorded here as an unidentified rendering fault. It was **our own coverage
+layer** (D89), drawn deliberately, with regions measured against the live store.
+
+It was diagnosed as a broken fill twice by someone who had read the file that
+draws it. That is worth writing down rather than quietly fixing, because the
+misreading was not carelessness - it was the layer failing at exactly the job
+it exists to do.
+
+### What was actually wrong
+
+The four layers did not share a zoom window.
+
+| layer | floor | opacity from |
+|---|---|---|
+| fill, hatch, outline | **none** | 1.5 |
+| label | **2.5** | 1.5 |
+
+So from zoom 1.5 to 2.5 the shapes faded up with **no label attached to them**.
+A hatch with no sentence is not a weaker version of the claim; it is a
+different claim, and the one a reader reaches for is *"the map is broken."*
+
+That inverts the layer's whole purpose. D89 exists because an unexplained
+**hole** reads as a fault in the data. An unexplained **hatch** reads as a fault
+in the renderer, which is worse: it impugns the map itself, and it sent three
+sessions of investigation at the basemap - Liberty's fills, patterned fills,
+Esri's no-data tiles - none of which were involved.
+
+### The fix is one window, not one floor
+
+Giving the shapes a `minzoom` alone would have left the 1.5 stop in the fade
+curve unreachable and turned the appearance into a pop at full strength. So the
+curve moved with the floor: everything begins at `COVERAGE_MIN_ZOOM` and fades
+in from there. A test asserts all four layers share a window, that the window is
+a real number rather than four `undefined`s, and that the fade starts no earlier
+than the floor.
+
+### And D108 had broken its colours
+
+Separately, the coverage layer's `whenFlat` arm was a mid-slate wash, a
+`#3f5470` outline and `#33445c` text - all correct against Liberty's cream and
+all close to invisible against the `#1b212c` ground D108 introduced. The dark
+palette was checked against the basemap's own layers and not against the four
+layers Orbital adds on top of it. **Recolouring a ground is not a local change**;
+anything drawn over it was tuned against the old one.
+
+### The lesson
+
+Two of the six defects in 19.49-19.52 were chrome describing the wrong subject.
+This is the same fault in a different medium: a **drawing** making a claim its
+caption was not present to qualify. The rule that falls out is narrow enough to
+apply: *if a mark on the map needs words to be read correctly, the mark and the
+words share a visibility condition - not two conditions that agree most of the
+time.*
+
+---
+
+## D112 - Invisible tiles are not free
+
+Phone, on the earth being slow to appear while scrolling. The status readout in
+the screenshot had the answer in it: **`imagery: gibs 72 . close 76`** at zoom
+2.8, where the close tier's `raster-opacity` is zero.
+
+**`raster-opacity: 0` does not stop a tile being fetched.** MapLibre loads the
+tiles a layer covers and lets paint decide what to do with them. So half the
+imagery requests at world zoom were for photography that was drawn at zero, and
+against a browser budget of roughly six connections per host they were
+competing directly with the tiles the user was waiting to see.
+
+Worse in the vector modes: `flat` and `dark` take **both** imagery layers to
+zero, so every pan fetched a full hemisphere of satellite photography and threw
+all of it away.
+
+Measured in the running app, per pan at zoom 6 over fresh ground:
+
+| | before | after |
+|---|---|---|
+| imagery mode | 29 far + 29 close | unchanged |
+| flat / dark mode | 29 far + 29 close | **0 + 0** |
+| world zoom, close tier | 76 | **0** |
+
+Close imagery still loads where it is needed: 32 tiles at zoom 7.
+
+Two mechanisms, because the two cases are different. The close tier gets a
+`minzoom` half a level below the crossfade - enough headroom that the seam stays
+a dissolve rather than a pop. The mode gate has to be imperative, because
+`visibility` is a layout property and takes no expression, so it cannot be
+folded into `whenBasemap` with the colours.
+
+### A note on measuring this
+
+The first three measurements after page load were **wrong**, and consistently
+so: `performance.getEntriesByType('resource')` has a default buffer of **250
+entries**, and this app fills it during startup. Every count taken afterwards
+read zero, which looked exactly like "the gate broke the close tier" - and
+removing the gate changed nothing, which is what finally gave it away. Call
+`setResourceTimingBufferSize` and `clearResourceTimings` before counting, or the
+instrument reports a fixed answer regardless of the code.
+
+### A map handle, in development only
+
+All of this was diagnosed from outside the app, guessing at a style nobody could
+interrogate. `window.__orbitalMap` now exists under `import.meta.env.DEV`, which
+is how the gate was finally cleared of a fault it did not have. It is stripped
+from the production bundle by constant folding.

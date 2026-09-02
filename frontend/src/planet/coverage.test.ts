@@ -4,6 +4,7 @@ import {
   COVERAGE_GAPS,
   COVERAGE_LABEL_SOURCE,
   COVERAGE_MAX_ZOOM,
+  COVERAGE_MIN_ZOOM,
   COVERAGE_SOURCE,
   coverageFeatures,
   coverageLabelFeatures,
@@ -140,5 +141,54 @@ describe('the hatch', () => {
     if (image === null) return;
     expect(image.width).toBeGreaterThan(0);
     expect(image.height).toBe(image.width);
+  });
+});
+
+describe('the shape and its sentence are one statement', () => {
+  it('draws no shape at a zoom where the label cannot draw', () => {
+    // The fault this catches: the label carried a minzoom and the fill, hatch
+    // and outline did not, so below 2.5 a hatched patch drew over western China
+    // with nothing to say what it was. An unexplained hole reads as a fault -
+    // that is why this layer exists - and an unexplained hatch reads as a
+    // *rendering* fault, which impugns the map rather than the data (D111).
+    const layers = coverageLayers();
+    const windows = layers.map((l) => [l.minzoom, l.maxzoom]);
+    for (const w of windows) expect(w).toEqual(windows[0]);
+  });
+
+  it('gives every coverage layer a floor, not just the label', () => {
+    // Stated separately from the equality above, because four layers that all
+    // have `undefined` are also all equal.
+    for (const layer of coverageLayers()) {
+      expect(typeof layer.minzoom).toBe('number');
+      expect(layer.minzoom).toBe(COVERAGE_MIN_ZOOM);
+    }
+  });
+
+  it('starts fading in no earlier than the floor it is allowed to draw at', () => {
+    // A `minzoom` alone would have left the old 1.5 stop unreachable and made
+    // the shapes pop into existence at full strength. Both halves of the fix
+    // are needed, so both are asserted (D111).
+    for (const layer of coverageLayers()) {
+      const paint = layer.paint as Record<string, unknown>;
+      const key = Object.keys(paint).find((k) => k.endsWith('-opacity'))!;
+      const ramp = paint[key] as unknown[];
+      expect(ramp[0]).toBe('interpolate');
+      expect(ramp[3]).toBe(COVERAGE_MIN_ZOOM);
+      expect(ramp[4]).toBe(0);
+    }
+  });
+
+  it('draws the label light on both grounds, because both are dark', () => {
+    // Pre-D108 the flat basemap was cream and this arm was near-black. The
+    // ground is #1b212c now and that text would be invisible on it.
+    const label = coverageLayers().find((l) => l.type === 'symbol')!;
+    const colour = (label.paint as Record<string, unknown>)['text-color'] as unknown[];
+    const flatArm = String(colour[3]);
+    const luminance = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      return 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
+    };
+    expect(luminance(flatArm)).toBeGreaterThan(160);
   });
 });

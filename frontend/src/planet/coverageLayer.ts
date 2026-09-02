@@ -66,6 +66,26 @@ export const COVERAGE_LABEL_LAYER = 'orbital-coverage-label';
  */
 export const COVERAGE_MAX_ZOOM = 5.5;
 
+/**
+ * Below this zoom the shapes are hidden too, not just the label.
+ *
+ * **The shape and its label are one statement.** The label carries a `minzoom`
+ * of its own because at world zoom the region is a few hundred pixels across
+ * and the type does not fit in it; the fill, hatch and outline carried none, so
+ * between zoom 0 and here a hatched patch drew over western China and central
+ * Siberia with nothing at all to say what it was.
+ *
+ * That is the exact failure this layer exists to prevent, one level up. An
+ * unexplained *hole* reads as a fault, which is why the shapes were drawn; an
+ * unexplained *hatch* reads as a rendering fault, which is worse, because it
+ * impugns the map rather than the data. It was diagnosed as a broken fill twice
+ * in one session by someone who had read this file (D111).
+ *
+ * So all four layers share one window. Nothing here draws unless the sentence
+ * that explains it draws with it.
+ */
+export const COVERAGE_MIN_ZOOM = 2.5;
+
 export interface CoverageRegion {
   name: string;
   /** Aircraft per 100 square degrees when this was measured, for the record. */
@@ -223,12 +243,19 @@ export function createHatchImage(size = 8): ImageData | null {
  * shapes do not blink out mid-gesture.
  */
 export function coverageLayers(): LayerSpecification[] {
+  // The fade-in begins where the layer is allowed to draw at all, not before.
+  //
+  // It used to start at 1.5 and reach full at 2.5, which is precisely the
+  // window the label's own floor excluded - so for a whole zoom level the
+  // hatch faded up over western China with no sentence attached to it. Closing
+  // that with a `minzoom` alone would have left these stops unreachable and
+  // turned the appearance into a pop, so the curve moves with the floor.
   const fadeOut = (peak: number): unknown => [
     'interpolate',
     ['linear'],
     ['zoom'],
-    1.5, 0,
-    2.5, peak,
+    COVERAGE_MIN_ZOOM, 0,
+    COVERAGE_MIN_ZOOM + 0.8, peak,
     COVERAGE_MAX_ZOOM - 1, peak,
     COVERAGE_MAX_ZOOM, 0,
   ];
@@ -239,8 +266,12 @@ export function coverageLayers(): LayerSpecification[] {
       type: 'fill',
       source: COVERAGE_SOURCE,
       maxzoom: COVERAGE_MAX_ZOOM,
+      minzoom: COVERAGE_MIN_ZOOM,
       paint: {
-        'fill-color': whenFlat('#7f97b8', '#e8eef8'),
+        // Both grounds are dark since D108, so both want the light wash. The
+        // vector arm used to be a mid slate, correct against cream and close to
+        // invisible against #1b212c.
+        'fill-color': whenFlat('#cddaee', '#e8eef8'),
         'fill-opacity': fadeOut(0.09) as never,
       },
     } as LayerSpecification,
@@ -252,6 +283,7 @@ export function coverageLayers(): LayerSpecification[] {
       type: 'fill',
       source: COVERAGE_SOURCE,
       maxzoom: COVERAGE_MAX_ZOOM,
+      minzoom: COVERAGE_MIN_ZOOM,
       paint: {
         'fill-pattern': COVERAGE_HATCH_IMAGE,
         'fill-opacity': fadeOut(0.5) as never,
@@ -262,9 +294,10 @@ export function coverageLayers(): LayerSpecification[] {
       type: 'line',
       source: COVERAGE_SOURCE,
       maxzoom: COVERAGE_MAX_ZOOM,
+      minzoom: COVERAGE_MIN_ZOOM,
       layout: { 'line-join': 'round' },
       paint: {
-        'line-color': whenFlat('#3f5470', '#ffffff'),
+        'line-color': whenFlat('#dce6f4', '#ffffff'),
         'line-width': 2,
         // A soft edge under the stroke, so the boundary survives being drawn
         // over mountain shadow and cloud without needing to be loud.
@@ -278,7 +311,7 @@ export function coverageLayers(): LayerSpecification[] {
       // The point source, not the polygons: see coverageLabelFeatures.
       source: COVERAGE_LABEL_SOURCE,
       maxzoom: COVERAGE_MAX_ZOOM,
-      minzoom: 2.5,
+      minzoom: COVERAGE_MIN_ZOOM,
       layout: {
         'text-field': 'NO RECEIVER COVERAGE',
         'text-font': ['Noto Sans Regular'],
@@ -289,8 +322,8 @@ export function coverageLayers(): LayerSpecification[] {
         'text-optional': true,
       },
       paint: {
-        'text-color': whenFlat('#33445c', '#ffffff'),
-        'text-halo-color': whenFlat('rgba(255,255,255,0.8)', 'rgba(0,0,0,0.72)'),
+        'text-color': whenFlat('#e4ecf8', '#ffffff'),
+        'text-halo-color': whenFlat('rgba(6,9,14,0.8)', 'rgba(0,0,0,0.72)'),
         'text-halo-width': 1.4,
         'text-opacity': fadeOut(0.9) as never,
       },

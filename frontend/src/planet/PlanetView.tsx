@@ -33,7 +33,9 @@ import {
   selectionFromHits,
 } from './aircraftLayer';
 import {
+  BASEMAP_IMAGERY,
   BASEMAP_STATE,
+  IMAGERY_LAYERS,
   basemapDimLayer,
   firstLabelLayerId,
   loadPlanetStyle,
@@ -127,6 +129,27 @@ import { boundsToBBox, coversWholeWorld } from './viewport';
 
 /** How often to republish the viewport, matching the globe view's cadence. */
 const VIEWPORT_UPDATE_MS = 500;
+
+/**
+ * Show the imagery layers only on the map that has imagery in it.
+ *
+ * Paint expressions already take them to zero opacity on the two vector maps,
+ * and that is not enough: **MapLibre fetches the tiles a layer covers whether
+ * or not its paint draws them.** So flat and dark mode were pulling a full
+ * hemisphere of satellite photography per pan and throwing all of it away,
+ * against a browser budget of about six connections per host - the same budget
+ * the tiles the user is actually waiting for have to come out of (D112).
+ *
+ * `visibility` is a layout property and takes no expression, so this cannot be
+ * folded into `whenBasemap` with the colours. It is set imperatively wherever
+ * the mode is set, which is why both callers go through here.
+ */
+function setImageryVisible(map: import('maplibre-gl').Map, mode: string): void {
+  const visibility = mode === BASEMAP_IMAGERY ? 'visible' : 'none';
+  for (const id of IMAGERY_LAYERS) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
+  }
+}
 
 export function PlanetView() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -234,6 +257,18 @@ export function PlanetView() {
           // before anything else is added, so the first frame is already the
           // right map rather than the imagery flashing up and being switched.
           map.setGlobalStateProperty(BASEMAP_STATE, config.basemap);
+          setImageryVisible(map, config.basemap);
+
+          // A handle for the console, in development only.
+          //
+          // Every rendering defect in this project has been diagnosed by
+          // looking at the running map, and until now that meant reasoning
+          // about a style nobody could interrogate - `queryRenderedFeatures`
+          // and `getLayer` were unreachable from outside. Stripped from the
+          // production bundle by the constant folding on `import.meta.env.DEV`.
+          if (import.meta.env.DEV) {
+            (window as unknown as { __orbitalMap?: unknown }).__orbitalMap = map;
+          }
 
           // SDF, so one silhouette can be tinted per aircraft by altitude rather
           // than baking an image per colour (D28).
@@ -269,8 +304,10 @@ export function PlanetView() {
           // Photograph, plain map or dark map. Above the night toggle in the
           // corner because it changes more of the screen than night does.
           const basemapControl = createBasemapControl((mode) => {
-            map?.setGlobalStateProperty(BASEMAP_STATE, mode);
-            map?.triggerRepaint();
+            if (!map) return;
+            map.setGlobalStateProperty(BASEMAP_STATE, mode);
+            setImageryVisible(map, mode);
+            map.triggerRepaint();
           }, config.basemap);
           map.addControl(basemapControl, 'top-right');
 
