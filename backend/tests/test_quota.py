@@ -143,11 +143,19 @@ class TestConfiguredPresetsFitTheirBudget:
         assert Settings(quota_preset="union", provider="union").daily_allowance == 4000
 
     def test_authenticated_preset_projects_the_documented_figure(self):
-        assert Settings(quota_preset="authenticated").projected_daily_credits() == 3072
+        # The provider is named, not inherited. This preset's cost is a fact
+        # about polling a metered source, and under the `union` provider the
+        # figure is different by design - the cadence comes off the free feed
+        # instead (D83). The test read 3,072 only because the default provider
+        # happened to be a metered one (D114).
+        settings = Settings(quota_preset="authenticated", provider="opensky")
+        assert settings.projected_daily_credits() == 3072
 
     def test_startup_fails_when_an_interval_overspends(self):
         with pytest.raises(ValueError, match="credits/day"):
-            Settings(quota_preset="authenticated", daily_credit_budget=1000)
+            Settings(
+                quota_preset="authenticated", provider="opensky", daily_credit_budget=1000
+            )
 
     def test_unknown_preset_fails_loudly(self):
         with pytest.raises(ValueError, match="unknown quota preset"):
@@ -175,10 +183,14 @@ class TestConfiguredPresetsFitTheirBudget:
     def test_ttl_must_exceed_the_longest_interval(self):
         # Otherwise every response is stale the moment it is served.
         with pytest.raises(ValueError, match="stale by construction"):
-            Settings(quota_preset="authenticated", snapshot_ttl_seconds=10.0)
+            Settings(
+                quota_preset="authenticated", provider="opensky", snapshot_ttl_seconds=10.0
+            )
 
     def test_derived_ttl_outlives_the_slowest_preset(self):
-        settings = Settings(quota_preset="anonymous")
+        # `anonymous` is an OpenSky account tier, so it is asserted against the
+        # provider it describes rather than against whatever the default is.
+        settings = Settings(quota_preset="anonymous", provider="opensky")
         assert settings.snapshot_ttl > settings.longest_interval
 
 
@@ -227,3 +239,31 @@ class TestThrottle:
         assert not ThrottleLevel.MINIMAL.allows_focus_tier
         assert ThrottleLevel.MINIMAL.allows_polling
         assert not ThrottleLevel.EXHAUSTED.allows_polling
+
+
+def test_the_shipped_defaults_are_a_coherent_live_configuration():
+    """The defaults must name a pair that actually works together.
+
+    `provider` and `quota_preset` default independently, and only some
+    combinations mean anything. `union` with the `authenticated` preset is
+    valid but pointless - it polls at 300 s/90 s, throwing away the faster
+    cadence the free feed exists to buy - and `union` with a preset built for a
+    metered-only provider projects over the ceiling and is refused outright.
+
+    Defaults are what a fresh clone runs, and nobody reads two `Field` lines
+    forty lines apart and checks they agree (D114).
+    """
+    from app.config import PRESETS, Settings
+
+    settings = Settings(_env_file=None)
+    assert settings.provider == "union"
+    assert settings.quota_preset == "union"
+
+    # And the pair is under budget, which is the check that would have caught
+    # the mismatched combination.
+    assert settings.projected_daily_credits() <= settings.daily_allowance * 0.85
+
+    # The union preset's cadence is the faster one; that is why it exists.
+    union_global = next(j for j in PRESETS["union"] if j.name == "global")
+    auth_global = next(j for j in PRESETS["authenticated"] if j.name == "global")
+    assert union_global.interval_seconds < auth_global.interval_seconds

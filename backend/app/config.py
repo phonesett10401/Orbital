@@ -12,9 +12,8 @@ git-ignored. ``.env.example`` documents the names with empty values.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -132,20 +131,51 @@ DAILY_ALLOWANCES: dict[str, int] = {
 }
 
 
+#: Where the backend's settings file lives, as an absolute path.
+#:
+#: Named and absolute rather than the bare ``".env"`` pydantic defaults to,
+#: because that is resolved against the *working directory*: started from
+#: ``backend/`` it is found, and started from the repository root - which
+#: ``uvicorn --app-dir backend`` does - it is not. A missing env file is not an
+#: error in pydantic, so the backend simply came up on every default, on the
+#: fixture provider, while this file said ``opensky`` (D114).
+#:
+#: A constant rather than an expression inside ``model_config`` so that the
+#: test suite can assert this without reading a value the suite itself
+#: overrides: ``conftest`` sets ``model_config["env_file"] = None`` to keep the
+#: developer's own file out of the tests.
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+
+
 class Settings(BaseSettings):
     """Application settings, all overridable by ``ORBITAL_``-prefixed env vars."""
 
+    #: Resolved from this file, not from the working directory.
+    #:
+    #: ``env_file=".env"`` is relative to wherever the process was started, so
+    #: the backend read its settings only when launched from ``backend/``. Run
+    #: from the repository root - which is what ``uvicorn --app-dir backend``
+    #: does, and what ``.claude/launch.json`` does - it found no file, silently
+    #: fell back to every default, and came up on the **fixture** provider while
+    #: ``.env`` plainly said ``opensky``. No error, no warning: just the wrong
+    #: data source and a log line nobody reads twice (D114).
+    #:
+    #: An absolute path makes the answer the same from any directory.
     model_config = SettingsConfigDict(
         env_prefix="ORBITAL_",
-        env_file=".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
     # ---- data source -------------------------------------------------------
     provider: str = Field(
-        default="fixture",
-        description="Which provider to run. 'fixture' needs no credentials (D8).",
+        default="union",
+        description=(
+            "Which provider to run. 'union' is the real one: adsb.lol on every "
+            "poll, OpenSky as a 120 s supplement (D83). 'fixture' is offline "
+            "sample data and needs no credentials (D8)."
+        ),
     )
     object_type: ObjectType = ObjectType.AIRCRAFT
 
@@ -220,7 +250,7 @@ class Settings(BaseSettings):
 
     # ---- quota -------------------------------------------------------------
     quota_preset: str = Field(
-        default="authenticated",
+        default="union",
         description=(
             "Which polling preset to run: anonymous, authenticated, contributor, "
             "or union. The first three are OpenSky account tiers and their "

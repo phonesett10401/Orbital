@@ -35,7 +35,9 @@ def client(monkeypatch):
     """An app whose satellite layer reads committed elements and never dials out."""
     monkeypatch.setattr("app.providers.satellites.utcnow", lambda: fixture_now())
 
-    settings = Settings(provider="fixture", satellite_layer_enabled=True)
+    settings = Settings(
+        provider="fixture", quota_preset="authenticated", satellite_layer_enabled=True
+    )
     app = create_app(settings, routes=offline_routes())
 
     original = SatelliteProvider.__init__
@@ -122,7 +124,11 @@ class TestTheLayerCanBeSwitchedOff:
     def test_disabled_reports_404_not_503(self):
         # A permanent property of the deployment, not a transient failure.
         app = create_app(
-            Settings(provider="fixture", satellite_layer_enabled=False),
+            Settings(
+                provider="fixture",
+                quota_preset="authenticated",
+                satellite_layer_enabled=False,
+            ),
             routes=offline_routes(),
         )
         with TestClient(app) as c:

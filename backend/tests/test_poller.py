@@ -72,7 +72,7 @@ def provider() -> FakeProvider:
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings(quota_preset="authenticated")
+    return Settings(quota_preset="authenticated", provider="opensky")
 
 
 @pytest.fixture

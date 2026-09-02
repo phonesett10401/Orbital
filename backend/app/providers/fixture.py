@@ -1,8 +1,13 @@
 """A Provider that replays recorded data from disk instead of calling the network.
 
-This exists so three people can build the API layer, the thinning logic and the
-entire frontend without any of them holding OpenSky credentials or spending
-from a shared daily quota. It is the default provider in development.
+This exists so the API layer, the thinning logic and the entire frontend can be
+built without holding OpenSky credentials or spending from a shared daily
+quota.
+
+**It is no longer the default** - the backend comes up on the live union feed
+now (D115). It remains the provider the test suite runs on, it is what makes
+the app work with no network at all, and it is the only way to develop against
+a moving map when a credit budget is exhausted. Keep it.
 
 The fixture file holds *already normalized* objects rather than raw OpenSky
 rows. That keeps this module independent of any one upstream format, at the

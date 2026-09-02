@@ -109,7 +109,9 @@ class TestCompression:
 
     def test_the_threshold_is_configurable(self):
         app = create_app(
-            settings=Settings(quota_preset="authenticated", gzip_min_bytes=10**9),
+            settings=Settings(
+                quota_preset="authenticated", provider="fixture", gzip_min_bytes=10**9
+            ),
             provider=BulkProvider(),
             routes=offline_routes(),
         )

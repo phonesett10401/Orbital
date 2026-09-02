@@ -2,14 +2,52 @@
 
 ``anyio_backend`` pins async tests to asyncio. Without it, anyio's plugin would
 also try to run every async test under trio, which we do not depend on.
+
+``_settings_ignore_local_env`` is the more important one: it stops the suite
+reading the developer's own ``.env``.
 """
 
 from __future__ import annotations
 
+import os
+
 import httpx
 import pytest
 
+from app.config import Settings
 from app.ingestion.flightroutes import FlightRoutes
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _settings_ignore_local_env():
+    """Insulate every ``Settings()`` in the suite from the local ``.env``.
+
+    A test that builds ``Settings(provider="fixture")`` is stating the whole
+    configuration it means to test. It was not: pydantic fills every field the
+    call omits from the environment and from ``.env``, so the suite's result
+    depended on an untracked file that differs per machine.
+
+    That was always true when pytest ran from ``backend/`` - it simply never
+    showed, because the values that happened to be in the file were compatible.
+    The day ``.env`` changed to ``union``/``union``, twelve tests began erroring
+    on a preset none of them had asked for: ``provider="fixture"`` from the call
+    and ``quota_preset="union"`` from the file, a combination that projects
+    8,640 credits a day and is correctly refused (D114).
+
+    The suite is not the place to discover that. A test asserts a claim about a
+    configuration it names, so anything it does not name must come from the
+    defaults in ``config.py`` and nowhere else.
+    """
+    original = Settings.model_config.get("env_file")
+    Settings.model_config["env_file"] = None
+    removed = {k: v for k, v in os.environ.items() if k.startswith("ORBITAL_")}
+    for key in removed:
+        del os.environ[key]
+    try:
+        yield
+    finally:
+        Settings.model_config["env_file"] = original
+        os.environ.update(removed)
 
 
 @pytest.fixture

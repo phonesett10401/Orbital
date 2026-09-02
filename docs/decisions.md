@@ -5974,3 +5974,116 @@ have on screen a beat earlier than the photograph.
 can be absent for even a moment - because it comes off a network, at a
 resolution, on a schedule - then whatever is beneath it is not decoration, it
 is the fallback, and it should be chosen on purpose.
+
+---
+
+## D114 - Settings are found from the code, not from the working directory
+
+Phone asked for the live backend. The backend had been running **fixture** all
+day, while `backend/.env` plainly said `ORBITAL_PROVIDER=opensky`.
+
+`SettingsConfigDict(env_file=".env")` resolves that path against the **process
+working directory**. Started from `backend/`, as every documented command in
+this project does, it works. Started from the repository root - which
+`uvicorn --app-dir backend` does, and which the `.claude/launch.json` committed
+earlier the same day does - pydantic finds no file, falls back to every default,
+and comes up on a different data source.
+
+**Nothing reports this.** A missing `env_file` is not an error in pydantic; it
+is the ordinary case of "no file, use defaults". The only evidence was one
+startup line, `provider=fixture`, in a log that also says it is ready.
+
+The fix is an absolute path built from `config.py`'s own location, so the
+answer cannot depend on where anybody happened to be standing.
+
+### This is the second one from the same cause, on the same day
+
+The launch config moved the working directory, and two separate things resolved
+relative to it broke quietly:
+
+| | resolved against cwd | symptom |
+|---|---|---|
+| element cache | `.cache/` | a 450 KB blob appeared at the repo root, outside the gitignore rule that named `backend/.cache/` |
+| settings | `.env` | the wrong provider, silently |
+
+The cache was caught because git showed an untracked file. The settings were
+caught only because somebody asked for live data and looked at what came back.
+
+**The general rule:** a path that a program resolves against its working
+directory is a path whose meaning belongs to whoever launched it. That is
+correct for a file the user names on the command line and wrong for a file that
+is part of the application. Configuration, bundled data and caches are the
+application's, so they should be found from the code.
+
+### Tested as a property, not as a launch
+
+Starting a server from two directories inside a test is a lot of machinery for
+one assertion. The test instead asserts what actually has to be true: the
+configured `env_file` is a `Path`, it is **absolute**, it is named `.env`, and
+its parent is the backend package - and that it still is after `chdir` to a
+temporary directory. Reverting the fix fails it on the first assertion.
+
+A note on that check: the first attempt to verify it reported "not caught",
+which was the *harness* failing rather than the test - `.venv/Scripts/python`
+is not a command `cmd.exe` understands, so pytest never ran and the absence of
+the word "failed" was read as a pass. **A break-test that reports nothing broke
+must be shown to have actually run.**
+
+---
+
+## D115 - The live feed is the default; the fixture stays for the suite
+
+Phone: *"remove demo backend, we dont need anymore and make backend Union
+permanent."*
+
+Half of that is done and half of it should not be.
+
+**Union is now the default.** `provider` defaulted to `fixture` and
+`quota_preset` to `authenticated`, which meant the backend served recorded
+sample data unless someone remembered to say otherwise - and after D114 it did
+so even when `.env` said otherwise. Both defaults are now `union`: adsb.lol on
+every poll with OpenSky as a 120 s supplement, 2,880 projected credits a day
+against a 4,000 allowance.
+
+**The fixture provider stays.** It is not a demo; it is what the suite runs on.
+526 tests, the whole API layer, the thinning logic and every frontend session
+without credentials. Deleting it would delete the ability to test the API at
+all, and the ability to develop against a moving map with no network or an
+exhausted budget. Its docstring now says it is no longer the default, so nobody
+reads it as the normal path.
+
+### The defaults were two facts that had to agree, and nothing checked that
+
+`provider` and `quota_preset` are separate fields declared forty lines apart,
+and only some pairs mean anything. `union` with the `authenticated` preset is
+valid and pointless - 300 s/90 s intervals, throwing away the faster cadence
+the free feed exists to buy. `union` preset on a metered-only provider projects
+8,640 credits a day and is refused outright. A test now asserts the shipped
+pair is coherent and under budget, because nobody reads two `Field` lines and
+checks they agree.
+
+### Changing a default exposed six tests that were reading it
+
+`Settings(provider="fixture")` and `Settings(quota_preset="authenticated")`
+appear throughout the suite, each naming *one* of the pair and inheriting the
+other. They passed for as long as the inherited value happened to suit them.
+Moving the default broke six at once - not because the change was wrong, but
+because those tests were asserting a configuration they had not stated.
+
+Every one now names both. **The rule that keeps falling out of this file: a
+test asserts a claim about a configuration it names, so anything it does not
+name must come from a default it is prepared to have change.**
+
+### And the suite was reading the developer's own `.env`
+
+Found the same afternoon and the sharpest of the three. D114 made the settings
+file resolve from the code rather than the working directory, which is correct
+- and it meant every `Settings()` in the suite began loading a real, untracked,
+per-machine file. Twelve tests erred immediately, on a preset none of them had
+asked for.
+
+The fault was older than the fix. Run from `backend/`, pytest had *always* read
+that file; it simply never showed, because the values in it happened to be
+compatible. A suite whose result depends on an untracked local file is not a
+suite. `conftest` now nulls `env_file` and strips `ORBITAL_*` from the
+environment for the session, and removing that fixture reproduces the errors.

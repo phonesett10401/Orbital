@@ -284,6 +284,8 @@ class TestRegistry:
         from app.config import Settings
         from app.providers import registry
 
-        built = registry.build("satellites", Settings(provider="satellites"))
+        built = registry.build(
+            "satellites", Settings(provider="satellites", quota_preset="authenticated")
+        )
         assert built.object_type is ObjectType.SATELLITE
         assert built.remaining_credits is None

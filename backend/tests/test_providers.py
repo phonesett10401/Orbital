@@ -7,6 +7,8 @@ wrong, everything downstream is being tested against a lie.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import json
 from datetime import timedelta
 
@@ -319,3 +321,35 @@ class TestAnimatedHeading:
 
         (advanced,) = await provider.fetch()
         assert advanced.heading is None
+
+
+def test_settings_find_their_env_file_from_any_working_directory(tmp_path, monkeypatch):
+    """The backend must read `.env` wherever it was started from.
+
+    `env_file=".env"` is resolved against the *working directory*, so the
+    settings were only loaded when the process started inside `backend/`. Run
+    from the repository root - which `uvicorn --app-dir backend` does, and which
+    `.claude/launch.json` does - pydantic found no file, silently fell back to
+    every default, and the backend came up on the fixture provider while
+    `.env` said `opensky`. No error and no warning: the wrong data source and
+    one log line (D114).
+
+    Asserted as a property of the path rather than by starting a server: the
+    configured file must be absolute, so that resolving it cannot depend on
+    where anybody happened to be standing.
+    """
+    from app.config import ENV_FILE
+
+    # Read from the constant, not from `model_config`: conftest nulls that
+    # for the session so the suite cannot read the developer's own `.env`.
+    # Asserting the overridden value would test the harness, not the app.
+    assert isinstance(ENV_FILE, Path)
+    assert ENV_FILE.is_absolute()
+    assert ENV_FILE.name == ".env"
+    assert ENV_FILE.parent.name == "backend"
+
+    # And it does not move when the working directory does.
+    monkeypatch.chdir(tmp_path)
+    from app.config import ENV_FILE as after_chdir
+
+    assert after_chdir == ENV_FILE
