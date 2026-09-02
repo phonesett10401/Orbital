@@ -77,4 +77,11 @@ frontend/public/data/
 
 # Orbital elements cached between runs, so a restart during an upstream
 # outage still has something to propagate. Derived data with a network source.
+#
+# Two paths because the cache is relative to the working directory, and the
+# backend has two supported ones: `backend/` when uvicorn is run from there,
+# and the repository root when it is run with `--app-dir backend`, which is
+# what `.claude/launch.json` does. Ignoring only the first would have committed
+# a 450 KB element blob the first time anyone used the launch config.
 backend/.cache/
+/.cache/
