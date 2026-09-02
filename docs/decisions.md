@@ -5654,3 +5654,110 @@ The shell leaves the selected satellite's sprite out while the model is
 drawing, told per frame rather than on selection - whether the model draws
 depends on zoom and the horizon as well as on what is selected. The same
 arrangement `setHidden` gives the aircraft symbol layer.
+
+---
+
+## D108 - The flat basemap is recoloured, not inherited
+
+Phone asked for a dark basemap on the strength of one observation: the flat map
+is bright, and what sits on top of it is two thousand small bright aircraft or
+fourteen hundred satellites, so nothing reads as foreground.
+
+The first answer given was wrong, and wrong in a way worth recording: *"swap
+the style URL to OpenFreeMap Dark, one line."* It is one line, and it costs:
+
+| | Liberty | OpenFreeMap Dark |
+|---|---|---|
+| Layers | **111** | 47 |
+| 3D buildings | **`building-3d`** | none |
+
+Liberty was chosen in the first place *because* it carries `building-3d`
+(D52). Dark, Positron and Fiord all lack it - checked, not assumed. And at
+world zoom the ready-made dark styles are worse than the light one: Dark's
+land is `hsl(0,2%,5%)` against water at `rgb(27,27,29)`, a difference of about
+two per cent, so the globe reads as a black disc with labels floating on it.
+That is a reasonable trade for a street map and the wrong one for a planet.
+
+**So the darkness is ours and the cartography stays Liberty's.** Every fill and
+the background get a colour from `DARK_FILL_COLORS`; the arrangement - which
+areas exist, where they are, what gets a label - is untouched.
+
+This reverses a decision recorded in the file itself, which passed Liberty's
+fills through on the reasoning that *"nobody here can draw a basemap better
+than its authors."* That reasoning was sound and its conclusion was still
+wrong, because the thing being inherited was not the cartography but the
+**brightness** - and brightness is the one property of a basemap that Orbital
+cannot inherit, because Orbital is the only thing that knows what will be drawn
+on top of it.
+
+### Land and water is the pair that has to survive
+
+At world zoom they are most of the picture and nothing else is. `#1b212c`
+against `#080f1c` is a deliberate two-step, and it is asserted as a *luminance*
+difference rather than by eye, because by eye is how the ready-made styles get
+away with two per cent.
+
+### Three things recolouring cannot reach
+
+- **`fill-pattern` ignores `fill-color`.** A patterned layer would keep the
+  light style's hatching on a dark map, so patterned fills are hidden outright.
+  A pale hatch over dark ground reads as a rendering fault, which is what it
+  would be.
+- **`layout: undefined`.** Writing the key with nothing in it fails the style
+  spec, and a rejected property drops the whole style silently (defect #25).
+  Caught by the spec validator, not by reading.
+- **The dim layer.** `flatBasemapDim` existed to buy contrast back from a light
+  map and now defaults to **0**: dimming a dark palette takes the ground, the
+  roads and the labels down together, which is the contrast the palette was
+  drawn to keep.
+
+### Country names are sized for a map, and this is a globe
+
+Liberty asks for 17 px country names by zoom 4. At that zoom a globe shows a
+hemisphere, and the names collide into a mat of text over the thing the user
+came to look at. `REGION_LABEL_SIZE` replaces the ramp for country and state
+labels only, rejoining the style's own sizing by zoom 7.
+
+**It is a top-level `interpolate`, not a multiplier.** The obvious way to write
+"the same but smaller" is to multiply the style's ramp by a factor, and a
+`zoom` expression may only be the direct input of a top-level step or
+interpolate - so a product of two of them is rejected, and a rejected paint
+property drops the entire style with no error at all (D25, defect #25).
+
+---
+
+## D109 - A third basemap, because dark is not one look
+
+Phone asked for the near-black map to stay as a third option rather than
+replace the plain one, and that is right: they answer different questions.
+`flat` is a dark map you are meant to **read**; `dark` is a dark map you are
+meant to **see past**, which is what the satellite layer wants and what no
+amount of tuning a single palette gives you at once.
+
+It is a palette, not a second stylesheet. `setStyle` is what the global-state
+design exists to avoid - it would tear down and re-add the aircraft, their
+tracks, the leader, the model and the terminator on every press (D75).
+
+### The trap the third mode opened
+
+Every existing call site was written as `whenFlat(flat, imagery)`, a two-armed
+`match` - and **a two-armed match sends every unlisted value to the fallback**,
+which is the *imagery* arm. Left alone, switching to `dark` would have drawn
+the photograph's colours on a map with no photograph in it, and turned the
+imagery raster back on underneath. `whenFlat` now maps `dark` onto the flat arm
+and only the properties that genuinely differ reach for `whenBasemap`.
+
+Confirmed by breaking it: with `dark` routed to the imagery arm, two tests
+fail. All four assertions new to D108 and D109 were checked the same way.
+
+### The button is a cycle, so it is not a toggle
+
+Three states, so `aria-pressed` came off: it has two values, and leaving it on
+tells a screen reader the button is a checkbox that is currently off. The
+glyph, the title and the cycle order live in one table so they cannot drift.
+
+### Still open
+
+A hatched lens over Xinjiang and a second over northern Russia, visible in
+every vector mode and in the light palette before this change, so it predates
+it. It is not a patterned fill - hiding those did not remove it. Untracked.

@@ -33,8 +33,6 @@ import {
   selectionFromHits,
 } from './aircraftLayer';
 import {
-  BASEMAP_FLAT,
-  BASEMAP_IMAGERY,
   BASEMAP_STATE,
   basemapDimLayer,
   firstLabelLayerId,
@@ -235,10 +233,7 @@ export function PlanetView() {
           // Which of the two looks the style's expressions resolve to. Set
           // before anything else is added, so the first frame is already the
           // right map rather than the imagery flashing up and being switched.
-          map.setGlobalStateProperty(
-            BASEMAP_STATE,
-            config.basemap === 'flat' ? BASEMAP_FLAT : BASEMAP_IMAGERY,
-          );
+          map.setGlobalStateProperty(BASEMAP_STATE, config.basemap);
 
           // SDF, so one silhouette can be tinted per aircraft by altitude rather
           // than baking an image per colour (D28).
@@ -271,12 +266,12 @@ export function PlanetView() {
           });
           map.addLayer(terminator, firstLabelLayerId(map.getStyle()) ?? undefined);
 
-          // Satellite or plain map. Above the night toggle in the corner
-          // because it changes more of the screen than night does.
-          const basemapControl = createBasemapControl((flat) => {
-            map?.setGlobalStateProperty(BASEMAP_STATE, flat ? BASEMAP_FLAT : BASEMAP_IMAGERY);
+          // Photograph, plain map or dark map. Above the night toggle in the
+          // corner because it changes more of the screen than night does.
+          const basemapControl = createBasemapControl((mode) => {
+            map?.setGlobalStateProperty(BASEMAP_STATE, mode);
             map?.triggerRepaint();
-          }, config.basemap === 'flat');
+          }, config.basemap);
           map.addControl(basemapControl, 'top-right');
 
           const control = createTerminatorControl((enabled) => {

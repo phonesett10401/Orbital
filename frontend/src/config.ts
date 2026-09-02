@@ -142,7 +142,11 @@ export const config = {
    * for - and the flat map is a button away for anyone who wants to read the
    * map rather than look at it (D75).
    */
-  basemap: str(import.meta.env.VITE_BASEMAP, 'imagery') === 'flat' ? 'flat' : 'imagery',
+  basemap: (['imagery', 'flat', 'dark'] as const).includes(
+    str(import.meta.env.VITE_BASEMAP, 'imagery') as 'imagery' | 'flat' | 'dark',
+  )
+    ? (str(import.meta.env.VITE_BASEMAP, 'imagery') as 'imagery' | 'flat' | 'dark')
+    : ('imagery' as const),
 
   /**
    * Opacity of the night side at its darkest.
@@ -158,20 +162,20 @@ export const config = {
   /**
    * How far the flat basemap is dimmed, 0 for none and 1 for black.
    *
-   * The flat basemap is a light style - cream land, white roads, near-black
-   * labels - and it is correct on its own terms. It is wrong *here*, because
-   * what sits on top of it is two thousand small bright aircraft, and a page
-   * that is bright everywhere has nothing left to make them stand out with.
+   * **Zero now, and that is a change of mechanism rather than of taste.** This
+   * existed because the flat basemap was a light style - cream land, white
+   * roads, near-black labels - correct on its own terms and wrong under two
+   * thousand small bright aircraft. Dimming was the cheapest way to buy the
+   * markers some contrast back.
    *
-   * Dimming the basemap rather than the whole canvas is the point: the dim
-   * layer goes above the cartography and below the aircraft, so the map's own
-   * internal contrast - road against ground, label against halo - is preserved
-   * exactly, while the aircraft gain the contrast they had over imagery.
-   *
-   * Tunable because brightness is a taste, and because the last two lighting
+   * The palette is dark at the source now (D108), so dimming on top of it
+   * subtracts from a budget that has already been spent: it takes the ground
+   * and the roads and the labels down together, which is exactly the contrast
+   * the dark palette was drawn to keep. The setting stays because it costs one
+   * line and brightness is a taste, and because the last two lighting
    * constants in this file both needed a second attempt (D49).
    */
-  flatBasemapDim: num(import.meta.env.VITE_FLAT_DIM, 0.32),
+  flatBasemapDim: num(import.meta.env.VITE_FLAT_DIM, 0),
 
   /**
    * Satellite imagery for the planet view, as XYZ tiles.

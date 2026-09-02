@@ -39,13 +39,21 @@ import {
   IMAGERY_NEAR_MAX_ZOOM,
   loadPlanetStyle,
   resolveVectorSources,
+  DARKEST_GROUND,
+  DARKEST_WATER,
+  DARK_GROUND,
+  DARK_WATER,
+  REGION_LABEL_SIZE,
   styleForImagery,
   withImagery,
   firstLabelLayerId,
+  BASEMAP_DARK,
   BASEMAP_FLAT,
+  BASEMAP_MODES,
   BASEMAP_IMAGERY,
   BASEMAP_STATE,
   basemapDimLayer,
+  whenBasemap,
   whenFlat,
 } from './basemap';
 import { createBasemapControl } from './basemapControl';
@@ -137,9 +145,12 @@ const bareStyle: StyleSpecification = {
  * encoding rather than the appearance, and would pass just as happily with the
  * two arms swapped (D75).
  */
-function forMode(value: unknown, mode: 'flat' | 'imagery'): unknown {
+function forMode(value: unknown, mode: 'flat' | 'dark' | 'imagery'): unknown {
   if (!Array.isArray(value) || value[0] !== 'match') return value;
-  return mode === 'flat' ? value[3] : value[4];
+  // ['match', input, 'flat', flat, 'dark', dark, imagery]
+  if (mode === 'flat') return value[3];
+  if (mode === 'dark') return value[5];
+  return value[6];
 }
 
 describe('withImagery', () => {
@@ -610,9 +621,11 @@ describe('the diagnostics readout', () => {
 });
 
 describe('styling cartography for imagery', () => {
-  it('inverts label colours, because the basemap is a light style', () => {
-    // Dark text with a white halo is correct on cream and close to invisible
-    // on a satellite photograph of a city, which is grey and white and busy.
+  it('draws light text on a dark halo on every map, because all three are dark', () => {
+    // This used to assert the opposite for the flat map, and correctly: it was
+    // a light style then, so it wanted dark text on a white halo. The palette
+    // is dark at the source now (D108), and a near-black label on a white halo
+    // would be the unreadable one.
     const styled = styleForImagery({
       id: 'place_label',
       type: 'symbol',
@@ -624,10 +637,95 @@ describe('styling cartography for imagery', () => {
     const paint = (styled as { paint: Record<string, unknown> }).paint;
     expect(forMode(paint['text-color'], 'imagery')).toBe('#ffffff');
     expect(String(forMode(paint['text-halo-color'], 'imagery'))).toContain('0, 0, 0');
-    // And the other way round on the flat map, where the ground is pale: dark
-    // text on a light halo. Each is unreadable over the other background.
-    expect(String(forMode(paint['text-color'], 'flat'))).not.toBe('#ffffff');
-    expect(String(forMode(paint['text-halo-color'], 'flat'))).toContain('255, 255, 255');
+    // The vector maps get a dimmer text and a darker halo than the photograph:
+    // a photograph is busier, so it needs the brighter label to survive it.
+    for (const mode of ['flat', 'dark'] as const) {
+      expect(String(forMode(paint['text-color'], mode))).not.toBe('#ffffff');
+      expect(String(forMode(paint['text-halo-color'], mode))).toContain('6, 9, 14');
+    }
+    // And the dark map's label is dimmer still than the plain map's, because
+    // it is the mode whose whole job is to stay out of the way.
+    expect(forMode(paint['text-color'], 'dark')).not.toBe(forMode(paint['text-color'], 'flat'));
+  });
+
+  it('hides patterned fills, which are the one thing recolouring cannot reach', () => {
+    // `fill-pattern` draws a sprite and ignores `fill-color` outright, so a
+    // patterned layer would keep the light style's hatching on a dark map.
+    const patterned = styleForImagery({
+      id: 'landcover_wetland',
+      type: 'fill',
+      source: 'openmaptiles',
+      'source-layer': 'landcover',
+      paint: { 'fill-pattern': 'wetland_bg_11', 'fill-opacity': 0.8 },
+    });
+    expect((patterned as { paint: Record<string, unknown> }).paint['fill-opacity']).toBe(0);
+  });
+
+  it('recolours the ground instead of inheriting the style s light palette', () => {
+    // The reversal at the heart of D108. Liberty s fills are a light palette
+    // and were passed through untouched; what that kept was not the
+    // cartography but the brightness, which is the one thing this map cannot
+    // inherit.
+    const water = styleForImagery({
+      id: 'water',
+      type: 'fill',
+      source: 'openmaptiles',
+      'source-layer': 'water',
+      paint: { 'fill-color': 'rgb(158,189,255)' },
+    });
+    const paint = (water as { paint: Record<string, unknown> }).paint;
+    expect(forMode(paint['fill-color'], 'flat')).toBe(DARK_WATER);
+    expect(forMode(paint['fill-color'], 'dark')).toBe(DARKEST_WATER);
+  });
+
+  it('keeps land and water apart, which is the whole picture at world zoom', () => {
+    // The reason a ready-made dark style was rejected: they put land and water
+    // within a couple of per cent of each other, which is fine on a city
+    // rectangle and turns a globe into a black disc. Compared as luminance
+    // rather than by eye, because by eye is how it was missed.
+    const luminance = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      return 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
+    };
+    expect(luminance(DARK_GROUND) - luminance(DARK_WATER)).toBeGreaterThan(8);
+    expect(luminance(DARKEST_GROUND) - luminance(DARKEST_WATER)).toBeGreaterThan(3);
+  });
+
+  it('shrinks country and state names, and leaves every other label alone', () => {
+    // Country names are sized for a map showing one region; Orbital shows a
+    // globe, where every country on the daylit half is on screen at once.
+    const country = styleForImagery({
+      id: 'label_country_1',
+      type: 'symbol',
+      source: 'openmaptiles',
+      'source-layer': 'place',
+      layout: { 'text-size': ['interpolate', ['linear'], ['zoom'], 1, 9, 4, 17] as never },
+    });
+    expect((country as { layout: Record<string, unknown> }).layout['text-size']).toBe(
+      REGION_LABEL_SIZE,
+    );
+
+    const poi = styleForImagery({
+      id: 'poi_r1',
+      type: 'symbol',
+      source: 'openmaptiles',
+      'source-layer': 'poi',
+      layout: { 'text-size': 12 },
+    });
+    expect((poi as { layout: Record<string, unknown> }).layout['text-size']).toBe(12);
+  });
+
+  it('sizes region labels with one top-level zoom interpolate, not a product', () => {
+    // A `zoom` expression may only be the direct input of a top-level step or
+    // interpolate, so 'the style s own ramp, times a factor' is rejected - and
+    // a rejected paint property drops the entire style with no error at all
+    // (defect #25). It also has to actually get smaller as you zoom out.
+    const ramp = REGION_LABEL_SIZE as unknown as unknown[];
+    expect(ramp[0]).toBe('interpolate');
+    expect(ramp[2]).toEqual(['zoom']);
+    const sizes = ramp.slice(3).filter((_, i) => i % 2 === 1) as number[];
+    expect(sizes).toEqual([...sizes].sort((a, b) => a - b));
+    expect(sizes[0]).toBeLessThan(sizes[sizes.length - 1]);
   });
 
   it('darkens road casings and brightens the roads themselves', () => {
@@ -880,7 +978,19 @@ describe('the basemap switch', () => {
     expect(expression[1]).toEqual(['global-state', BASEMAP_STATE]);
     expect(expression[2]).toBe(BASEMAP_FLAT);
     expect(expression[3]).toBe('A');
-    expect(expression[4]).toBe('B');
+    expect(expression[4]).toBe(BASEMAP_DARK);
+    expect(expression[6]).toBe('B');
+  });
+
+  it('gives the dark map the ground styling, never the imagery styling', () => {
+    // The trap the third mode opens: every existing call site was written as
+    // two arms, and a two-armed match sends every unlisted value to the
+    // fallback - which is the *imagery* arm. Left alone, switching to `dark`
+    // would have drawn the photograph's colours on a map with no photograph in
+    // it, and turned the imagery raster back on underneath. `whenFlat` maps
+    // dark onto the flat arm for exactly this reason.
+    expect(forMode(whenFlat('ground', 'photo'), 'dark')).toBe('ground');
+    expect(forMode(whenBasemap('a', 'b', 'c'), 'dark')).toBe('b');
   });
 
   it('is a switch, not a style swap', () => {
@@ -895,31 +1005,52 @@ describe('the basemap control', () => {
   it('offers the map you are not looking at', () => {
     // A button labelled with its current state reads as a status line and gets
     // pressed by someone trying to confirm what they see (D68).
-    const onImagery = createBasemapControl(() => {}, false);
+    const onImagery = createBasemapControl(() => {}, 'imagery');
     expect(onImagery.button.title).toBe('Show the plain map');
-    expect(onImagery.button.getAttribute('aria-pressed')).toBe('false');
 
-    const onFlat = createBasemapControl(() => {}, true);
-    expect(onFlat.button.title).toBe('Show satellite imagery');
+    const onFlat = createBasemapControl(() => {}, 'flat');
+    expect(onFlat.button.title).toBe('Show the dark map');
     expect(onFlat.button.classList.contains('is-on')).toBe(true);
+
+    const onDark = createBasemapControl(() => {}, 'dark');
+    expect(onDark.button.title).toBe('Show satellite imagery');
+  });
+
+  it('does not claim to be a toggle, because it is a cycle', () => {
+    // `aria-pressed` has two values and this has three. Leaving it on would
+    // tell a screen reader the button is a checkbox that is currently off,
+    // which is a false statement about a control that cycles.
+    const control = createBasemapControl(() => {}, 'imagery');
+    expect(control.button.hasAttribute('aria-pressed')).toBe(false);
+  });
+
+  it('cycles back to where it started, visiting each map once', () => {
+    const control = createBasemapControl(() => {}, 'imagery');
+    const seen: string[] = [];
+    for (let i = 0; i < BASEMAP_MODES.length; i += 1) {
+      control.button.click();
+      seen.push(control.button.title);
+    }
+    expect(new Set(seen).size).toBe(BASEMAP_MODES.length);
+    expect(control.button.title).toBe('Show the plain map');
   });
 
   it('reports each change once', () => {
-    const changes: boolean[] = [];
-    const control = createBasemapControl((flat) => changes.push(flat), false);
+    const changes: string[] = [];
+    const control = createBasemapControl((mode) => changes.push(mode), 'imagery');
     control.button.click();
     control.button.click();
-    expect(changes).toEqual([true, false]);
+    expect(changes).toEqual(['flat', 'dark']);
   });
 
   it('can be told about a change it did not cause', () => {
-    const control = createBasemapControl(() => {}, false);
-    control.setFlat(true);
+    const control = createBasemapControl(() => {}, 'imagery');
+    control.setMode('dark');
     expect(control.button.title).toBe('Show satellite imagery');
   });
 
   it('hands MapLibre a control group to place', () => {
-    const control = createBasemapControl(() => {}, false);
+    const control = createBasemapControl(() => {}, 'imagery');
     const element = control.onAdd({} as import('maplibre-gl').Map);
     expect(element.className).toContain('maplibregl-ctrl-group');
     expect(element.contains(control.button)).toBe(true);

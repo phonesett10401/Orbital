@@ -99,21 +99,45 @@ export const CLOSE_IMAGERY_ATTRIBUTION =
 export const BASEMAP_STATE = 'basemap';
 export const BASEMAP_IMAGERY = 'imagery';
 export const BASEMAP_FLAT = 'flat';
+export const BASEMAP_DARK = 'dark';
+
+/** The three looks, in the order the corner button cycles them. */
+export const BASEMAP_MODES = [BASEMAP_IMAGERY, BASEMAP_FLAT, BASEMAP_DARK] as const;
+export type BasemapMode = (typeof BASEMAP_MODES)[number];
 
 /**
- * `flat` when the vector basemap is showing, `imagery` when the photograph is.
+ * Pick a value per basemap mode.
  *
- * Every colour in this file goes through here, so no layer can end up styled
- * for one mode and drawn in the other.
+ * `dark` is the third look (D109): the same cartography as `flat`, with the
+ * ground taken down to near-black so that fourteen hundred satellites are the
+ * brightest thing on screen. It is a *palette*, not a second stylesheet -
+ * swapping in a ready-made dark style would mean `setStyle`, which is what the
+ * whole global-state design exists to avoid, and would cost the 111 layers
+ * and the `building-3d` extrusion this style was chosen for (D108).
  */
-export function whenFlat<T>(flat: T, imagery: T): ExpressionSpecification {
+export function whenBasemap<T>(flat: T, dark: T, imagery: T): ExpressionSpecification {
   return [
     'match',
     ['global-state', BASEMAP_STATE],
     BASEMAP_FLAT,
     flat,
+    BASEMAP_DARK,
+    dark,
     imagery,
   ] as unknown as ExpressionSpecification;
+}
+
+/**
+ * `flat` when either vector map is showing, `imagery` when the photograph is.
+ *
+ * The default for everything that distinguishes *ground* from *photograph* -
+ * whether the imagery raster draws, whether the fills do. Only the properties
+ * that genuinely differ between the two vector looks reach for `whenBasemap`,
+ * so adding the third mode could not silently give a layer its imagery styling
+ * on a map with no imagery in it.
+ */
+export function whenFlat<T>(flat: T, imagery: T): ExpressionSpecification {
+  return whenBasemap(flat, flat, imagery);
 }
 
 /** The id of the layer that dims the flat basemap. */
@@ -145,10 +169,125 @@ export function basemapDimLayer(strength: number): LayerSpecification {
     type: 'background',
     paint: {
       'background-color': '#05070c',
-      'background-opacity': whenFlat(strength, 0),
+      // Nothing to dim in the other two: imagery has none of this problem, and
+      // the dark mode's ground is already near-black by palette. Dimming it
+      // again would flatten its remaining contrast rather than add any.
+      'background-opacity': whenBasemap(strength, 0, 0),
     },
   } as LayerSpecification;
 }
+
+/**
+ * The dark ground for the flat map, by Liberty layer id.
+ *
+ * Liberty's own palette is a *light* palette - cream land, blue water, pale
+ * green parks - and this file used to pass its fills through untouched, on the
+ * reasoning that nobody here can draw a basemap better than its authors. That
+ * reasoning was sound and its conclusion was still wrong, because the thing
+ * being kept was not the cartography but the **brightness**, and brightness is
+ * the one property of a basemap that Orbital cannot inherit: what sits on top
+ * of it is two thousand small bright aircraft, or fourteen hundred satellites.
+ *
+ * So the *arrangement* is still Liberty's - which areas exist, where they are,
+ * what gets a label - and only the lightness is ours. Switching to a
+ * ready-made dark style instead would have cost 64 of the 111 layers and the
+ * `building-3d` extrusion, which is the one thing Liberty was chosen for
+ * (D108).
+ *
+ * Land and water are the pair that has to survive at world zoom, where they
+ * are most of the picture and nothing else is: `#1b212c` against `#080f1c` is
+ * a deliberate two-step, because the ready-made dark styles put them within
+ * two per cent of each other and the globe reads as a black disc.
+ */
+export const DARK_GROUND = '#1b212c';
+export const DARK_WATER = '#080f1c';
+
+export const DARK_FILL_COLORS: Record<string, string> = {
+  water: DARK_WATER,
+  landcover_wetland: '#12202a',
+  park: '#16241a',
+  landcover_wood: '#152219',
+  landcover_grass: '#17251b',
+  landcover_ice: '#232a35',
+  landcover_sand: '#262117',
+  landuse_residential: '#1f2530',
+  landuse_pitch: '#1a2320',
+  landuse_track: '#1a2320',
+  landuse_cemetery: '#1a2320',
+  landuse_school: '#1c2422',
+  landuse_hospital: '#2a1c22',
+  aeroway_fill: '#1e242e',
+  road_area_pattern: '#1e242e',
+  building: '#232936',
+};
+
+/**
+ * The dark counterpart of one fill layer, or the default ground.
+ *
+ * Unknown ids fall back to the ground colour rather than being left as
+ * authored: a style is free to add a fill layer, and inheriting one cream
+ * patch into a dark map is worse than inheriting no patch at all.
+ */
+export function darkFillColor(layerId: string): string {
+  return DARK_FILL_COLORS[layerId] ?? DARK_GROUND;
+}
+
+/**
+ * The third look: the map recedes to near-black and keeps only its lines.
+ *
+ * Where `flat` is a dark map you are meant to read, this is a dark map you are
+ * meant to see *past*. So it is one ground colour for every fill rather than a
+ * palette - parks, sand and residential all stop being worth a hue when the
+ * point of the mode is that nothing on the ground competes with what is above
+ * it. Water keeps its own value, because the coastline is the one piece of
+ * ground information that stays useful at orbital zoom.
+ */
+export const DARKEST_GROUND = '#0a0d12';
+export const DARKEST_WATER = '#04060a';
+
+export function darkestFillColor(layerId: string): string {
+  return layerId === 'water' ? DARKEST_WATER : DARKEST_GROUND;
+}
+
+/**
+ * The label layers whose size is ours rather than the style's.
+ *
+ * Country and state names are sized by their styles for a *map* - a rectangle
+ * showing one region - and Orbital shows them on a globe, where every country
+ * on the daylit half is on screen at once. Liberty asks for 17 px country
+ * names by zoom 4; at that zoom the whole Pacific is visible and the names
+ * collide into a mat of text over the thing the user is here to look at.
+ */
+export function isRegionLabel(layerId: string): boolean {
+  return layerId.includes('country') || layerId.includes('state');
+}
+
+/**
+ * How big a country or state name may be, by zoom.
+ *
+ * **A top-level `interpolate`, not a multiplier on the style's own ramp.** The
+ * obvious way to write "the same but smaller" is to multiply the existing
+ * expression by a factor, and a `zoom` expression may only be the direct input
+ * of a top-level step or interpolate - so a product of two of them is rejected,
+ * and a rejected paint property drops the entire style with no error at all
+ * (defect #25, D25).
+ *
+ * The curve rejoins the style's own sizing by zoom 7, where a viewport holds a
+ * country rather than a hemisphere and the original sizes are right again.
+ */
+export const REGION_LABEL_SIZE = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  0,
+  7,
+  3,
+  10,
+  5,
+  13,
+  7,
+  16,
+] as unknown as ExpressionSpecification;
 
 export const KEPT_LAYER_TYPES = new Set(['line', 'symbol', 'fill-extrusion']);
 
@@ -167,16 +306,27 @@ export const KEPT_LAYER_TYPES = new Set(['line', 'symbol', 'fill-extrusion']);
  */
 export function styleForImagery(layer: LayerSpecification): LayerSpecification {
   if (layer.type === 'symbol') {
+    // Both grounds are dark now, so both want light text on a dark halo. They
+    // are still written as two arms rather than one colour: a photograph is
+    // busier than a flat fill, so it needs the brighter text and the heavier
+    // halo, and collapsing them would tune one mode by accident.
+    // Spread rather than assigned, because a symbol layer may legitimately
+    // have no `layout` at all and writing `layout: undefined` puts the key
+    // there with nothing in it - which the style spec rejects, and a rejected
+    // property drops the whole style silently (defect #25). Caught by the
+    // spec validator, not by reading.
+    const sized = isRegionLabel(layer.id)
+      ? { layout: { ...layer.layout, 'text-size': REGION_LABEL_SIZE } }
+      : {};
     return {
       ...layer,
+      ...sized,
       paint: {
         ...layer.paint,
-        // White on a dark halo over a photograph; near-black on a light halo
-        // over a pale basemap. Each is unreadable on the other background.
-        'text-color': whenFlat('#39404d', '#ffffff'),
-        'text-halo-color': whenFlat('rgba(255, 255, 255, 0.9)', 'rgba(0, 0, 0, 0.85)'),
-        'text-halo-width': whenFlat(1.2, 1.6),
-        'icon-halo-color': whenFlat('rgba(255, 255, 255, 0.9)', 'rgba(0, 0, 0, 0.85)'),
+        'text-color': whenBasemap('#aab4c4', '#8791a1', '#ffffff'),
+        'text-halo-color': whenFlat('rgba(6, 9, 14, 0.85)', 'rgba(0, 0, 0, 0.85)'),
+        'text-halo-width': whenFlat(1.4, 1.6),
+        'icon-halo-color': whenFlat('rgba(6, 9, 14, 0.85)', 'rgba(0, 0, 0, 0.85)'),
         'icon-halo-width': 1.2,
       },
     } as LayerSpecification;
@@ -193,10 +343,15 @@ export function styleForImagery(layer: LayerSpecification): LayerSpecification {
       ...layer,
       paint: {
         ...layer.paint,
+        // The road is lighter than its ground in both modes and the casing is
+        // darker, which is the relationship that makes a road read at all. On
+        // the flat map the road stops at a mid grey rather than white: white
+        // roads on a dark ground are brighter than the aircraft above them,
+        // which is the whole fault this palette exists to fix.
         'line-color': isCasing
-          ? whenFlat('#dfe4ec', 'rgba(0, 0, 0, 0.55)')
-          : whenFlat('#ffffff', 'rgba(255, 255, 255, 0.9)'),
-        'line-opacity': isCasing ? whenFlat(1, 0.85) : whenFlat(1, 0.95),
+          ? whenFlat('rgba(0, 0, 0, 0.55)', 'rgba(0, 0, 0, 0.55)')
+          : whenBasemap('#5a6478', '#39414f', 'rgba(255, 255, 255, 0.9)'),
+        'line-opacity': isCasing ? whenFlat(0.9, 0.85) : whenFlat(1, 0.95),
       },
     } as LayerSpecification;
   }
@@ -206,7 +361,7 @@ export function styleForImagery(layer: LayerSpecification): LayerSpecification {
       ...layer,
       paint: {
         ...layer.paint,
-        'fill-extrusion-color': whenFlat('#e3e7ee', '#d7dee8'),
+        'fill-extrusion-color': whenBasemap('#2a313f', '#171c25', '#d7dee8'),
         // Translucent over imagery so the building reads as a volume over its
         // own footprint in the photograph rather than replacing it. Opaque on
         // the flat map, where there is no photograph to preserve.
@@ -215,21 +370,42 @@ export function styleForImagery(layer: LayerSpecification): LayerSpecification {
     } as LayerSpecification;
   }
 
-  // Fills and the background are Liberty's own palette, kept as authored -
-  // that palette *is* the flat map, and it is the one part of this style
-  // nobody here can draw better than its authors. They are simply switched
-  // off when a photograph is doing their job.
+  // Fills and the background are the flat map, and they are recoloured rather
+  // than inherited (D108). The colour is set outright instead of through
+  // `whenFlat` because these layers draw at opacity 0 in imagery mode, so
+  // there is no second value to preserve - and several of Liberty's fill
+  // colours are zoom expressions, which a two-armed `match` cannot switch
+  // against a plain colour anyway.
   if (layer.type === 'fill') {
+    // **A patterned fill cannot be recoloured.** `fill-pattern` draws a sprite
+    // from the style's own image atlas and `fill-color` is ignored entirely,
+    // so these layers would keep Liberty's light hatching on a dark map - the
+    // one patch of the old palette that recolouring cannot reach. Hidden
+    // rather than left showing: a pale hatch over dark ground reads as a
+    // rendering fault, which is what it would be.
+    const patterned = 'fill-pattern' in (layer.paint ?? {});
     return {
       ...layer,
-      paint: { ...layer.paint, 'fill-opacity': whenFlat(fillOpacityOf(layer), 0) },
+      paint: {
+        ...layer.paint,
+        'fill-color': whenBasemap(
+          darkFillColor(layer.id),
+          darkestFillColor(layer.id),
+          darkFillColor(layer.id),
+        ),
+        'fill-opacity': patterned ? 0 : whenFlat(fillOpacityOf(layer), 0),
+      },
     } as LayerSpecification;
   }
 
   if (layer.type === 'background') {
     return {
       ...layer,
-      paint: { ...layer.paint, 'background-opacity': whenFlat(1, 0) },
+      paint: {
+        ...layer.paint,
+        'background-color': whenBasemap(DARK_GROUND, DARKEST_GROUND, DARK_GROUND),
+        'background-opacity': whenFlat(1, 0),
+      },
     } as LayerSpecification;
   }
 
