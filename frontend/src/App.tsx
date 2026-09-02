@@ -36,8 +36,16 @@ export function App() {
 
       <header className="app__header">
         <div className="app__brand">
-          <span className="app__title">Orbital</span>
-          <span className="app__subtitle">{chromeFor(activeLayer.id, []).subtitle}</span>
+          {/*
+            Decorative, so it is hidden from assistive technology: the name is
+            already right beside it as text, and announcing both would read the
+            brand twice.
+          */}
+          <img className="app__mark" src="/logo.svg" alt="" aria-hidden="true" />
+          <div className="app__brandText">
+            <span className="app__title">Orbital</span>
+            <span className="app__subtitle">{chromeFor(activeLayer.id, []).subtitle}</span>
+          </div>
         </div>
         <SearchBar />
         <LayerToggle />

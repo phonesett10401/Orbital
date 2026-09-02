@@ -91,9 +91,27 @@ body {
 
 .app__brand {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   line-height: 1.2;
   padding: 6px 4px;
+}
+
+.app__brandText {
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * Sized in a fixed unit rather than an em: the mark is a drawing with its own
+ * internal weights, and letting it track the title's font size would thin the
+ * orbit stroke on any browser where that size is overridden.
+ */
+.app__mark {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: block;
 }
 
 .app__title {

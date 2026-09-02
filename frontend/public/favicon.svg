@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Orbital">
+  <title>Orbital</title>
+  <!--
+    A separate drawing, not the logo scaled down.
+
+    At 16 px the full mark loses everything that carries it: the city lights are
+    under a pixel, the atmosphere haze becomes a smudge over the whole tile, and
+    a 5 px ring stroke lands at half a pixel and greys out. What survives a
+    favicon is the *arrangement* - a lit sphere, a dark half, a ring across it -
+    so that is all this draws, at weights chosen for the size it renders at.
+  -->
+  <defs>
+    <radialGradient id="fd" cx="0.68" cy="0.3" r="0.9">
+      <stop offset="0"   stop-color="#8ad6ff"/>
+      <stop offset="0.5" stop-color="#2d7cc2"/>
+      <stop offset="1"   stop-color="#123a61"/>
+    </radialGradient>
+    <clipPath id="fg"><circle cx="16" cy="16" r="10.5"/></clipPath>
+    <clipPath id="fn"><rect x="-4" y="16" width="40" height="20"/></clipPath>
+  </defs>
+
+  <rect width="32" height="32" rx="7" fill="#070b13"/>
+
+  <!-- Far arc. -->
+  <g transform="rotate(-20 16 16)">
+    <ellipse cx="16" cy="16" rx="13.4" ry="8" fill="none"
+             stroke="#5aa8ff" stroke-width="2" opacity="0.45"/>
+  </g>
+
+  <circle cx="16" cy="16" r="10.5" fill="url(#fd)"/>
+  <g clip-path="url(#fg)">
+    <path d="M18 24.5 q4 -3 3.5 -8 q3.5 1.5 3 6 z" fill="#35946f" opacity="0.5"/>
+    <path d="M19.5 6.5 q4 1.5 4 5.5 q-4 1.5 -6 -1.5 z" fill="#35946f" opacity="0.5"/>
+    <!-- Half dark. Curved, so it still reads as a sphere at this size. -->
+    <path d="M16 5.5 A10.5 10.5 0 0 0 16 26.5 A3.5 10.5 0 0 1 16 5.5 Z" fill="#0a1120"/>
+    <circle cx="11.5" cy="13" r="0.75" fill="#ffd58a"/>
+    <circle cx="13"   cy="19" r="0.65" fill="#ffd58a" opacity="0.8"/>
+  </g>
+  <circle cx="16" cy="16" r="10.5" fill="none" stroke="#bfe3ff" stroke-width="0.7" opacity="0.5"/>
+
+  <!-- Near arc, over the planet: the wrap, at a weight that survives 16 px. -->
+  <g transform="rotate(-20 16 16)">
+    <g clip-path="url(#fn)">
+      <ellipse cx="16" cy="16" rx="13.4" ry="8" fill="none"
+               stroke="#a9dcff" stroke-width="2.3"/>
+    </g>
+  </g>
+</svg>
