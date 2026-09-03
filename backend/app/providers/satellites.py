@@ -38,6 +38,11 @@ import httpx
 from app.models import BBox, ObjectType, TrackedObjectRecord, utcnow
 from app.orbits import OrbitError, parse_epoch, propagate, tle_epoch
 from app.providers.base import Provider, ProviderBadResponse, ProviderUnavailable
+from app.providers.satellite_names import (
+    SATNOGS_DIRECTORY_URL,
+    parse_directory,
+    resolve_names,
+)
 
 logger = logging.getLogger("app.providers.satellites")
 
@@ -116,6 +121,7 @@ DEFAULT_SOURCES: tuple[tuple[str, str], ...] = (
 )
 
 ElementFetcher = Callable[[], Awaitable[list[ElementSet]]]
+NameFetcher = Callable[[], Awaitable[dict[str, str]]]
 
 
 class SatelliteProvider(Provider):
@@ -138,6 +144,7 @@ class SatelliteProvider(Provider):
         user_agent: str = "Orbital/0.1 (CSC480 student project)",
         refresh_seconds: float = ELEMENT_REFRESH_SECONDS,
         fetch_elements: ElementFetcher | None = None,
+        fetch_names: NameFetcher | None = None,
         cache_path: Path | None = None,
     ) -> None:
         self._sources = tuple(sources)
@@ -145,6 +152,7 @@ class SatelliteProvider(Provider):
         self._user_agent = user_agent
         self._refresh = refresh_seconds
         self._fetch_elements = fetch_elements or self._fetch_from_sources
+        self._fetch_names = fetch_names or self._fetch_directory
         self._client: httpx.AsyncClient | None = None
 
         self._cache_path = cache_path
@@ -183,6 +191,18 @@ class SatelliteProvider(Provider):
                 return elements
             failures.append(f"{source_name}: no usable element sets")
         raise ProviderUnavailable("no element source answered: " + "; ".join(failures))
+
+    async def _fetch_directory(self) -> dict[str, str]:
+        """Catalogue number to real name, from the SatNOGS satellite database.
+
+        A different endpoint from the elements: ``/api/satellites/`` is the
+        directory and ``/api/tle/`` is the feed. The directory knows that
+        2019-093C is CAS-6; the feed still calls it ``OBJECT C`` (D117).
+        """
+        client = await self._client_or_new()
+        response = await client.get(SATNOGS_DIRECTORY_URL)
+        response.raise_for_status()
+        return parse_directory(response.json())
 
     def _read_cache(self) -> list[ElementSet]:
         """Elements saved by a previous run, or an empty list."""
@@ -265,8 +285,25 @@ class SatelliteProvider(Provider):
                     return self._elements
                 raise
 
+            # Names are a nicety on top of positions, so a directory that
+            # will not load must not cost us the elements that did. The whole
+            # reliability argument for this layer is that an upstream failure
+            # is invisible; a naming failure is less than that again.
+            try:
+                directory = await self._fetch_names()
+            except Exception as exc:
+                logger.warning("satellite name directory unavailable: %s", exc)
+            else:
+                resolved = resolve_names(elements, directory)
+                if resolved:
+                    logger.info(
+                        "named %d objects the element feed left as placeholders", resolved
+                    )
+
             self._elements = elements
             self._elements_at = now
+            # Written after resolution, so a restart during an outage comes back
+            # with the names as well as the orbits.
             self._write_cache(elements)
             return self._elements
 

@@ -45,8 +45,20 @@ def frozen_now(monkeypatch):
     return moment
 
 
+async def _no_directory() -> dict[str, str]:
+    """The name directory, switched off.
+
+    Injected by default because a test that supplies its own elements has said
+    it controls the network, and the name lookup is a *second* upstream that
+    would otherwise still be dialled. Adding it without this default made seven
+    tests reach db.satnogs.org and time out (D117).
+    """
+    return {}
+
+
 def provider(**kwargs) -> SatelliteProvider:
     kwargs.setdefault("fetch_elements", elements_from_file(FIXTURE))
+    kwargs.setdefault("fetch_names", _no_directory)
     return SatelliteProvider(**kwargs)
 
 
@@ -289,3 +301,59 @@ class TestRegistry:
         )
         assert built.object_type is ObjectType.SATELLITE
         assert built.remaining_credits is None
+
+
+class TestNamesAreASecondUpstream:
+    """The name directory is a different service from the element feed."""
+
+    @pytest.mark.anyio
+    async def test_a_failed_directory_costs_nothing(self):
+        """Positions survive a naming outage, because names are the nicety.
+
+        The reliability argument for this layer is that an upstream failure is
+        invisible. A *naming* failure has to be less than that again: the
+        satellites still have orbits, and drawing them under placeholder names
+        is enormously better than not drawing them (D117).
+        """
+
+        async def directory_is_down() -> dict[str, str]:
+            raise RuntimeError("db.satnogs.org unreachable")
+
+        records = await provider(fetch_names=directory_is_down).fetch()
+        assert len(records) > 0
+
+    @pytest.mark.anyio
+    async def test_the_name_reaches_the_record_the_api_returns(self):
+        """Not merely resolved - actually carried through to what we serve.
+
+        The vacuous version asserts `resolve_names` works, which is covered
+        elsewhere and would stay green with the call deleted from the provider
+        entirely. This reads the label off a record the provider handed back.
+        """
+
+        async def elements_with_a_placeholder():
+            sets = await elements_from_file(FIXTURE)()
+            for element in sets:
+                if element.catalog_id == "25544":
+                    element.name = "OBJECT A"
+            return sets
+
+        async def directory() -> dict[str, str]:
+            return {"25544": "ISS (ZARYA)"}
+
+        records = await provider(
+            fetch_elements=elements_with_a_placeholder, fetch_names=directory
+        ).fetch()
+        iss = next(r for r in records if r.id == "25544")
+        assert iss.label == "ISS (ZARYA)"
+
+    @pytest.mark.anyio
+    async def test_a_real_name_is_never_replaced_by_the_directory(self):
+        """The element feed is the authority; the directory only fills blanks."""
+
+        async def directory() -> dict[str, str]:
+            return {"25544": "SOMETHING ELSE ENTIRELY"}
+
+        records = await provider(fetch_names=directory).fetch()
+        iss = next(r for r in records if r.id == "25544")
+        assert iss.label == "ISS (ZARYA)"

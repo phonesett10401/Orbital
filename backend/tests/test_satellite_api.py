@@ -42,8 +42,15 @@ def client(monkeypatch):
 
     original = SatelliteProvider.__init__
 
+    async def no_directory() -> dict[str, str]:
+        return {}
+
     def offline_init(self, **kwargs):
         kwargs["fetch_elements"] = elements_from_file(FIXTURE)
+        # The names come from a second upstream, so "never dials out" has to
+        # switch off both. It did not, and these tests went to the network
+        # (D117).
+        kwargs["fetch_names"] = no_directory
         kwargs["cache_path"] = None
         original(self, **kwargs)
 

@@ -6165,3 +6165,89 @@ Verified in the running app against the live union feed: **G-STBO**, a British
 Airways 777-300ER outbound LHR-JFK, showed its own photograph with the credit
 and link intact; **N9055F**, a Cessna 208 over Kotzebue Sound, showed the
 absent state.
+
+---
+
+## D117 - `OBJECT BS` was VisionCube all along
+
+Phone asked what the `OBJECT xx` entries in the satellite layer were - satellites,
+stations or debris. The answer was worth the question: **satellites, and most of
+them have names we were not asking for.**
+
+### What they are
+
+When a launch deploys several payloads, each object takes a letter from its
+international designator - `2019-093C` becomes `OBJECT C` - until somebody
+correlates it with a spacecraft. That placeholder lives in the **element set**,
+which is what Orbital reads. SatNOGS's *database* has since worked most of them
+out; its *element feed* still carries the old name.
+
+Measured on the live catalogue, 2026-09-03:
+
+| | |
+|---|---|
+| Shown as `OBJECT xx` | 266 of 1,429 (19%) |
+| SatNOGS has a real identity | **213** |
+| Genuinely unidentified | 53 (3.7%) |
+
+FloripaSat-1, CAS-6, NanoDragon, CBERS-4A, VisionCube, and the four SNIPE
+spacecraft flying in formation were all being reported as unidentified objects.
+
+All 266 are `in orbit` in SatNOGS, between 250 and 980 km, median 496 km.
+**None of them are debris.**
+
+### There is no debris filter, and the test that says otherwise checks nothing
+
+`test_no_provider_serves_debris_or_rocket_bodies` asserts that no string in
+`registry.available()` contains "debris", "rocket" or "junk" - that is, that no
+*provider is named* after debris. It inspects `('fixture', 'opensky',
+'adsblol', 'union', 'satellites')`. It would pass unchanged while serving
+nothing but debris.
+
+The feed is clean for a different reason entirely: elements come from SatNOGS,
+which is a **spacecraft** database of ~2,773 objects, not the ~100,000-object
+catalogue that includes debris and spent stages. That is a property of the
+source, not of any check we perform - and it would stop being true the moment
+CelesTrak came back and the source changed.
+
+### After: 3.7%
+
+`satellite_names.py` fetches the SatNOGS *directory* - a different endpoint
+from the element feed - and fills in names the feed left blank. Live: **222
+objects named on the first refresh**, 266 placeholders down to 53.
+
+It only ever fills a blank. It never renames an object the feed named, and
+never swaps one placeholder for another; a directory that has forgotten an
+identity must not un-name something we could already name.
+
+**Names are a nicety on top of positions**, so a directory that will not load
+costs nothing: the elements are kept, the satellites still draw, and the log
+says so. The reliability argument for this layer is that an upstream failure is
+invisible; a *naming* failure has to be less than that again.
+
+### Three things this cost
+
+**`\b` became a backspace, again.** Writing the word-boundary pattern through a
+shell heredoc put byte `0x08` either side of `TBA`, producing a regex that
+matches nothing. `grep` renders it invisibly - the line read as `re.compile(r"TBA")`
+- and `cat -A` showed `r"^HTBA^H"`. This is the second time in this project, and
+it is already a written rule. **Use the edit tool for any line containing an
+escape.**
+
+**A substring check would have un-named a real satellite.** `"TBA" in name` is
+true of `SATBAND`. Zero false positives on today's catalogue, which is luck
+rather than correctness, so `TBA` is matched on a word boundary.
+
+**"Never dials out" was not enforced.** `test_satellite_api.py`'s fixture
+injects `fetch_elements` and documents that the layer never reaches the
+network. Adding a *second* upstream silently broke that: seven tests began
+calling db.satnogs.org and timing out. A test that asserts an offline property
+has to switch off every source, and there is now one to switch off per source.
+
+### And the same break-test harness failed the same way
+
+Verifying the new assertions by breaking the code reported "did not run" for
+all three, because `.venv/Scripts/python` is not a command `cmd.exe`
+understands - the identical failure recorded in D114 one day earlier. Run
+break-tests through the shell that actually works, and **treat "nothing broke"
+as a claim needing evidence that the tests ran at all.**
