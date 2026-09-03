@@ -18,6 +18,7 @@ import pytest
 from app.models import BBox, ObjectType
 from app.orbits import tle_epoch
 from app.providers.base import ProviderBadResponse, ProviderUnavailable
+from app.providers.satellite_names import DirectoryEntry
 from app.providers.satellites import (
     SatelliteProvider,
     elements_from_file,
@@ -45,7 +46,7 @@ def frozen_now(monkeypatch):
     return moment
 
 
-async def _no_directory() -> dict[str, str]:
+async def _no_directory() -> dict:
     """The name directory, switched off.
 
     Injected by default because a test that supplies its own elements has said
@@ -316,7 +317,7 @@ class TestNamesAreASecondUpstream:
         is enormously better than not drawing them (D117).
         """
 
-        async def directory_is_down() -> dict[str, str]:
+        async def directory_is_down() -> dict:
             raise RuntimeError("db.satnogs.org unreachable")
 
         records = await provider(fetch_names=directory_is_down).fetch()
@@ -338,8 +339,8 @@ class TestNamesAreASecondUpstream:
                     element.name = "OBJECT A"
             return sets
 
-        async def directory() -> dict[str, str]:
-            return {"25544": "ISS (ZARYA)"}
+        async def directory() -> dict:
+            return {"25544": DirectoryEntry(name="ISS (ZARYA)")}
 
         records = await provider(
             fetch_elements=elements_with_a_placeholder, fetch_names=directory
@@ -351,9 +352,35 @@ class TestNamesAreASecondUpstream:
     async def test_a_real_name_is_never_replaced_by_the_directory(self):
         """The element feed is the authority; the directory only fills blanks."""
 
-        async def directory() -> dict[str, str]:
-            return {"25544": "SOMETHING ELSE ENTIRELY"}
+        async def directory() -> dict:
+            return {"25544": DirectoryEntry(name="SOMETHING ELSE ENTIRELY")}
 
         records = await provider(fetch_names=directory).fetch()
         iss = next(r for r in records if r.id == "25544")
         assert iss.label == "ISS (ZARYA)"
+
+    @pytest.mark.anyio
+    async def test_a_picture_reaches_the_record_when_the_directory_has_one(self):
+        """The image URL is carried into meta, where the panel can find it."""
+
+        async def directory() -> dict:
+            return {"25544": DirectoryEntry(image_url="https://db.satnogs.org/media/x.jpg")}
+
+        records = await provider(fetch_names=directory).fetch()
+        iss = next(r for r in records if r.id == "25544")
+        assert iss.meta["imageUrl"] == "https://db.satnogs.org/media/x.jpg"
+
+    @pytest.mark.anyio
+    async def test_no_picture_means_no_key_rather_than_an_empty_one(self):
+        """Two objects in three have no picture, and absence is not a value.
+
+        An empty string in `imageUrl` would reach the frontend as a broken
+        image; the key simply not being there is the honest shape, and it is
+        what the panel branches on.
+        """
+
+        async def directory() -> dict:
+            return {}
+
+        records = await provider(fetch_names=directory).fetch()
+        assert all("imageUrl" not in r.meta for r in records)

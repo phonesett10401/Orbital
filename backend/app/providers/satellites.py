@@ -39,8 +39,13 @@ from app.models import BBox, ObjectType, TrackedObjectRecord, utcnow
 from app.orbits import OrbitError, parse_epoch, propagate, tle_epoch
 from app.providers.base import Provider, ProviderBadResponse, ProviderUnavailable
 from app.providers.satellite_names import (
+    SATCAT_URL,
     SATNOGS_DIRECTORY_URL,
-    parse_directory,
+    DirectoryEntry,
+    image_index,
+    merge_directories,
+    parse_satcat,
+    parse_satnogs_directory,
     resolve_names,
 )
 
@@ -121,7 +126,7 @@ DEFAULT_SOURCES: tuple[tuple[str, str], ...] = (
 )
 
 ElementFetcher = Callable[[], Awaitable[list[ElementSet]]]
-NameFetcher = Callable[[], Awaitable[dict[str, str]]]
+DirectoryFetcher = Callable[[], Awaitable[dict[str, DirectoryEntry]]]
 
 
 class SatelliteProvider(Provider):
@@ -144,7 +149,7 @@ class SatelliteProvider(Provider):
         user_agent: str = "Orbital/0.1 (CSC480 student project)",
         refresh_seconds: float = ELEMENT_REFRESH_SECONDS,
         fetch_elements: ElementFetcher | None = None,
-        fetch_names: NameFetcher | None = None,
+        fetch_names: DirectoryFetcher | None = None,
         cache_path: Path | None = None,
     ) -> None:
         self._sources = tuple(sources)
@@ -153,6 +158,7 @@ class SatelliteProvider(Provider):
         self._refresh = refresh_seconds
         self._fetch_elements = fetch_elements or self._fetch_from_sources
         self._fetch_names = fetch_names or self._fetch_directory
+        self._images: dict[str, str] = {}
         self._client: httpx.AsyncClient | None = None
 
         self._cache_path = cache_path
@@ -192,17 +198,35 @@ class SatelliteProvider(Provider):
             failures.append(f"{source_name}: no usable element sets")
         raise ProviderUnavailable("no element source answered: " + "; ".join(failures))
 
-    async def _fetch_directory(self) -> dict[str, str]:
-        """Catalogue number to real name, from the SatNOGS satellite database.
+    async def _fetch_directory(self) -> dict[str, DirectoryEntry]:
+        """Names and pictures, from both directories, merged.
 
-        A different endpoint from the elements: ``/api/satellites/`` is the
-        directory and ``/api/tle/`` is the feed. The directory knows that
-        2019-093C is CAS-6; the feed still calls it ``OBJECT C`` (D117).
+        Different endpoints from the elements: ``/api/satellites/`` is SatNOGS's
+        directory and ``/api/tle/`` its feed. The directory knows 2019-093C is
+        CAS-6 while the feed still calls it ``OBJECT C`` (D117).
+
+        **Either source may fail without costing the other.** They are separate
+        services and they fail separately - CelesTrak's SATCAT has served
+        normally through days of its element endpoint returning 403 - so a
+        source that does not answer contributes nothing rather than taking the
+        other down with it (D118). SatNOGS is listed first because it is the
+        only one with pictures and the better curated on small satellites.
         """
         client = await self._client_or_new()
-        response = await client.get(SATNOGS_DIRECTORY_URL)
-        response.raise_for_status()
-        return parse_directory(response.json())
+        collected: list[dict[str, DirectoryEntry]] = []
+        for label, url, parse in (
+            ("satnogs", SATNOGS_DIRECTORY_URL, parse_satnogs_directory),
+            ("celestrak satcat", SATCAT_URL, parse_satcat),
+        ):
+            try:
+                response = await client.get(url)
+                response.raise_for_status()
+                collected.append(parse(response.json()))
+            except Exception as exc:
+                logger.warning("name source %s failed: %s", label, exc)
+        if not collected:
+            raise ProviderUnavailable("no satellite directory answered")
+        return merge_directories(*collected)
 
     def _read_cache(self) -> list[ElementSet]:
         """Elements saved by a previous run, or an empty list."""
@@ -295,10 +319,13 @@ class SatelliteProvider(Provider):
                 logger.warning("satellite name directory unavailable: %s", exc)
             else:
                 resolved = resolve_names(elements, directory)
-                if resolved:
-                    logger.info(
-                        "named %d objects the element feed left as placeholders", resolved
-                    )
+                self._images = image_index(directory)
+                logger.info(
+                    "named %d objects the element feed left as placeholders; "
+                    "%d have a picture",
+                    resolved,
+                    len(self._images),
+                )
 
             self._elements = elements
             self._elements_at = now
@@ -391,6 +418,13 @@ class SatelliteProvider(Provider):
                         "elementEpoch": element.epoch.isoformat(),
                         "elementAgeDays": f"{position.element_age_days:.2f}",
                         "elementSource": self._source_used or "unknown",
+                        # Absent for two objects in three, and the panel draws
+                        # that as an answer rather than a gap (D118).
+                        **(
+                            {"imageUrl": self._images[element.catalog_id]}
+                            if element.catalog_id in self._images
+                            else {}
+                        ),
                     },
                 )
             )

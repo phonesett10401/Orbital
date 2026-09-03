@@ -29,6 +29,7 @@ import { useEffect, useState } from 'react';
 import { STALE_AFTER_SECONDS } from '../interpolate';
 
 import { AircraftPhoto } from './AircraftPhoto';
+import { SatellitePhoto } from './SatellitePhoto';
 import { useAirline } from '../airlines';
 import type { Airport } from '../types';
 import { wingspanFor } from '../wingspan';
@@ -131,6 +132,12 @@ export function DetailPanel() {
     return (
       <aside className="panel" aria-label={`Details for ${detail.label}`}>
         {header}
+        {/*
+          A different component from the aircraft one, because it makes a
+          different claim: this is usually a picture of the mission or the
+          class, not a photograph of the object overhead (D118).
+        */}
+        <SatellitePhoto imageUrl={detail.meta?.imageUrl} />
         <div className="panel__age">
           Computed for now &mdash; a satellite position is calculated, not observed
         </div>

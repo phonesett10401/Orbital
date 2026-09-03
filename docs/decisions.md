@@ -6251,3 +6251,77 @@ all three, because `.venv/Scripts/python` is not a command `cmd.exe`
 understands - the identical failure recorded in D114 one day earlier. Run
 break-tests through the shell that actually works, and **treat "nothing broke"
 as a claim needing evidence that the tests ran at all.**
+
+---
+
+## D118 - Two directories, and the picture comes free with the name
+
+Phone asked what the remaining `OBJECT xx` entries were and whether satellites
+could have photographs like the aircraft do. Both answers came from the same
+place.
+
+### The remaining 32
+
+D117 took 266 placeholders down to 53 using SatNOGS. The 53 that survived are
+genuinely uncorrelated - SatNOGS itself calls them `Object B`, `Unknown
+Satellite`, `2019-093F`. Several share a launch: 44880/82/84/86/87/89 are all
+2019-093, one rideshare where nothing was individually identified.
+
+**CelesTrak's SATCAT knows 21 of them** - SHUNTIAN, ETRSS-1, FENGYUN 3H,
+ALSAT-3B, TIANYAN 02, WEILAI 1R, five DONGPO satellites. Live after the union:
+**32 unnamed, 2.2%**, from 19% this morning.
+
+**And SATCAT answers when CelesTrak's element endpoint does not.** `gp.php` has
+returned 403 for days while `satcat/records.php` serves in four seconds. That
+is D95's lesson arriving a third time: *"CelesTrak is up" and "elements are
+available" are different questions* - and so is "names are available". A source
+written off as down was serving the whole time, on another path.
+
+### The debris question, answered from the catalogue
+
+Every one of the 1,114 objects we serve that SATCAT has a record for is
+`OBJECT_TYPE: PAY`. **No rocket bodies, no debris.** Not because anything
+filters: the elements come from SatNOGS, a 2,773-object *spacecraft* database
+rather than the ~100,000-object catalogue. That is a property of the source and
+would stop holding if the source changed.
+
+`test_no_provider_serves_debris_or_rocket_bodies` does not check this. It
+asserts no *provider is named* after debris, inspecting `('fixture', 'union',
+'satellites')`. It would pass unchanged while serving nothing but debris - the
+same shape as the vacuous test in D107, and worth its own entry only because
+its name is so much stronger than its assertion.
+
+### The merge is field by field, because the sources are good at different things
+
+| | names | pictures |
+|---|---|---|
+| SatNOGS | curated, small sats | **1,040 of 2,773** |
+| CelesTrak SATCAT | the official catalogue | none |
+
+Taking whole rows would mean choosing between a name from one and a picture
+from the other when both are available. Either source may fail without costing
+the other; only both failing is an outage.
+
+**The picture costs no extra request.** The SatNOGS row carrying a name carries
+an `image` too, so resolving names and finding pictures are the same fetch.
+The data is CC BY-SA 4.0, so the panel credits SatNOGS beside the image.
+
+### A satellite picture is a different claim from an aircraft photograph
+
+`SatellitePhoto` is deliberately **not** `AircraftPhoto` reused. An aircraft
+photo is of *that airframe* - a spotter photographed G-STBO. A satellite
+picture is frequently the mission, the class, or an engineering model; nobody
+photographs a cubesat at 500 km. So the caption reads *"Pictured by SatNOGS"*
+rather than implying a photograph taken in orbit. Sharing the component would
+have saved thirty lines and asserted something untrue.
+
+Two objects in three have no picture, drawn at the same height as an answer.
+
+### And a measurement mistake worth naming
+
+Reading `imageUrl` back from `/api/satellites` returned **0%**, which looked
+exactly like the feature not working. The list endpoint strips `meta` by
+design; the detail endpoint - the one the panel actually calls - had the URL
+all along. **Measure the endpoint the feature uses.** That is the third
+instrument error in three days, after the 250-entry resource-timing buffer
+(D112) and the break-test harness that never ran (D114, D117).

@@ -42,7 +42,7 @@ def client(monkeypatch):
 
     original = SatelliteProvider.__init__
 
-    async def no_directory() -> dict[str, str]:
+    async def no_directory() -> dict:
         return {}
 
     def offline_init(self, **kwargs):

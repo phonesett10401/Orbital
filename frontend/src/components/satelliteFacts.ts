@@ -180,4 +180,7 @@ export const SATELLITE_META_SHOWN = new Set([
   'elementAgeDays',
   'elementSource',
   'elementEpoch',
+  // Drawn as the picture at the top of the panel, so it must not also appear
+  // as a key/value row - the generic renderer would print the raw URL (D118).
+  'imageUrl',
 ]);
