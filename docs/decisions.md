@@ -6087,3 +6087,81 @@ that file; it simply never showed, because the values in it happened to be
 compatible. A suite whose result depends on an untracked local file is not a
 suite. `conftest` now nulls `env_file` and strips `ORBITAL_*` from the
 environment for the session, and removing that fixture reproduces the errors.
+
+---
+
+## D116 - A photograph of the actual airframe, fetched by the browser
+
+Phone asked for aircraft photos at the top of the detail panel. The interesting
+part is not the feature, it is that the terms of use decide the architecture -
+and they decide it against D7.
+
+### The source, and why it needs nothing looked up first
+
+Planespotters' public photo API is free, needs no key, and is keyed on the
+**ICAO24 hex** - which is already Orbital's aircraft `id`. So there is no
+registration lookup in front of it and no second request.
+
+**Coverage was measured, not assumed.** Sixty real aircraft over southern
+England, pulled live from adsb.lol: **42 of 52 had a photograph of that exact
+airframe - 81%**. High enough to design the panel around the picture rather
+than treat it as a garnish.
+
+An earlier reading of the same sample reported a 13% error rate. That was
+wrong, and wrong in a way worth recording: it was **our own request rate**,
+about eight a second. Paced properly, 59 of 60 succeeded, the single failure
+was an HTTP 525 - a Cloudflare origin hiccup - and the same hex returned a
+photograph a second later. In the app the rate is one request per aircraft
+somebody clicks. **An instrument under load measures the instrument.**
+
+### The browser calls it directly, and cannot do otherwise
+
+D7 says the browser talks to our backend and nothing else. This is a deliberate
+exception, and unlike the OpenFreeMap tiles it is permanent, because the terms
+forbid the alternative explicitly:
+
+> Re-exposing the API or its data through your own API, feed, bulk export, or
+> dataset is prohibited.
+
+> All URLs returned by the API - image sources, photo links, and any other URL
+> fields - must be used unchanged. Proxying, rewriting, or hot-link-protection
+> bypassing is not permitted.
+
+So there is no `/api/aircraft/{id}/photo`, no backend cache and no image proxy.
+The API is CORS-enabled and checks the `Origin` header a browser sends
+automatically; a server would instead have to send a descriptive `User-Agent`,
+which a browser cannot set and does not need. The intended client here is the
+one we were going to route around.
+
+### Attribution is a condition of display, so it is structural
+
+The photographer must be credited in visible text and the thumbnail must lead
+back to the photo's page, in a plain anchor with no `rel="nofollow"`. That is
+not styling, it is the licence. Three things follow:
+
+- The anchor **is** the thumbnail and the credit lives inside the same
+  `<figure>`, so no later layout change can separate them.
+- `parsePhotos` returns `null` for a record missing `link` or `photographer`.
+  A photo we cannot attribute is treated as no photo rather than shown bare.
+- A test asserts the URLs are passed through byte-for-byte, because a
+  well-meaning CDN rewrite would look like an optimisation.
+
+Caching is metadata only, capped at the 24 hours the terms allow. The image
+binaries are fetched by the browser from the returned URLs and never stored.
+
+### One aircraft in five has no photograph, and that is an answer
+
+`{"photos":[]}` is the ordinary case for 19% of traffic, so it is drawn: a
+dashed panel of the same 16:9 height saying *"No photograph of this airframe"*.
+Same height deliberately - a panel that loses its top third reads as broken.
+
+It is also kept **distinct from a failed request**, which says *"Could not
+reach the photo archive"*. Collapsing them would report a network fault as a
+fact about the aircraft, which is the D102 mistake exactly: there, 70% of a
+named satellite catalogue was labelled "Unidentified object" because a fact
+about our pattern list was reported as a fact about the world.
+
+Verified in the running app against the live union feed: **G-STBO**, a British
+Airways 777-300ER outbound LHR-JFK, showed its own photograph with the credit
+and link intact; **N9055F**, a Cessna 208 over Kotzebue Sound, showed the
+absent state.

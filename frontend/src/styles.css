@@ -300,6 +300,103 @@ body {
   color: var(--text-dim);
 }
 
+/*
+ * The aircraft photograph.
+ *
+ * A fixed aspect ratio on every state - image, absent, error and loading - so
+ * the panel does not jump as one resolves into another. Planespotters returns
+ * about 497x280, which is 16:9 within a pixel.
+ */
+.panel__photo {
+  margin: 0 0 10px;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panel__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.panel__photo a {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * The credit sits over the foot of the image rather than under it: the panel is
+ * short and this must never be the row that gets cut off, because showing the
+ * photograph without it is not permitted.
+ */
+.panel__photo figcaption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 8px 5px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.82);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), transparent);
+  pointer-events: none;
+}
+
+.panel__photo figcaption a {
+  width: auto;
+  height: auto;
+  pointer-events: auto;
+  color: rgba(255, 255, 255, 0.82);
+  text-decoration: underline;
+  flex: none;
+}
+
+.panel__photo-credit {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* No photograph, and the request that failed. Both are answers, so both are
+   drawn rather than collapsed to zero height. */
+.panel__photo--none {
+  font-size: 11px;
+  color: var(--text-dim);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: none;
+}
+
+.panel__photo--pending {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.04) 30%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.04) 70%
+  );
+  background-size: 240% 100%;
+  animation: panel-photo-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes panel-photo-shimmer {
+  from { background-position: 140% 0; }
+  to { background-position: -40% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel__photo--pending { animation: none; }
+}
+
 .panel__age {
   margin-top: 6px;
   font-size: 12px;

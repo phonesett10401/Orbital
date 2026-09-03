@@ -28,6 +28,7 @@
 import { useEffect, useState } from 'react';
 import { STALE_AFTER_SECONDS } from '../interpolate';
 
+import { AircraftPhoto } from './AircraftPhoto';
 import { useAirline } from '../airlines';
 import type { Airport } from '../types';
 import { wingspanFor } from '../wingspan';
@@ -165,6 +166,14 @@ export function DetailPanel() {
   return (
     <aside className="panel" aria-label={`Details for ${detail.label}`}>
       {header}
+
+      {/*
+        Above the age line and below the callsign: the picture answers "what am
+        I looking at" faster than any row below it can, and four selections in
+        five have one (D116). Keyed on the id so switching aircraft remounts
+        rather than showing the previous airframe while the next loads.
+      */}
+      <AircraftPhoto key={detail.id} icao24={detail.id} />
 
       <div className={`panel__age ${isStale ? 'panel__age--stale' : ''}`}>
         Last reported {formatAge(ageSec)}
