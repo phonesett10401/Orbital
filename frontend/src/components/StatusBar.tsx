@@ -28,7 +28,7 @@ function formatAge(seconds: number | null): string {
 export function StatusBar() {
   const viewInstant = useOrbitalStore((s) => s.viewInstant);
   const activeBody = useOrbitalStore((s) => s.activeBody);
-  const moonCraft = useOrbitalStore((s) => s.moonCraft);
+  const moonCraft = useOrbitalStore((s) => s.moonCraft.length);
   const activeLayer = useOrbitalStore((s) => s.activeLayer);
   const feed = useOrbitalStore((s) => s.feed);
   const count = useOrbitalStore((s) => s.objects.size);

@@ -7214,15 +7214,22 @@ objects the clamp existed to save were being dropped before the shader ran.
 handles the depth, this handles the culling, and neither is sufficient alone -
 which is why the first fix looked correct and was half a fix.
 
-### Checked and found already correct
+### A "verified" finding here was wrong - see D135
 
-The feed does **not** keep polling while the camera is on another world -
-measured, because the quota is real: Earth's `fetchedAtMs` advanced over thirty
-seconds, Mars's advanced by **0 ms**. Worth recording as verified rather than
-assumed, since the instrument lied twice on the way there: the resource-timing
-buffer reported zero requests because it caps at 250 entries, and a patched
-`window.fetch` counted zero on Earth too, where polling was demonstrably
-happening.
+This section originally recorded that the feed does not poll while the camera
+is on another world, measured by watching `feed.fetchedAtMs` fail to advance on
+Mars. **That conclusion was false and the measurement did not support it.**
+
+`fetchedAtMs` is parsed from the response's `fetchedAt` - the *backend's*
+upstream fetch time. It stops advancing whenever the backend's own poller has
+not been round again, which is a fact about the backend's schedule and says
+nothing whatever about whether the browser is making requests. Two instruments
+had already lied on the way to that answer, both correctly identified at the
+time; the third lied too and was believed, because by then it looked like
+confirmation.
+
+D135 measured the requests themselves and found the poll running off Earth all
+along.
 
 ## D134 - Spacecraft around the Moon, which needed a third kind of data path
 
@@ -7306,3 +7313,75 @@ moment the Moon had objects, which is the D120 fault again in the one line a
 reader checks to find out what they are looking at. It now counts what is
 actually drawable, so a spacecraft whose window has run out is reflected in the
 number rather than silently missing from it.
+
+## D135 - A panel for the lunar craft, and a wrong answer corrected
+
+Phone asked for a detail panel on the Moon's spacecraft. Building it turned up
+a claim from the session before that was simply not true.
+
+### The panel
+
+A separate component from `DetailPanel` rather than a branch inside it. That
+panel is built around a fetched detail record, a data age, a decoded airline,
+an observed track and a scheduled route. A lunar craft has none of those, and
+has one thing none of the others do.
+
+**Its position was published in advance rather than observed.** An aircraft
+reports where it was. An Earth satellite's position is computed from elements
+fitted to real tracking. A lunar position is read from an ephemeris table
+computed *before the fact* by the people flying the spacecraft - very accurate,
+and not a measurement. Nothing about a marker on a map conveys that, so the
+panel says it, and the sentence is asserted in `moonFacts.test.ts` rather than
+left to whoever edits the JSX next.
+
+Two smaller judgements, both extracted so they could be tested:
+
+- The coordinates are labelled **"Over"**, not "Position". They are the point
+  on the surface beneath the craft, not a place it is at, and one word carries
+  the whole distinction.
+- There are **three** panel states, not two. A spacecraft can stop being
+  tracked *while its panel is open*, when its ephemeris window runs out on the
+  next poll. Freezing the last position looks identical to a craft still being
+  followed; closing the panel moves the reader somewhere they did not ask to
+  go. It says so instead.
+
+The store holds the craft rather than a count, so an open panel keeps up with a
+spacecraft that goes round the Moon in two hours. Verified live: the panel was
+opened on LRO at 71 km and read 82 km a moment later, because LRO had moved.
+
+Clicking is handled **inside the existing click handler**, not beside it. A
+second handler scoped to the lunar layers is the obvious way to write it and is
+exactly the defect D69 removed - two queries that agree only by coincidence,
+with a select undone by a deselect in the same click.
+
+There is no render harness in this project, so the component stays thin and the
+judgements live in `moonFacts.ts`, the way `satelliteFacts`, `routeSummary` and
+`panelFields` already do.
+
+### The correction
+
+D133 recorded, as a verified finding, that the feed does not poll while the
+camera is on another world. **It does.** Measured from the network log: three
+`/api/aircraft` requests in twenty-five seconds while the camera was on the
+Moon, against three in the same window on Earth.
+
+The original measurement watched `feed.fetchedAtMs` and saw it frozen on Mars.
+That field is parsed from the response's `fetchedAt` - **the backend's upstream
+fetch time**. It stops advancing whenever the backend's poller has not been
+round again, which is a fact about the backend and says nothing about whether
+the browser is asking. Two instruments had already been caught lying in that
+same investigation - the resource-timing buffer's 250-entry cap, and a patched
+`window.fetch` that counted zero on Earth - and the third was believed because
+by then it looked like confirmation rather than a fresh claim needing its own
+control.
+
+**No upstream credit was being spent**, which is why it survived: `/api/aircraft`
+is served from the backend's in-memory store and its poller runs to its own
+schedule either way. The cost was work and coherence - D120 clears the objects
+on a body change, and the next tick fetched two thousand of them straight back
+into the store that had just been emptied, to be drawn by nobody because D133
+hides the layers.
+
+Both polls in `usePolling` are now gated on being on Earth. Measured after:
+**0 requests on the Moon against 3 on Earth**, same instrument, same session,
+with the Earth reading taken as a control rather than assumed.

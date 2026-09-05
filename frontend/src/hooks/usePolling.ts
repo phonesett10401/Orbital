@@ -58,6 +58,19 @@ export function useObjectPolling(): void {
   const layer = useOrbitalStore((s) => s.activeLayer);
   const viewport = useOrbitalStore((s) => s.viewport);
   const viewInstant = useOrbitalStore((s) => s.viewInstant);
+  // **The poll stops when the camera leaves Earth.** D120 clears the objects on
+  // a body change because they describe Earth and nothing about them survives
+  // the trip - and without this the very next tick, at most ten seconds later,
+  // fetched two thousand of them straight back into the store that had just
+  // been emptied. Nothing was drawn, because D133 hides the layers, so the only
+  // visible symptom was work: a 2,000-object response parsed six times a minute
+  // to be looked at by nobody.
+  //
+  // No upstream credit was being spent - `/api/aircraft` is served from the
+  // backend's own store and its poller runs to its own schedule either way -
+  // which is exactly why this survived: it cost nothing anybody was measuring
+  // (D135).
+  const onEarth = useOrbitalStore((s) => s.activeBody) === 'earth';
 
   // Held in a ref so a viewport change does not tear down and restart the
   // interval; only the layer does that.
@@ -65,6 +78,7 @@ export function useObjectPolling(): void {
   viewportRef.current = viewport;
 
   useEffect(() => {
+    if (!onEarth) return undefined;
     let cancelled = false;
     let controller: AbortController | null = null;
 
@@ -104,7 +118,7 @@ export function useObjectPolling(): void {
       controller?.abort();
       if (timer !== null) window.clearInterval(timer);
     };
-  }, [layer.resource, viewInstant]);
+  }, [layer.resource, viewInstant, onEarth]);
 
   // A meaningful viewport change is worth an immediate refetch rather than
   // waiting out the interval, so panning to a new region fills in promptly.
@@ -113,6 +127,7 @@ export function useObjectPolling(): void {
   // already covers the globe, so a move has nothing to fetch and firing one
   // would replace the whole set with an identical one mid-drag.
   useEffect(() => {
+    if (!onEarth) return undefined;
     if (!viewport || !layer.viewportScoped) return undefined;
     // A rewound map is not viewport-scoped either: the layer that can be
     // rewound is the one that sends no viewport in the first place, but
@@ -139,7 +154,7 @@ export function useObjectPolling(): void {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [viewport, layer.resource, layer.viewportScoped, viewInstant]);
+  }, [viewport, layer.resource, layer.viewportScoped, viewInstant, onEarth]);
 }
 
 /** Fetch the full record, including the observed track, for the selection. */

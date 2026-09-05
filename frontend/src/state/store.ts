@@ -16,6 +16,7 @@
  */
 
 import { create } from 'zustand';
+import type { MoonSatellite } from '../moonSatellites';
 
 import type {
   Airport,
@@ -136,16 +137,27 @@ export interface OrbitalState {
   setActiveBody(body: BodyId): void;
 
   /**
-   * How many spacecraft are currently tracked around the Moon.
+   * The spacecraft currently tracked around the Moon.
    *
-   * Here rather than only on the map because the status bar has to say it, and
-   * the line it replaces - "no live objects here" - became false the moment
-   * the Moon got objects. That is the D120 fault exactly, one body along:
-   * chrome describing the wrong subject in the one line a reader checks
-   * (D134).
+   * The craft themselves rather than a count, because two things need them:
+   * the status bar, whose "no live objects here" became false the moment the
+   * Moon had objects (the D120 fault, one body along), and the detail panel,
+   * which must show a position that **keeps moving** - these go round in about
+   * two hours, so a snapshot taken at click time would be visibly wrong within
+   * a minute of reading it (D135).
    */
-  moonCraft: number;
-  setMoonCraft(count: number): void;
+  moonCraft: MoonSatellite[];
+  setMoonCraft(craft: MoonSatellite[]): void;
+
+  /**
+   * Which lunar spacecraft the panel is open for.
+   *
+   * Separate from `selectedId`, which names an object in Earth's sky and is
+   * fetched from a detail endpoint. There is no endpoint here and nothing to
+   * fetch: everything the panel shows already arrived with the position.
+   */
+  selectedMoonId: string | null;
+  selectMoonCraft(id: string | null): void;
 
   /**
    * Where the camera is heading, while a trip is in progress.
@@ -286,9 +298,13 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   },
 
   activeBody: 'earth',
-  moonCraft: 0,
-  setMoonCraft(count) {
-    if (useOrbitalStore.getState().moonCraft !== count) set({ moonCraft: count });
+  moonCraft: [],
+  setMoonCraft(craft) {
+    set({ moonCraft: craft });
+  },
+  selectedMoonId: null,
+  selectMoonCraft(id) {
+    if (useOrbitalStore.getState().selectedMoonId !== id) set({ selectedMoonId: id });
   },
   setActiveBody(body) {
     // Changing world clears everything held, for the same reason changing
@@ -301,6 +317,11 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
       selectedId: null,
       selectedDetail: null,
       viewInstant: null,
+      // The lunar craft and any panel open on one go the same way, and for the
+      // same reason: they name something that is not on the world being
+      // travelled to. Leaving them would show a Moon panel over Mars (D135).
+      moonCraft: [],
+      selectedMoonId: null,
     });
   },
 

@@ -15,6 +15,7 @@ import { showsEarthLayers } from './bodies';
 import { BodyPicker } from './components/BodyPicker';
 import { TimeControl } from './components/TimeControl';
 import { DetailPanel } from './components/DetailPanel';
+import { MoonPanel } from './components/MoonPanel';
 import { LayerToggle } from './components/LayerToggle';
 import { Legend } from './components/Legend';
 import { SearchBar } from './components/SearchBar';
@@ -66,6 +67,10 @@ export function App() {
 
       {onEarth && <TimeControl />}
       {onEarth && <DetailPanel />}
+      {/* Its own panel rather than a branch in that one: a lunar craft shares
+          almost no fields with an aircraft, and has one none of them do - a
+          position published in advance rather than observed (D135). */}
+      <MoonPanel />
       {onEarth && <Legend />}
       <StatusBar />
     </div>

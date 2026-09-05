@@ -51,8 +51,14 @@ import {
 import { createSatelliteIconCanvases } from './satelliteSprite';
 import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
 import { SOLAR_LAYER, createSolarSystemLayer, type SolarLayer } from './solarSystemLayer';
-import { MOON_SOURCE, moonSatelliteLayers, moonSource } from './moonLayer';
-import { toFeatures as moonFeatures } from '../moonSatellites';
+import {
+  MOON_LABEL_LAYER,
+  MOON_LAYER,
+  MOON_SOURCE,
+  moonSatelliteLayers,
+  moonSource,
+} from './moonLayer';
+import { drawable as drawableCraft, toFeatures as moonFeatures } from '../moonSatellites';
 import { fetchMoonSatellites } from '../api/client';
 import {
   SATELLITE_LABEL_LAYER,
@@ -192,10 +198,10 @@ function startMoonPoll(map: import('maplibre-gl').Map): { stop: () => void } {
       if (source && 'setData' in source) {
         (source as { setData: (data: unknown) => void }).setData(features);
       }
-      // The count the status bar reports is the number actually drawable, not
-      // the number of spacecraft that exist: a craft whose ephemeris window
-      // has run out is absent, and the footer should say so by counting.
-      useOrbitalStore.getState().setMoonCraft(features.features.length);
+      // What the status bar counts and the panel reads: the craft actually
+      // drawable, not the ones that exist. A craft whose ephemeris window has
+      // run out is absent from both, rather than frozen in either.
+      useOrbitalStore.getState().setMoonCraft(drawableCraft(snapshot.objects ?? []));
     } catch {
       // Keep what is drawn. See the note above.
     }
@@ -584,6 +590,18 @@ export function PlanetView() {
           // query, one decision, no ordering to get right (D69).
           map.on('click', (event) => {
             if (!map) return;
+            // The Moon first, and **inside this handler rather than beside
+            // it**. A second click handler scoped to the lunar layers is the
+            // obvious way to write this and is exactly the defect D69 removed:
+            // two queries that agree only by coincidence, with a select undone
+            // by a deselect in the same click. One query, one decision (D135).
+            if (useOrbitalStore.getState().activeBody === 'moon') {
+              const hit = hitsAt(map, event.point, [MOON_LAYER, MOON_LABEL_LAYER])[0];
+              useOrbitalStore
+                .getState()
+                .selectMoonCraft((hit?.properties?.id as string) ?? null);
+              return;
+            }
             // The shell is a custom layer, so MapLibre does not hit-test it.
             // Ask it first: when it is drawing, it *is* the satellite view.
             if (map && shell && shell.drawnCount() > 0) {
@@ -605,7 +623,7 @@ export function PlanetView() {
               .getState()
               .select(selectionFromHits(hitsAt(map, event.point, layers)));
           });
-          for (const layer of [AIRCRAFT_LAYER, AIRCRAFT_LABEL_LAYER]) {
+          for (const layer of [AIRCRAFT_LAYER, AIRCRAFT_LABEL_LAYER, MOON_LAYER, MOON_LABEL_LAYER]) {
             map.on('mouseenter', layer, () => {
               if (map) map.getCanvas().style.cursor = 'pointer';
             });
@@ -761,7 +779,7 @@ export function PlanetView() {
             // and the positions move about half a degree a minute (D134).
             moonPoll?.stop();
             moonPoll = state.activeBody === 'moon' ? startMoonPoll(map) : null;
-            if (state.activeBody !== 'moon') useOrbitalStore.getState().setMoonCraft(0);
+            if (state.activeBody !== 'moon') useOrbitalStore.getState().setMoonCraft([]);
             // The terminator is a custom layer outside the style, so its
             // visibility is not in the plan `applyBody` applies. Night is an
             // Earth fact here - the texture is Earth's city lights.

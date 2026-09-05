@@ -258,3 +258,45 @@ describe('flyTo', () => {
     expect(useOrbitalStore.getState().flyTo).not.toBe(first);
   });
 });
+
+describe('lunar spacecraft', () => {
+  const craft = {
+    id: '-85',
+    name: 'LRO',
+    operator: 'NASA',
+    purpose: 'Mapping the Moon.',
+    lat: 38.4,
+    lon: -68.4,
+    altitudeKm: 70.9,
+  };
+
+  it('keeps the craft themselves, so an open panel keeps up with them', () => {
+    // A count would serve the status bar and leave the panel showing a
+    // position from whenever it was clicked - visibly wrong within a minute,
+    // because these go round in about two hours (D135).
+    useOrbitalStore.getState().setMoonCraft([craft]);
+    expect(useOrbitalStore.getState().moonCraft[0].altitudeKm).toBe(70.9);
+    useOrbitalStore.getState().setMoonCraft([{ ...craft, altitudeKm: 88.2 }]);
+    expect(useOrbitalStore.getState().moonCraft[0].altitudeKm).toBe(88.2);
+  });
+
+  it('leaving the Moon closes the panel and drops the craft', () => {
+    // Otherwise a Moon panel hangs over Mars, which is the same class of fault
+    // as drawing Earth's satellites there (D133, D135).
+    useOrbitalStore.getState().setMoonCraft([craft]);
+    useOrbitalStore.getState().selectMoonCraft('-85');
+    useOrbitalStore.getState().setActiveBody('mars');
+    const next = useOrbitalStore.getState();
+    expect(next.selectedMoonId).toBeNull();
+    expect(next.moonCraft).toEqual([]);
+  });
+
+  it('selecting a lunar craft does not disturb the Earth selection', () => {
+    // Two separate selections deliberately: one names an object with a detail
+    // endpoint behind it, the other names something already fully in hand.
+    useOrbitalStore.getState().select('a1');
+    useOrbitalStore.getState().selectMoonCraft('-85');
+    expect(useOrbitalStore.getState().selectedId).toBe('a1');
+    expect(useOrbitalStore.getState().selectedMoonId).toBe('-85');
+  });
+});
