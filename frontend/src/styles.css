@@ -300,6 +300,124 @@ body {
   color: var(--text-dim);
 }
 
+/* The world picker, under the wordmark. */
+.bodies {
+  position: relative;
+  margin-top: 3px;
+}
+
+.bodies__current {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  padding: 1px 0;
+  cursor: pointer;
+}
+
+.bodies__current:hover,
+.bodies__current:focus-visible {
+  color: var(--text);
+}
+
+.bodies__caret {
+  font-size: 8px;
+}
+
+.bodies__list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -8px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 250px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  z-index: 20;
+}
+
+.bodies__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 7px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.bodies__item:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.bodies__item.is-active {
+  color: var(--accent);
+}
+
+/*
+ * A world with no ground is not a disabled button waiting to work - it is an
+ * answer. Dimmed rather than hidden, with the reason on the row, because
+ * omitting Jupiter would read as an unfinished feature rather than as physics.
+ */
+.bodies__item.is-locked {
+  cursor: default;
+  color: var(--text-dim);
+}
+
+.bodies__name {
+  flex: 1;
+}
+
+.bodies__radius,
+.bodies__why {
+  font-size: 9.5px;
+  color: var(--text-dim);
+  text-align: right;
+  max-width: 140px;
+}
+
+.bodies__why {
+  font-style: italic;
+  line-height: 1.25;
+}
+
+.bodies__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: #888;
+}
+
+/* Colours from the bodies themselves, so the list is scannable without
+   reading: Mars rust, Neptune blue, the Sun bright. */
+.bodies__dot--sun { background: #ffd166; box-shadow: 0 0 6px rgba(255, 209, 102, 0.8); }
+.bodies__dot--mercury { background: #9c8b7d; }
+.bodies__dot--venus { background: #e6c884; }
+.bodies__dot--earth { background: #5aa8ff; }
+.bodies__dot--moon { background: #c9c9c9; }
+.bodies__dot--mars { background: #d1603d; }
+.bodies__dot--jupiter { background: #d7a06a; }
+.bodies__dot--saturn { background: #e3cfa0; }
+.bodies__dot--uranus { background: #9fd8e0; }
+.bodies__dot--neptune { background: #6b8fd6; }
+
 /*
  * The time scrubber, bottom centre.
  *

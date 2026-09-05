@@ -126,6 +126,14 @@ import {
   type PlanetFailure,
 } from './status';
 import { boundsToBBox, coversWholeWorld } from './viewport';
+import { bodyFor } from '../bodies';
+import { GIBS_ATTRIBUTION, IMAGERY_FAR_MAX_ZOOM } from './basemap';
+import {
+  IMAGERY_FAR,
+  maxZoomFor,
+  surfaceTilesFor,
+  visibilityFor,
+} from './bodySurface';
 
 /** How often to republish the viewport, matching the globe view's cadence. */
 const VIEWPORT_UPDATE_MS = 500;
@@ -144,6 +152,61 @@ const VIEWPORT_UPDATE_MS = 500;
  * folded into `whenBasemap` with the colours. It is set imperatively wherever
  * the mode is set, which is why both callers go through here.
  */
+/**
+ * Put a body under the camera.
+ *
+ * Not a `setStyle`: that would tear down every custom layer and source this
+ * view has added, which is the objection D75 raised against doing it for the
+ * imagery toggle. The style stays; the tiles and the visibilities change
+ * (D120).
+ */
+function applyBody(map: import('maplibre-gl').Map, bodyId: string): void {
+  const body = bodyFor(bodyId as never);
+  const style = map.getStyle();
+  if (!style) return;
+
+  // **The source is replaced, not re-pointed.** `setTiles` swaps the URLs and
+  // leaves the source's `attribution` behind, so Mars was being served under
+  // "Imagery NASA EOSDIS GIBS" - crediting the wrong mission for somebody
+  // else's data, which is a licence fault rather than a cosmetic one. MapLibre
+  // reads attribution when a source is added, so changing it means removing
+  // the layer, removing the source, and putting both back (D120).
+  const tiles = surfaceTilesFor(body);
+  const wanted = tiles
+    ? { tiles: [tiles], attribution: body.surface!.attribution, maxzoom: body.surface!.maxZoom }
+    : { tiles: [config.imageryTileUrl], attribution: GIBS_ATTRIBUTION, maxzoom: IMAGERY_FAR_MAX_ZOOM };
+
+  const existing = map.getStyle()?.sources?.[IMAGERY_FAR] as { attribution?: string } | undefined;
+  if (existing?.attribution !== wanted.attribution) {
+    const layer = map.getStyle()?.layers?.find((l) => l.id === IMAGERY_FAR);
+    // Put it back where it was: under the cartography, over the ground fill.
+    const all = map.getStyle()?.layers ?? [];
+    const below = all[all.findIndex((x) => x.id === IMAGERY_FAR) + 1]?.id;
+    if (layer) map.removeLayer(IMAGERY_FAR);
+    if (map.getSource(IMAGERY_FAR)) map.removeSource(IMAGERY_FAR);
+    map.addSource(IMAGERY_FAR, {
+      type: 'raster',
+      tiles: wanted.tiles,
+      tileSize: 256,
+      maxzoom: wanted.maxzoom,
+      attribution: wanted.attribution,
+    });
+    if (layer) map.addLayer(layer as never, below);
+  }
+
+  for (const [id, visibility] of Object.entries(
+    visibilityFor(body, style as never),
+  )) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
+  }
+
+  // Past a mosaic's own maximum zoom MapLibre overzooms, which on Mercury's
+  // five levels means a blurred rectangle shown with the confidence of a sharp
+  // one. The floor stays where it is - that is the globe's, not the body's.
+  map.setMaxZoom(maxZoomFor(body));
+  map.triggerRepaint();
+}
+
 function setImageryVisible(map: import('maplibre-gl').Map, mode: string): void {
   const visibility = mode === BASEMAP_IMAGERY ? 'visible' : 'none';
   for (const id of IMAGERY_LAYERS) {
@@ -578,6 +641,18 @@ export function PlanetView() {
         map.on('moveend', publishViewport);
 
         unsubscribe = useOrbitalStore.subscribe((state, previous) => {
+          // Changing world is rare and changes almost everything, so it is
+          // handled first and the rest of this subscriber is skipped: the
+          // layers it would touch have just been hidden (D120).
+          if (state.activeBody !== previous.activeBody && map) {
+            applyBody(map, state.activeBody);
+            // The terminator is a custom layer outside the style, so its
+            // visibility is not in the plan `applyBody` applies. Night is an
+            // Earth fact here - the texture is Earth's city lights.
+            terminator?.setEnabled(state.activeBody === 'earth' && config.terminator);
+            return;
+          }
+
           // The route is redrawn only when the selected object's detail changes,
           // not every frame: the track only grows once per poll, and rebuilding
           // a densified polyline is the expensive part of this layer (D6).

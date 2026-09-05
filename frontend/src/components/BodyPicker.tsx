@@ -1,0 +1,95 @@
+/**
+ * The worlds, under the wordmark.
+ *
+ * Opens on hover and on focus - hover alone would put the whole feature out of
+ * reach of a keyboard, and this is the only way to leave Earth.
+ *
+ * **Every body is listed, including the six that cannot be entered**, each
+ * with the reason it cannot. The alternative - showing only the four that
+ * work - would answer "can I go to Jupiter" with silence, and a reader would
+ * reasonably conclude the feature was unfinished rather than that Jupiter has
+ * no ground (D120).
+ */
+
+import { useState } from 'react';
+
+import { BODIES, type Body, bodyFor, isLandable } from '../bodies';
+import { useOrbitalStore } from '../state/store';
+
+export function BodyPicker() {
+  const activeBody = useOrbitalStore((s) => s.activeBody);
+  const setActiveBody = useOrbitalStore((s) => s.setActiveBody);
+  const [open, setOpen] = useState(false);
+
+  const current = bodyFor(activeBody);
+
+  const choose = (body: Body) => {
+    if (!isLandable(body)) return;
+    setActiveBody(body.id);
+    setOpen(false);
+  };
+
+  return (
+    <div
+      className="bodies"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        className="bodies__current"
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        onClick={() => setOpen((was) => !was)}
+        onFocus={() => setOpen(true)}
+      >
+        <span className={`bodies__dot bodies__dot--${current.id}`} aria-hidden="true" />
+        {current.name}
+        <span className="bodies__caret" aria-hidden="true">
+          ▾
+        </span>
+      </button>
+
+      {open && (
+        <ul className="bodies__list" role="listbox" aria-label="World to show">
+          {BODIES.map((body) => {
+            const landable = isLandable(body);
+            return (
+              <li key={body.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={body.id === activeBody}
+                  disabled={!landable}
+                  // The reason is on the row itself, not only in a tooltip: a
+                  // disabled control with no stated cause reads as broken.
+                  title={landable ? undefined : body.noSurfaceReason}
+                  className={`bodies__item ${body.id === activeBody ? 'is-active' : ''} ${
+                    landable ? '' : 'is-locked'
+                  }`}
+                  onClick={() => choose(body)}
+                >
+                  <span
+                    className={`bodies__dot bodies__dot--${body.id}`}
+                    aria-hidden="true"
+                  />
+                  <span className="bodies__name">{body.name}</span>
+                  {landable ? (
+                    <span className="bodies__radius">
+                      {body.radiusKm.toLocaleString(undefined, {
+                        maximumFractionDigits: 0,
+                      })}{' '}
+                      km
+                    </span>
+                  ) : (
+                    <span className="bodies__why">{body.noSurfaceReason}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}

@@ -11,6 +11,8 @@
  * that is the point: none of it was ever about how the planet is drawn.
  */
 
+import { showsEarthLayers } from './bodies';
+import { BodyPicker } from './components/BodyPicker';
 import { TimeControl } from './components/TimeControl';
 import { DetailPanel } from './components/DetailPanel';
 import { LayerToggle } from './components/LayerToggle';
@@ -31,6 +33,13 @@ export function App() {
   // layer rather than being written once for aircraft (D100).
   const activeLayer = useOrbitalStore((s) => s.activeLayer);
 
+  // Aircraft and satellites are statements about Earth. On another world the
+  // search box, the layer toggle, the altitude key and the object count are
+  // not empty - they are about nothing (D120). Chrome describing the wrong
+  // subject is the fault D100 already caught once, in the place a reader is
+  // most likely to believe it.
+  const onEarth = showsEarthLayers(useOrbitalStore((s) => s.activeBody));
+
   return (
     <div className="app">
       <PlanetView />
@@ -45,16 +54,19 @@ export function App() {
           <img className="app__mark" src="/logo.svg" alt="" aria-hidden="true" />
           <div className="app__brandText">
             <span className="app__title">Orbital</span>
-            <span className="app__subtitle">{chromeFor(activeLayer.id, []).subtitle}</span>
+            <span className="app__subtitle">
+              {onEarth ? chromeFor(activeLayer.id, []).subtitle : 'surface imagery'}
+            </span>
+            <BodyPicker />
           </div>
         </div>
-        <SearchBar />
-        <LayerToggle />
+        {onEarth && <SearchBar />}
+        {onEarth && <LayerToggle />}
       </header>
 
-      <TimeControl />
-      <DetailPanel />
-      <Legend />
+      {onEarth && <TimeControl />}
+      {onEarth && <DetailPanel />}
+      {onEarth && <Legend />}
       <StatusBar />
     </div>
   );

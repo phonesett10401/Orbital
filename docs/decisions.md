@@ -6401,3 +6401,84 @@ aircraft panel, the element age on every satellite, the coverage layer's
 sentence about absence. A rewound map that looked live would have been the most
 confident lie in the project, and the first version shipped one in the corner.
 Found by looking at the running app, which is where the other twenty came from.
+
+---
+
+## D120 - Four worlds, and the six that say why not
+
+Phase 1 of the solar system: a picker under the wordmark, and Orbital can put a
+camera on somewhere other than Earth.
+
+### Probing changed the answer twice
+
+**NASA Trek looked like the source.** It serves Mercury, the Moon and Mars, all
+keyless, and the tiles came back 200. Then the grid gave it away: Trek's `z0`
+is **two tiles wide and one tall**, which is equirectangular. Web Mercator's
+`z0` is a single tile. A MapLibre raster source has no plate carree support, so
+Trek is unusable here whatever its coverage - and nothing about the HTTP status
+would ever have said so.
+
+**OpenPlanetaryMap serves the same three in Web Mercator.** Mercury was very
+nearly written off with them: it is absent from OPM's own basemap page, and
+only appeared after guessing `opm-mercury-basemap-v0-1` when `v0-2` returned
+404. Venus, Ceres, Vesta, Titan, Europa, Io and Pluto were probed on the same
+pattern and all 404.
+
+So: **Earth, Mercury, Moon, Mars**. Four worlds with ground under them.
+
+### Two different kinds of "no"
+
+Venus has a complete Magellan radar map and no Mercator tiles here. Jupiter has
+**no solid surface** - not a missing dataset that might appear later, but
+nothing to map. The picker states each reason on the row rather than hiding
+either, because a list of four would answer *"can I go to Jupiter"* with
+silence and a reader would conclude the feature was unfinished.
+
+### A body swap is not a `setStyle`
+
+That would tear down the aircraft, their tracks, the leader, the model, the
+terminator, the satellite shell and every source behind them - the objection
+D75 raised against doing it for the imagery toggle. The style stays; tiles and
+visibilities change.
+
+**Except the attribution, which forced one exception.** `setTiles` swaps the
+URLs and leaves the source's `attribution` behind, so Mars was served under
+*"Imagery NASA EOSDIS GIBS"* - crediting the wrong mission for somebody else's
+data. That is a licence fault, not a cosmetic one. MapLibre reads attribution
+when a source is added, so the imagery source is now removed and re-added on a
+body change, and Mars reads *"Basemap OpenPlanetaryMap - imagery NASA Viking
+MDIM21"*.
+
+### The chrome had to leave Earth too, and at first it did not
+
+Layer gating was built first and worked: aircraft, satellites, airports,
+coverage and the vector cartography all switched off. The screenshot showed
+Mars, correctly, under a status bar reading **"2,000 aircraft - showing a
+sample of 6,181 in view"**, an altitude key in kilometres, and a search box
+offering airports.
+
+**That is D100 exactly, one world further out.** Chrome describing the wrong
+subject, in the place a reader looks to find out what they are looking at. The
+search box, the layer toggle, the key, the time scrubber and the detail panel
+are all Earth furniture; on Mars they are not empty but *about nothing*. All of
+them are now gated, and the status bar says the body's name and
+*"surface imagery - no live objects here"*.
+
+That makes **three consecutive features** - satellites (D100), the rewind
+(D119), and this - where the layer worked first time and the words around it
+lied. The pattern is strong enough to be a checklist item rather than a lesson:
+**when a view gains a mode, walk every string on screen before calling it
+done.**
+
+### Zoom stops where the mosaic does
+
+Mercury's mosaic has five levels, Mars eight, the Moon seven. Past those
+MapLibre overzooms, and a blurred rectangle is presented with exactly the
+confidence of a sharp one, so `maxZoom` follows the body.
+
+### What Phase 1 deliberately does not do
+
+No space, no second renderer, no planet positions, nothing to scale. The Sun
+and the gas giants appear only as rows in a list. Phases 2 to 6 remain as
+planned, and Phase 4 - the handover spike - is still the one that decides
+whether the rest is worth building.

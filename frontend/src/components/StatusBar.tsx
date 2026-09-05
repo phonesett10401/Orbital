@@ -14,6 +14,7 @@
 import { useEffect, useState } from 'react';
 
 import { chromeFor } from './layerChrome';
+import { bodyFor } from '../bodies';
 import { formatInstant } from '../timeTravel';
 import { useOrbitalStore } from '../state/store';
 
@@ -26,6 +27,7 @@ function formatAge(seconds: number | null): string {
 
 export function StatusBar() {
   const viewInstant = useOrbitalStore((s) => s.viewInstant);
+  const activeBody = useOrbitalStore((s) => s.activeBody);
   const activeLayer = useOrbitalStore((s) => s.activeLayer);
   const feed = useOrbitalStore((s) => s.feed);
   const count = useOrbitalStore((s) => s.objects.size);
@@ -44,6 +46,25 @@ export function StatusBar() {
   // was measured on first fetch, and only the absolute instant still tells the
   // truth (D47). The cost is a dependence on the two clocks agreeing, which is
   // wrong by the skew rather than wrong without bound.
+  // On another world there is no feed, no count and no data age: those are
+  // facts about Earth's receiver networks. Saying "2,000 aircraft" over Mars
+  // is the D100 fault again - chrome describing the wrong subject, in the one
+  // line a reader checks to find out what they are looking at (D120).
+  //
+  // After every hook, deliberately: an early return above them would change
+  // the hook order between worlds.
+  if (activeBody !== 'earth') {
+    const body = bodyFor(activeBody);
+    return (
+      <div className="status">
+        <span className="status__count">
+          <strong>{body.name}</strong>
+        </span>
+        <span className="status__item">surface imagery &mdash; no live objects here</span>
+      </div>
+    );
+  }
+
   const localAge =
     feed.fetchedAtMs !== null ? (Date.now() - feed.fetchedAtMs) / 1000 : null;
 

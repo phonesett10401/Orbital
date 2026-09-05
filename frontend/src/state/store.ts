@@ -26,6 +26,7 @@ import type {
   TrackedObject,
   TrackedObjectDetail,
 } from '../types';
+import type { BodyId } from '../bodies';
 import { toRenderable } from '../interpolate';
 
 /**
@@ -123,6 +124,16 @@ export interface OrbitalState {
    */
   viewInstant: number | null;
   setViewInstant(instant: number | null): void;
+
+  /**
+   * Which world the camera is on.
+   *
+   * Leaving Earth switches off aircraft, satellites, airports, coverage and
+   * the terminator - they are statements about Earth, and over Mars they are
+   * not stale but meaningless (D120).
+   */
+  activeBody: BodyId;
+  setActiveBody(body: BodyId): void;
 
   /** Camera target requested by a search hit, consumed by the globe. */
   flyTo: { lat: number; lon: number; nonce: number; zoom?: number } | null;
@@ -245,6 +256,21 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   viewport: null,
   setViewport(bbox) {
     set({ viewport: bbox });
+  },
+
+  activeBody: 'earth',
+  setActiveBody(body) {
+    // Changing world clears everything held, for the same reason changing
+    // layer does: the objects describe Earth and nothing about them survives
+    // the trip. Selection goes too - it names something not on this world.
+    set({
+      activeBody: body,
+      objects: new Map(),
+      objectsVersion: get().objectsVersion + 1,
+      selectedId: null,
+      selectedDetail: null,
+      viewInstant: null,
+    });
   },
 
   viewInstant: null,
