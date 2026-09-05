@@ -57,6 +57,7 @@ export function bboxFor(
 export function useObjectPolling(): void {
   const layer = useOrbitalStore((s) => s.activeLayer);
   const viewport = useOrbitalStore((s) => s.viewport);
+  const viewInstant = useOrbitalStore((s) => s.viewInstant);
 
   // Held in a ref so a viewport change does not tear down and restart the
   // interval; only the layer does that.
@@ -73,6 +74,7 @@ export function useObjectPolling(): void {
       try {
         const response = await fetchObjects(layer.resource, {
           bbox: bboxFor(layer, viewportRef.current),
+          at: viewInstant,
           signal: controller.signal,
         });
         if (!cancelled) useOrbitalStore.getState().applySnapshot(response, Date.now());
@@ -87,14 +89,22 @@ export function useObjectPolling(): void {
     };
 
     void poll();
-    const timer = window.setInterval(poll, config.pollIntervalMs);
+
+    // **The clock stops while the map is rewound.** A chosen instant does not
+    // change, so re-requesting it would fetch an identical answer every few
+    // seconds - and worse, each reply replaces the object set, so a slow one
+    // arriving after the user scrubbed again would drag the map back to a
+    // moment they had already left (D119). One fetch per instant is both
+    // correct and cheaper.
+    const timer =
+      viewInstant === null ? window.setInterval(poll, config.pollIntervalMs) : null;
 
     return () => {
       cancelled = true;
       controller?.abort();
-      window.clearInterval(timer);
+      if (timer !== null) window.clearInterval(timer);
     };
-  }, [layer.resource]);
+  }, [layer.resource, viewInstant]);
 
   // A meaningful viewport change is worth an immediate refetch rather than
   // waiting out the interval, so panning to a new region fills in promptly.
@@ -104,6 +114,10 @@ export function useObjectPolling(): void {
   // would replace the whole set with an identical one mid-drag.
   useEffect(() => {
     if (!viewport || !layer.viewportScoped) return undefined;
+    // A rewound map is not viewport-scoped either: the layer that can be
+    // rewound is the one that sends no viewport in the first place, but
+    // stating it here keeps the two conditions from drifting apart.
+    if (viewInstant !== null) return undefined;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       void fetchObjects(layer.resource, { bbox: viewport, signal: controller.signal })
@@ -125,7 +139,7 @@ export function useObjectPolling(): void {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [viewport, layer.resource, layer.viewportScoped]);
+  }, [viewport, layer.resource, layer.viewportScoped, viewInstant]);
 }
 
 /** Fetch the full record, including the observed track, for the selection. */

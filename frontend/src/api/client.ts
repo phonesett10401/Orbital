@@ -66,6 +66,14 @@ export interface FetchObjectsOptions {
   bbox?: BoundingBox | null;
   limit?: number;
   signal?: AbortSignal;
+  /**
+   * Compute positions for this instant rather than now, as epoch milliseconds.
+   *
+   * Satellites only: their positions are computed, so any instant within the
+   * elements' accuracy window is as cheap as the present one. An aircraft
+   * position is observed, so there is nothing to ask for (D119).
+   */
+  at?: number | null;
 }
 
 /**
@@ -78,10 +86,13 @@ export interface FetchObjectsOptions {
  */
 export function fetchObjects(
   resource: string,
-  { bbox, limit, signal }: FetchObjectsOptions = {},
+  { bbox, limit, signal, at }: FetchObjectsOptions = {},
 ): Promise<ObjectListResponse> {
   const params = new URLSearchParams();
   if (bbox) params.set('bbox', formatBbox(bbox));
+  // `toISOString` always ends in `Z`, so there is no `+` to be eaten by the
+  // query string - the backend tolerates one anyway, having been bitten.
+  if (at != null) params.set('at', new Date(at).toISOString());
   params.set('limit', String(limit ?? config.maxObjects));
   return request<ObjectListResponse>(`/api/${resource}?${params}`, signal);
 }

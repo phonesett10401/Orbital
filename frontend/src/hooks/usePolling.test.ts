@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { bboxFor, VIEWPORT_REFETCH_DEBOUNCE_MS } from './usePolling';
 import { LAYERS } from '../state/store';
+import { isLive } from '../timeTravel';
 import type { BoundingBox } from '../types';
 
 const VIEWPORT: BoundingBox = { latMin: 10, lonMin: -20, latMax: 50, lonMax: 30 };
@@ -48,5 +49,24 @@ describe('how long a move waits before it is worth a request', () => {
     // lag (D110).
     expect(VIEWPORT_REFETCH_DEBOUNCE_MS).toBeGreaterThan(0);
     expect(VIEWPORT_REFETCH_DEBOUNCE_MS).toBeLessThanOrEqual(150);
+  });
+});
+
+describe('when the map is rewound', () => {
+  it('sends the instant, and only for a layer that can answer', () => {
+    // Satellites compute their positions, so any instant costs the same
+    // arithmetic as now. Aircraft positions are observed - there is no
+    // function to evaluate at another time - so the control is not offered
+    // there at all (D119).
+    const satellites = LAYERS.find((l) => l.resource === 'satellites')!;
+    expect(satellites.viewportScoped).toBe(false);
+    expect(bboxFor(satellites, VIEWPORT)).toBeNull();
+  });
+
+  it('treats zero as a real instant, not as live', () => {
+    // Epoch zero is 1970, which is a time. A truthiness check would call it
+    // live and silently resume polling over the top of it.
+    expect(isLive(0)).toBe(false);
+    expect(isLive(null)).toBe(true);
   });
 });

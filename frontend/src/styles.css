@@ -301,6 +301,101 @@ body {
 }
 
 /*
+ * The time scrubber, bottom centre.
+ *
+ * Given the whole width it needs rather than tucked in a corner: while it is
+ * off `Live` the map is not showing the present, and that has to be the most
+ * visible fact on screen after the map itself.
+ */
+.timectl {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  width: min(520px, calc(100vw - 48px));
+  padding: 10px 14px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  z-index: 5;
+}
+
+/* Rewound is a state, not a mode: the border changes colour so it reads at a
+   glance without anyone having to find the label. */
+.timectl--rewound {
+  border-color: rgba(242, 181, 68, 0.65);
+  box-shadow: var(--shadow), 0 0 0 1px rgba(242, 181, 68, 0.25);
+}
+
+.timectl__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.timectl__label {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.timectl--rewound .timectl__label {
+  color: var(--warn);
+}
+
+.timectl__live {
+  font: inherit;
+  font-size: 11px;
+  color: var(--bg);
+  background: var(--warn);
+  border: none;
+  border-radius: 5px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+.timectl__slider {
+  width: 100%;
+  accent-color: var(--accent);
+  margin: 2px 0 0;
+}
+
+.timectl--rewound .timectl__slider {
+  accent-color: var(--warn);
+}
+
+.timectl__scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.timectl__stamp {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+/* Positions here are propagated, not recorded. Saying so is the same rule the
+   rest of this app follows about the age of a position. */
+.timectl__note {
+  font-family: inherit;
+  font-style: italic;
+}
+
+/*
  * The aircraft photograph.
  *
  * A fixed aspect ratio on every state - image, absent, error and loading - so

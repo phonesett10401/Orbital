@@ -11,6 +11,7 @@
  * that is the point: none of it was ever about how the planet is drawn.
  */
 
+import { TimeControl } from './components/TimeControl';
 import { DetailPanel } from './components/DetailPanel';
 import { LayerToggle } from './components/LayerToggle';
 import { Legend } from './components/Legend';
@@ -51,6 +52,7 @@ export function App() {
         <LayerToggle />
       </header>
 
+      <TimeControl />
       <DetailPanel />
       <Legend />
       <StatusBar />

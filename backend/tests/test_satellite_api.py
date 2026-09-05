@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
+from urllib.parse import quote
 from pathlib import Path
 
 import pytest
@@ -159,3 +160,69 @@ class TestBothLayersAtOnce:
         aircraft = {o["id"] for o in client.get("/api/aircraft").json()["objects"]}
         satellites = {o["id"] for o in client.get("/api/satellites").json()["objects"]}
         assert aircraft.isdisjoint(satellites)
+
+
+class TestLookingBack:
+    """Positions for an instant other than now.
+
+    The capability was always in `propagate` - it checks `abs(age_days)`, so a
+    time before the epoch is refused on the same terms as one after it. What
+    was missing was any way to say so: the provider hardcoded `utcnow()` and
+    the route took no time parameter, so the argument existed at the bottom of
+    the stack and nothing above it could reach it (D119).
+    """
+
+    def test_a_past_instant_gives_different_positions(self, client):
+        now = client.get("/api/satellites").json()["objects"]
+        past_at = quote((fixture_now() - timedelta(hours=1)).isoformat())
+        past = client.get(f"/api/satellites?at={past_at}").json()["objects"]
+
+        assert len(past) == len(now) > 0
+        by_id = {o["id"]: o for o in now}
+        moved = [
+            o for o in past
+            if abs(o["lat"] - by_id[o["id"]]["lat"]) > 0.01
+            or abs(o["lon"] - by_id[o["id"]]["lon"]) > 0.01
+        ]
+        # An hour is over half an orbit; nothing should be where it was.
+        assert len(moved) == len(past)
+
+    def test_a_future_instant_works_the_same_way(self, client):
+        ahead = quote((fixture_now() + timedelta(hours=2)).isoformat())
+        assert client.get(f"/api/satellites?at={ahead}").json()["total"] > 0
+
+    def test_omitting_it_means_now(self, client):
+        assert client.get("/api/satellites").json()["total"] > 0
+
+    def test_an_unencoded_plus_offset_is_understood(self, client):
+        # A `+` in a query string decodes to a space, so an ISO offset arrives
+        # as ` 00:00`. Sent raw, exactly as a careless client would.
+        raw = (fixture_now()).isoformat()
+        assert "+" in raw
+        assert client.get(f"/api/satellites?at={raw}").json()["total"] > 0
+
+    def test_a_naive_timestamp_is_read_as_utc(self, client):
+        # The client sends what its clock says, and a satellite position is
+        # meaningless in local time. Guessing UTC is the only useful reading.
+        naive = fixture_now().replace(tzinfo=None).isoformat()
+        assert client.get(f"/api/satellites?at={naive}").json()["total"] > 0
+
+    def test_a_z_suffix_is_accepted(self, client):
+        stamp = fixture_now().replace(microsecond=0, tzinfo=None).isoformat() + "Z"
+        assert client.get(f"/api/satellites?at={stamp}").json()["total"] > 0
+
+    def test_something_that_is_not_a_timestamp_is_refused_clearly(self, client):
+        response = client.get("/api/satellites?at=last%20tuesday")
+        assert response.status_code == 422
+        assert "ISO 8601" in response.json()["detail"]
+
+    def test_beyond_the_accuracy_bound_the_objects_drop_out(self, client):
+        # Not a 4xx: the seven days are measured per element set against its
+        # own epoch, and those epochs differ across the catalogue, so this is
+        # the same behaviour as an element set that has gone stale rather than
+        # a bad request. SGP4 drifts about a kilometre a day, so past the bound
+        # the answer stops being one.
+        far = quote((fixture_now() + timedelta(days=30)).isoformat())
+        response = client.get(f"/api/satellites?at={far}")
+        assert response.status_code == 200
+        assert response.json()["total"] == 0

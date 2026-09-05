@@ -22,6 +22,7 @@ comfort: CelesTrak returned 503 for the entire day this was written.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -50,6 +51,41 @@ def _catalogue(provider: SatelliteProvider | None) -> SatelliteProvider:
     return provider
 
 
+def _parse_instant(raw: str | None) -> datetime | None:
+    """An ISO 8601 instant, or ``None`` for now.
+
+    A naive timestamp is read as UTC rather than rejected: the client sends
+    what its clock says and a satellite position is meaningless in local time
+    anyway, so guessing UTC is both the only useful reading and the one the
+    rest of this layer already assumes.
+
+    **The seven-day bound is not enforced here.** It belongs to ``propagate``,
+    which measures it per element set against that set's own epoch - and those
+    epochs differ by hours across the catalogue, so one check at the door would
+    have to invent a single epoch that does not exist. An instant too far from
+    a given set makes *that* object drop out with a logged reason, which is the
+    same behaviour as an element set that has gone stale (D119).
+    """
+    if raw is None:
+        return None
+    # A `+` in a query string decodes to a space, so an offset written
+    # `+00:00` arrives as ` 00:00` unless the client percent-encoded it. Every
+    # client gets this wrong once; refusing them teaches nothing. The space can
+    # only have been a plus here, because ISO 8601 has no other use for one.
+    candidate = raw.strip()
+    if " " in candidate and "T" in candidate:
+        head, _, tail = candidate.rpartition(" ")
+        if tail and (tail[0].isdigit() or tail[0] == ":"):
+            candidate = head + "+" + tail
+    try:
+        parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(
+            status_code=422, detail=f"could not read {raw!r} as an ISO 8601 instant"
+        ) from None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 def _parse_bbox(raw: str | None) -> BBox | None:
     if raw is None:
         return None
@@ -68,13 +104,21 @@ async def list_satellites(
     request: Request,
     bbox: str | None = Query(default=None, description="latMin,lonMin,latMax,lonMax"),
     limit: int | None = Query(default=None, ge=1, description="Cap after thinning."),
+    at: str | None = Query(
+        default=None,
+        description=(
+            "ISO 8601 instant to compute positions for. Past or future, within "
+            "seven days of each element set's epoch. Omit for now."
+        ),
+    ),
     settings: Settings = Depends(get_settings_dep),
     provider: SatelliteProvider | None = Depends(get_satellites),
 ) -> ObjectListResponse:
     catalogue = _catalogue(provider)
     box = _parse_bbox(bbox)
+    when = _parse_instant(at)
 
-    records = catalogue.positions(box)
+    records = catalogue.positions(box, at=when)
     total = len(records)
     cap = limit or settings.max_objects_per_response
     if total > cap:

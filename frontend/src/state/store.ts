@@ -113,6 +113,17 @@ export interface OrbitalState {
   viewport: BoundingBox | null;
   setViewport(bbox: BoundingBox | null): void;
 
+  /**
+   * The instant being shown, as epoch ms, or `null` for live.
+   *
+   * Non-null means the map is **not live**, which the chrome has to say
+   * loudly: everything else in this app that shows a position also says how
+   * old it is, and a rewound map that claimed to be current would be the most
+   * confident lie in the project (D119).
+   */
+  viewInstant: number | null;
+  setViewInstant(instant: number | null): void;
+
   /** Camera target requested by a search hit, consumed by the globe. */
   flyTo: { lat: number; lon: number; nonce: number; zoom?: number } | null;
   requestFlyTo(lat: number, lon: number, zoom?: number): void;
@@ -234,6 +245,18 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   viewport: null,
   setViewport(bbox) {
     set({ viewport: bbox });
+  },
+
+  viewInstant: null,
+  setViewInstant(instant) {
+    // Changing the instant clears the objects for the same reason changing
+    // layer does: what is held describes a different moment, and drawing it
+    // beside positions from another one would be a picture of no time at all.
+    set({
+      viewInstant: instant,
+      objects: new Map(),
+      objectsVersion: get().objectsVersion + 1,
+    });
   },
 
   flyTo: null,

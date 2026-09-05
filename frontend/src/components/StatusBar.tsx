@@ -14,6 +14,7 @@
 import { useEffect, useState } from 'react';
 
 import { chromeFor } from './layerChrome';
+import { formatInstant } from '../timeTravel';
 import { useOrbitalStore } from '../state/store';
 
 function formatAge(seconds: number | null): string {
@@ -24,6 +25,7 @@ function formatAge(seconds: number | null): string {
 }
 
 export function StatusBar() {
+  const viewInstant = useOrbitalStore((s) => s.viewInstant);
   const activeLayer = useOrbitalStore((s) => s.activeLayer);
   const feed = useOrbitalStore((s) => s.feed);
   const count = useOrbitalStore((s) => s.objects.size);
@@ -70,7 +72,18 @@ export function StatusBar() {
           that does not apply here (D95, D100). The source still shows: which
           element set the satellites came from is worth knowing. */}
       <span className="status__item">
-        {chrome.freshness === 'age' ? `data age ${formatAge(localAge)}` : 'positions computed now'}
+        {chrome.freshness === 'age'
+          ? `data age ${formatAge(localAge)}`
+          : /*
+              "computed now" is false the moment the map is rewound, and this
+              is the one line a reader checks to find out how current the
+              screen is - so it is the last place that may keep saying it
+              (D119). Found by looking at the running app with the scrubber two
+              days back and the status bar still claiming the present.
+            */
+            viewInstant === null
+            ? 'positions computed now'
+            : `positions computed for ${formatInstant(viewInstant)}`}
         {feed.source ? ` · ${feed.source}` : ''}
       </span>
 

@@ -6325,3 +6325,79 @@ design; the detail endpoint - the one the panel actually calls - had the URL
 all along. **Measure the endpoint the feature uses.** That is the third
 instrument error in three days, after the 250-entry resource-timing buffer
 (D112) and the break-test harness that never ran (D114, D117).
+
+---
+
+## D119 - The rewind existed in one function and nothing could reach it
+
+Phone, on the premium tier: *"we cant look back Satellites either right?"* and
+then *"our frontend does not have any key to rewind"*. Both questions were
+better than the feature list they were aimed at.
+
+### What was actually true
+
+`propagate` has always taken an arbitrary instant and always checked
+`abs(age_days)` against the seven-day bound - so a time **before** an element
+set's epoch was refused on exactly the same terms as one after it. Backwards
+propagation was never missing. Demonstrated before writing anything: the ISS
+over Germany 90 minutes ago, south of New Zealand 45 minutes ago, the Atlantic
+now, the Indian Ocean 45 minutes ahead. One 93-minute orbit, one function.
+
+What was missing was any way to *say so*. `positions()` hardcoded `utcnow()`,
+`/api/satellites` took `bbox` and `limit` only, and the UI had no time control
+at all. **The capability sat in one function at the bottom of the stack with
+three layers above it unable to pass the argument.** Two tier tables were
+written describing it as a product before anyone checked whether it was
+reachable.
+
+### The seven days are not a policy
+
+SGP4 drifts about a kilometre a day from epoch, so past a week the answer stops
+being one. The bound is enforced per element set against *that set's* own
+epoch, which is why the API does not check it at the door: the epochs differ by
+hours across the catalogue, so a single check would have to invent an epoch
+that does not exist. An instant too far from a given set drops that object with
+a logged reason - the same behaviour as an element set that has gone stale.
+
+### Aircraft cannot have this, and the control does not pretend otherwise
+
+A satellite position is **computed**; any instant costs the same arithmetic as
+now. An aircraft position is **observed** - it exists because a receiver heard
+it - and the store holds fifty points per object before evicting it five
+minutes after its last sighting. There is no function to evaluate at another
+time. So `TimeControl` returns `null` on the aircraft layer rather than
+existing and refusing.
+
+That asymmetry is the same one the revenue discussion turned on: the layer that
+can be rewound is the layer whose data is computed, and it is also the only one
+whose licences permit selling anything.
+
+### The clock stops while the map is rewound
+
+A chosen instant does not change, so re-requesting it every few seconds fetches
+an identical answer - and worse, each reply replaces the object set, so a slow
+response arriving after another scrub would drag the map back to a moment the
+user had already left. `setInterval` is simply not created while `viewInstant`
+is non-null. Measured: **zero requests in nine seconds** while two days back.
+
+### A `+` in a query string is a space
+
+The first live test returned 422 on a perfectly valid timestamp:
+`2026-09-04T18:55:00+00:00` arrives as `...00 00:00` unless the client
+percent-encoded it. Every client gets this wrong once, and refusing them
+teaches nothing, so the parser repairs it - the space can only have been a plus,
+because ISO 8601 has no other use for one. The frontend sends `toISOString()`,
+which ends in `Z` and has no offset to mangle.
+
+### The defect this feature exists to prevent, found in this feature
+
+With the scrubber two days back and the map correctly showing two days back,
+the status bar still read **"positions computed now"**. That is the one line a
+reader checks to find out how current the screen is, and it was the last place
+still claiming the present.
+
+Everything in this app that shows a position also says how old it is - the
+aircraft panel, the element age on every satellite, the coverage layer's
+sentence about absence. A rewound map that looked live would have been the most
+confident lie in the project, and the first version shipped one in the corner.
+Found by looking at the running app, which is where the other twenty came from.

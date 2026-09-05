@@ -348,16 +348,29 @@ class SatelliteProvider(Provider):
         await self._elements_for(utcnow())
         return len(self._elements)
 
-    def positions(self, bbox: BBox | None = None) -> list[TrackedObjectRecord]:
-        """Where every satellite is *now*, from the elements already held.
+    def positions(
+        self, bbox: BBox | None = None, at: datetime | None = None
+    ) -> list[TrackedObjectRecord]:
+        """Where every satellite is at ``at``, or now, from the elements held.
 
         Synchronous and network-free by construction. Propagating the whole
         catalogue measured 21 ms for 1,432 objects, which is why this can be
         done per request rather than polled into a store: a stored snapshot
         would be a position that was true a moment ago, when an exact one is
         available for the cost of some arithmetic (D95).
+
+        **``at`` may be in the past.** SGP4 is the same arithmetic in both
+        directions and ``propagate`` has always accepted an arbitrary instant -
+        it checks ``abs(age_days)`` against the seven-day limit, so a time
+        before the epoch is refused on exactly the same terms as one after it.
+        What was missing was any way to *say so*: this method hardcoded
+        ``utcnow()``, so the capability existed in one function at the bottom of
+        the stack and nothing above it could reach the parameter (D119).
+
+        The seven days are not a policy choice. SGP4 drifts about a kilometre a
+        day from epoch, so beyond that the answer stops being one.
         """
-        return self._propagate(utcnow(), self._elements, bbox)
+        return self._propagate(at or utcnow(), self._elements, bbox)
 
     async def fetch(self, bbox: BBox | None = None) -> list[TrackedObjectRecord]:
         """Refresh if due, then propagate. The ``Provider`` interface entry point.
