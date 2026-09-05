@@ -7719,3 +7719,44 @@ hidden it, and whichever ran last won.
 calls for. It is called from the zoom handler, at startup, and after every
 `applyBody`. Reading the zoom rather than tracking a flag is the point: two
 pieces of state that must agree is what produced this, and now there is one.
+
+## D142 - The true-size toggle worked; the checking did not
+
+Carried as "wired with tests but never confirmed changing anything on screen"
+for two sessions. It was correct the whole time. **Both attempts to verify it
+were invalid**, and in different ways.
+
+Measured properly, by reading the sphere geometry out of the running layer:
+
+| | compressed | true |
+|---|---|---|
+| Earth | 0.2408 | **0.0099** |
+| Jupiter | 0.6401 | **0.1085** |
+
+Earth shrinks twenty-four fold, and Jupiter against Earth comes out at **10.96**
+where the real ratio is 10.97.
+
+### Why it looked broken
+
+**The first check compared screenshots.** In true mode the inner planets are a
+fraction of a pixel - Earth is 0.4 of one - so "the picture looks the same" is
+what a *working* toggle produces at a glance. The visible change is that the
+planets vanish, which reads as nothing having happened.
+
+**The second check read a layer that had never rendered.** `spheres` was empty
+and `builtForAnchor` was still its initial `''`, while the flag itself flipped
+correctly - and the reason was that the vector style had failed to load on that
+page, so nothing drew at all. The style has failed to load three times in this
+session; it is intermittent and unrelated, and it silently invalidates any
+measurement taken through the map.
+
+Neither failure was in the feature. Both were in the instrument, which is now
+the fourth and fifth time this project has been misled by one.
+
+### The readout says it
+
+`report()` now carries `compressed` or `TRUE size`. Confirming the toggle used
+to need a temporary probe compiled into the layer; it now needs one glance at
+the line already on screen. **A thing that is hard to check gets checked
+wrongly** - twice, here - and the cheapest fix for that is to make the state
+visible rather than to be more careful next time.

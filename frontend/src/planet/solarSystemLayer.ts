@@ -625,9 +625,14 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
       const where = view
         ? `cam ${Math.hypot(...view.at).toFixed(0)}r near ${view.near.toFixed(2)} far ${view.far.toFixed(0)}`
         : 'no camera';
-      status = `${placements.length} bodies, fade ${fade.toFixed(2)}, sky ${
-        sky ? `${sky.toFixed(0)}r` : 'none'
-      }, ${where}`;
+      // The scale is in the readout because confirming the true-size toggle
+      // took a temporary probe twice - once against a layer whose `render` had
+      // never run, once against a style that had failed to load. Neither was a
+      // fault in the toggle, and both were invisible from outside. One glance
+      // answers it now (D142).
+      status = `${placements.length} bodies, ${
+        trueScale() ? 'TRUE size' : 'compressed'
+      }, fade ${fade.toFixed(2)}, sky ${sky ? `${sky.toFixed(0)}r` : 'none'}, ${where}`;
     },
 
     report() {
