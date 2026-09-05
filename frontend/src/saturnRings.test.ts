@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  RING_INNER,
-  RING_OUTER,
-  SATURN_POLE_DEC_DEG,
-  SATURN_POLE_RA_HOURS,
-  ringOpacity,
-  ringProfile,
-} from './saturnRings';
+import { RING_INNER, RING_OUTER, ringOpacity, ringProfile } from './saturnRings';
 
 describe('the ring profile', () => {
   it('is empty where there are no rings', () => {
@@ -82,17 +75,5 @@ describe('the lookup table the shader samples', () => {
       expect(data[i * 4 + 1]).toBe(data[i * 4]);
       expect(data[i * 4 + 3]).toBe(data[i * 4]);
     }
-  });
-});
-
-describe('which way the rings face', () => {
-  it('uses a pole that is nowhere near the ecliptic pole', () => {
-    // Saturn's axis is tilted 26.7 degrees, which is why the rings open and
-    // close over its 29-year orbit instead of always looking the same. A pole
-    // at declination 90 would mean no tilt at all.
-    expect(SATURN_POLE_DEC_DEG).toBeGreaterThan(80);
-    expect(SATURN_POLE_DEC_DEG).toBeLessThan(87);
-    expect(SATURN_POLE_RA_HOURS).toBeGreaterThan(0);
-    expect(SATURN_POLE_RA_HOURS).toBeLessThan(24);
   });
 });

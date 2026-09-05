@@ -35,13 +35,9 @@ import {
   starSize,
 } from '../stars';
 import { readCamera } from '../cameraFrame';
-import {
-  RING_INNER,
-  RING_OUTER,
-  SATURN_POLE_DEC_DEG,
-  SATURN_POLE_RA_HOURS,
-  ringProfile,
-} from '../saturnRings';
+import { RING_INNER, RING_OUTER, ringProfile } from '../saturnRings';
+import { poleDirection } from '../planetPoles';
+import { hasSurface, surfaceTexture } from '../planetSurface';
 
 export const SOLAR_LAYER = 'orbital-solar-system';
 
@@ -206,10 +202,23 @@ export function createSolarSystemLayer(
     starGeometry.attributes.position.needsUpdate = true;
   };
 
-  // Light from the Sun, so a planet has a day and a night side that are
-  // actually correct rather than a flat disc of colour.
-  const sunlight = new THREE.PointLight(0xfff2d0, 3.2, 0, 0);
-  const ambient = new THREE.AmbientLight(0x223044, 1.1);
+  // Light from the Sun, so a planet has a day and a night side, with the
+  // terminator in the place the geometry puts it.
+  //
+  // The ambient term is not decoration and not laziness. **The camera's
+  // distance is compressed and the system's is compressed differently**: the
+  // whole solar system is squeezed into 18 globe radii while the camera sits
+  // about 30 out, so it views every planet from *outside* its orbit. Measured
+  // phase angles from that vantage point run 141 to 171 degrees - every planet
+  // is a new moon. In reality Jupiter seen from Earth never exceeds about 12
+  // degrees of phase, because Earth is inside its orbit.
+  //
+  // So strict phase here is not more honest, it is an artefact of the
+  // compression - and it renders the entire system as black discs. The Sun
+  // still sets the direction and the terminator; the ambient makes the night
+  // side legible rather than absent (D132).
+  const sunlight = new THREE.PointLight(0xfff2d0, 2.4, 0, 0);
+  const ambient = new THREE.AmbientLight(0x9fb0c8, 1.9);
   scene.add(sunlight, ambient);
 
 /**
@@ -240,6 +249,32 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
   };
   return material;
 };
+
+  /**
+   * A body's latitude profile as a one-pixel-wide strip.
+   *
+   * `planetSurface.ts` explains why this is generated rather than downloaded;
+   * the short version is that a photographic map is megabytes of detail that is
+   * invisible at 20 pixels, and what is *visible* is which latitudes are dark.
+   * The sphere's own UVs run south pole to north, which is the order the strip
+   * is filled in.
+   */
+  const surfaceMap = (id: string): THREE.DataTexture => {
+    const texture = new THREE.DataTexture(surfaceTexture(id, 256), 1, 256, THREE.RGBAFormat);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    // The band colours are written as sRGB bytes, which is how they were
+    // chosen; without this they are decoded as linear and every planet comes
+    // out washed against the ones drawn from a plain colour.
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  };
+
+  const SPHERE_UP = new THREE.Vector3(0, 1, 0);
+  const bodyPole = new THREE.Vector3();
 
   const spheres = new Map<string, THREE.Mesh>();
   let orbitsBuiltFor = 0;
@@ -280,7 +315,10 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
         id === 'sun'
           ? new THREE.MeshBasicMaterial({ color: COLOURS.sun, transparent: true })
           : new THREE.MeshStandardMaterial({
-              color: COLOURS[id] ?? 0xaaaaaa,
+              // White under a texture, so the map's own colours come through
+              // rather than being multiplied by a second one.
+              color: hasSurface(id) ? 0xffffff : (COLOURS[id] ?? 0xaaaaaa),
+              map: hasSurface(id) ? surfaceMap(id) : null,
               transparent: true,
               roughness: 0.95,
               metalness: 0,
@@ -371,8 +409,7 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
   /** Point the rings along Saturn's own pole and hang them on the planet. */
   const placeRing = (at: readonly [number, number, number], date: Date, alpha: number, scale: number) => {
     if (!ringMesh || !ringMaterial) return;
-    const dir = starDirection(SATURN_POLE_RA_HOURS, SATURN_POLE_DEC_DEG);
-    const pole = equatorialToGlobe({ x: dir[0], y: dir[1], z: dir[2] }, date);
+    const pole = poleDirection('saturn', date);
     ringNormal.set(pole[0], pole[1], pole[2]).normalize();
     ringMesh.quaternion.setFromUnitVectors(RING_UP, ringNormal);
     ringMesh.position.set(at[0], at[1], at[2]);
@@ -451,6 +488,13 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
         const emphasis = !heading || placement.id === heading ? 1 : 0.35;
         (mesh.material as THREE.Material).opacity = fade * emphasis;
         mesh.scale.setScalar(heading === placement.id ? 1.6 : 1);
+        // Stand the body on its own axis. Bands run along latitude, so a
+        // planet left in the globe frame would wear Earth's tilt - which on
+        // Uranus, whose pole lies almost in the ecliptic, is close to a right
+        // angle wrong (D132).
+        const pole = poleDirection(placement.id, date);
+        bodyPole.set(pole[0], pole[1], pole[2]).normalize();
+        mesh.quaternion.setFromUnitVectors(SPHERE_UP, bodyPole);
       }
 
       const saturn = placements.find((p) => p.id === 'saturn');

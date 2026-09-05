@@ -7106,3 +7106,60 @@ actually looked wrong was D130's clipping, which no model fixes.
 The proportions to the planet are exact even though the planet's size is
 compressed: the same bargain `solarScale` struck. The arrangement is true, the
 scale is not.
+
+## D132 - Planets generated from published numbers, not downloaded as pictures
+
+The bodies drew as flat discs of one colour, which is the single thing that
+most made the scene look like a diagram. The fix is banding - it is the first
+thing the eye reads on a planet - and banding is a short table of numbers.
+
+### Why not photographic maps
+
+They exist, most are free, and they were still wrong here: several megabytes of
+binary per body, a licence to carry, a network fetch, and detail that is
+invisible at 8 to 90 pixels. What is *visible* at that size is which latitudes
+are dark and which are light.
+
+So `planetSurface.ts` holds the standard nomenclature at the standard
+latitudes - the North Equatorial Belt from about 7 to 17 north, the South
+Equatorial Belt 7 to 21 south, the bright Equatorial Zone between them - and
+generates a 1 by 256 strip, one kilobyte, from a function with fifteen tests.
+The sharpest of them asserts the belts and zones **alternate** rather than
+shading in one direction, because a gradient would pass a naive "it varies"
+check while looking nothing like Jupiter.
+
+**Venus is left almost uniform on purpose.** Venus is unbroken cloud; inventing
+features for it would have been the one dishonest thing in the file. Uranus
+gets three bands to Jupiter's eleven, for the same reason.
+
+Longitude is not attempted, and the file says so: the Great Red Spot is two
+pixels here and Syrtis Major would need a map.
+
+### Every planet stands on its own axis
+
+Bands run along latitude, so a banded planet built in the globe frame would
+wear **Earth's** tilt. On Uranus that is close to a right angle wrong - its
+pole lies almost in the ecliptic, which is the one fact everybody knows about
+it. `planetPoles.ts` carries the IAU pole of rotation for each body and reuses
+`starDirection` and `equatorialToGlobe` rather than introducing a second
+conversion to disagree with the first. Saturn's rings now take their normal
+from the same table instead of a private copy.
+
+### The compression breaks phase, and pretending otherwise renders black discs
+
+This was found by looking, after the textures were in and nothing changed on
+screen. Jupiter sat at the exact centre of the view, was the nearest body to
+the camera, and was invisible.
+
+It was not a texture failure. **Measured phase angles from this camera run 141
+to 171 degrees - every planet is a new moon.** The reason is that the camera's
+distance and the system's are compressed differently: the whole solar system is
+squeezed into 18 globe radii while the camera sits about 30 out, so it views
+every planet from *outside* its orbit. In reality Jupiter seen from Earth never
+exceeds about 12 degrees of phase, because Earth is inside its orbit.
+
+So strict phase here is not the honest choice - it is an artefact of the
+compression, and it renders the entire system as black discs. The Sun still
+sets the direction and the terminator; the ambient term was raised so the night
+side is legible rather than absent. The same bargain as `solarScale`, in light
+instead of distance.

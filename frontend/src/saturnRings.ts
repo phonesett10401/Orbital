@@ -23,6 +23,10 @@
  * The *size* Saturn is drawn at is compressed, like every other body here - but
  * the ring system's proportions to the planet are exact, which is the same
  * bargain `solarScale` struck: the arrangement is true, the scale is not.
+ *
+ * Which way the rings face is not here: the rings lie in Saturn's equatorial
+ * plane, so their normal is simply Saturn's pole, and that lives in
+ * `planetPoles.ts` with every other body's rather than in a copy of its own.
  */
 
 /** Inner edge of the C ring, where anything is visible at all. */
@@ -103,14 +107,3 @@ export function ringProfile(samples = 512): Uint8Array {
   }
   return data;
 }
-
-/**
- * Saturn's north pole, as right ascension in hours and declination in degrees.
- *
- * The IAU value for the invariable pole (RA 40.589 degrees, Dec 83.537). The
- * rings lie in Saturn's equatorial plane, so this direction *is* the ring
- * normal - which is why the rings are seen open or edge-on from Earth over a
- * 29-year cycle rather than always at the same angle.
- */
-export const SATURN_POLE_RA_HOURS = 40.589 / 15;
-export const SATURN_POLE_DEC_DEG = 83.537;
