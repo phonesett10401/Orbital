@@ -198,3 +198,46 @@ export function exaggerationOf(radiusKm: number, distanceAu: number): number {
 /** One line for the key, so the compression is never implicit. */
 export const SCALE_NOTE =
   'Distances and sizes are compressed separately — angles are true, nothing is to scale';
+
+/** Earth's mean radius, the unit true sizes are quoted in. */
+export const EARTH_RADIUS_KM = 6371;
+
+/**
+ * A body's drawn radius in globe radii, compressed or true.
+ *
+ * Compressed is the scale everything has always used: the Sun at 1.08 globe
+ * radii and Earth at 0.241, a true ratio of 109:1 drawn as 4.5:1, so the small
+ * bodies exist on screen at all.
+ *
+ * **True keeps the Sun the size it already is and lets everything else fall to
+ * its real proportion of it.** Anchoring the other way - Earth fixed, Sun
+ * true - would put the Sun 26 globe radii across and swallow the scene, so the
+ * mode would demonstrate nothing except that it had been switched on. This way
+ * the frame stays still and the planets visibly shrink to the specks they are,
+ * which is the comparison the toggle exists to make (D137).
+ *
+ * Distances are untouched by either mode. There is no setting at which they
+ * can be true: Neptune's orbit is 706,076 globe radii against a far plane one
+ * radius past the centre (D129).
+ */
+export function drawnBodyRadius(radiusKm: number, trueScale = false): number {
+  const compressed = globeRadiiFor(bodyRadiusFor(radiusKm));
+  if (!trueScale) return compressed;
+  const sun = globeRadiiFor(bodyRadiusFor(SUN_RADIUS_KM));
+  return sun * (radiusKm / SUN_RADIUS_KM);
+}
+
+/** The Sun's radius, which true mode holds fixed. */
+export const SUN_RADIUS_KM = 695_700;
+
+/**
+ * How much bigger than life a body is drawn, relative to the Sun.
+ *
+ * One means honest. In true mode this is one for every body, which is the
+ * claim the mode makes and this is what makes it executable.
+ */
+export function bodyExaggeration(radiusKm: number, trueScale = false): number {
+  const drawnRatio = drawnBodyRadius(radiusKm, trueScale) / drawnBodyRadius(SUN_RADIUS_KM, trueScale);
+  const realRatio = radiusKm / SUN_RADIUS_KM;
+  return realRatio === 0 ? 1 : drawnRatio / realRatio;
+}

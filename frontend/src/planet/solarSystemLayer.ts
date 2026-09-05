@@ -23,7 +23,7 @@ import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap 
 
 import { BODIES } from '../bodies';
 import { equatorialToGlobe, orbitRing, scenePlacements } from '../solarFrame';
-import { bodyRadiusFor, globeRadiiFor } from '../solarScale';
+import { drawnBodyRadius } from '../solarScale';
 import { PLANET_IDS, type PlanetId } from '../planets';
 import { usesGlobeFrame } from './modelFrame';
 import {
@@ -70,6 +70,7 @@ export function createSolarSystemLayer(
   now: () => Date,
   destination: () => string | null = () => null,
   origin: () => PlanetId = () => 'earth',
+  trueScale: () => boolean = () => false,
 ): SolarLayer {
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
@@ -307,9 +308,10 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
   const sphereFor = (id: string): THREE.Mesh => {
     let mesh = spheres.get(id);
     if (!mesh) {
-      // Radius from `solarScale`, in the same unit as the orbit distances -
-      // which is the units fix D122 made, and why no conversion appears here.
-      const r = globeRadiiFor(bodyRadiusFor(radiusKmOf(id)));
+      // The scale every body shares, unchanged since D122. The world under the
+      // camera is drawn on this same scale too - see `originSphere` - which is
+      // what stops it looming over the system it belongs to (D137).
+      const r = drawnBodyRadius(radiusKmOf(id), trueScale());
       // The Sun emits, so it stays unlit. Everything else is lit *by* it, which
       // is what turns a flat coloured disc into a body with a terminator - and
       // the phase is correct, because the light is where the Sun is.
@@ -358,13 +360,14 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
    * right one. What was actually wrong with the rings was D130's clipping, and
    * no model fixes that (D131).
    */
+  let builtForAnchor = '';
   let ringMesh: THREE.Mesh | null = null;
   let ringMaterial: THREE.ShaderMaterial | null = null;
   const RING_UP = new THREE.Vector3(0, 0, 1);
   const ringNormal = new THREE.Vector3();
 
   const buildRing = () => {
-    const r = globeRadiiFor(bodyRadiusFor(radiusKmOf('saturn')));
+    const r = drawnBodyRadius(radiusKmOf('saturn'), trueScale());
     const profile = new THREE.DataTexture(ringProfile(512), 512, 1, THREE.RGBAFormat);
     profile.minFilter = THREE.LinearFilter;
     profile.magFilter = THREE.LinearFilter;
@@ -465,6 +468,25 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
 
       const date = now();
       const centre = origin();
+
+      // Body radii are baked into geometry, so a change of anchor - a new
+      // world underfoot, or the true-scale toggle - means rebuilding them.
+      // Cheap: eight spheres and a ring, and only when one of the two changes.
+      const anchor = `${trueScale()}`;
+      if (anchor !== builtForAnchor) {
+        for (const mesh of spheres.values()) {
+          mesh.geometry.dispose();
+          bodies.remove(mesh);
+        }
+        spheres.clear();
+        if (ringMesh) {
+          ringMesh.geometry.dispose();
+          bodies.remove(ringMesh);
+          ringMesh = null;
+          ringMaterial = null;
+        }
+        builtForAnchor = anchor;
+      }
       // Rebuilt when the day changes *or* the world does: the rings are drawn
       // relative to the body under the camera, so standing somewhere else is a
       // different picture rather than the same one moved (D126).
@@ -493,10 +515,10 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
       const heading = destination();
       const placements = scenePlacements(date, centre);
       const sun = placements.find((p) => p.id === 'sun');
-      if (sun) sunlight.position.set(...sun.at);
+      if (sun) sunlight.position.set(sun.at[0], sun.at[1], sun.at[2]);
       for (const placement of placements) {
         const mesh = sphereFor(placement.id);
-        mesh.position.set(...placement.at);
+        mesh.position.set(placement.at[0], placement.at[1], placement.at[2]);
         const emphasis = !heading || placement.id === heading ? 1 : 0.35;
         (mesh.material as THREE.Material).opacity = fade * emphasis;
         mesh.scale.setScalar(heading === placement.id ? 1.6 : 1);

@@ -17,6 +17,7 @@ import {
   SOURCE_NOTE,
   SUB_POINT_NOTE,
   moonRows,
+  panelPosition,
   panelState,
 } from './moonFacts';
 
@@ -24,9 +25,21 @@ export function MoonPanel() {
   const selectedMoonId = useOrbitalStore((s) => s.selectedMoonId);
   const craft = useOrbitalStore((s) => s.moonCraft);
   const select = useOrbitalStore((s) => s.selectMoonCraft);
+  const at = useOrbitalStore((s) => s.moonPanelAt);
 
   const state = panelState(selectedMoonId, craft);
   if (state.kind === 'closed') return null;
+
+  // Floating at the end of the callout line rather than parked in a corner:
+  // the line and the panel are one object, and the panel is beside the
+  // spacecraft it describes (D137). Falls back to the corner if the map has
+  // not published a point yet.
+  const placed = at
+    ? panelPosition(at, { width: window.innerWidth, height: window.innerHeight })
+    : null;
+  const style = placed
+    ? { left: `${placed.left}px`, top: `${placed.top}px`, right: 'auto' }
+    : undefined;
 
   const close = (
     <button className="panel__close" onClick={() => select(null)} aria-label="Close">
@@ -36,7 +49,7 @@ export function MoonPanel() {
 
   if (state.kind === 'lost') {
     return (
-      <aside className="panel panel--moon" aria-live="polite">
+      <aside className="panel panel--moon" style={style} aria-live="polite">
         <div className="panel__header">
           <h2 className="panel__title">No longer tracked</h2>
           {close}
@@ -47,7 +60,7 @@ export function MoonPanel() {
   }
 
   return (
-    <aside className="panel panel--moon" aria-live="polite">
+    <aside className="panel panel--moon" style={style} aria-live="polite">
       <div className="panel__header">
         <h2 className="panel__title">{state.craft.name}</h2>
         {close}

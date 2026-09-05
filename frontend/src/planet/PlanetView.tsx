@@ -227,12 +227,17 @@ function drawMoonLeader(
   const target = source as { setData: (data: unknown) => void };
   if (!craft) {
     target.setData(moonLeaderFeature(null, null));
+    useOrbitalStore.getState().setMoonPanelAt(null);
     return;
   }
   const from = map.project([craft.lon, craft.lat]);
   const to = moonLeaderEnd({ x: from.x, y: from.y });
   const end = map.unproject([to.x, to.y]);
   target.setData(moonLeaderFeature([craft.lon, craft.lat], [end.lng, end.lat]));
+  // The panel hangs off the far end of the line, so the two are one object
+  // rather than a line and a distant box that happen to be about the same
+  // spacecraft (D137).
+  useOrbitalStore.getState().setMoonPanelAt({ x: to.x, y: to.y });
 }
 
 function startMoonPoll(
@@ -638,6 +643,10 @@ export function PlanetView() {
               const body = useOrbitalStore.getState().activeBody;
               return (body === 'moon' ? 'earth' : body) as PlanetId;
             },
+            // The *actual* world underfoot, which the origin above flattens to
+            // Earth for the Moon. Sizes are anchored on this one, because it is
+            // the globe MapLibre draws at radius 1 (D137).
+            () => useOrbitalStore.getState().trueScale,
           );
           map.addLayer(solar);
 

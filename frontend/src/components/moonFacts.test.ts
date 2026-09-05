@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   LOST_NOTE,
+  PANEL_WIDTH,
+  panelPosition,
   SOURCE_NOTE,
   SUB_POINT_NOTE,
   formatLat,
@@ -108,5 +110,38 @@ describe('what the panel shows', () => {
     const danuri: MoonSatellite = { ...LRO, id: '-155', name: 'Danuri' };
     const state = panelState('-155', [LRO, danuri]);
     expect(state.kind === 'craft' && state.craft.name).toBe('Danuri');
+  });
+});
+
+describe('where the floating panel goes', () => {
+  const WINDOW = { width: 1200, height: 900 };
+
+  it('hangs off the end of the line, above and to the right', () => {
+    // The line leaves the spacecraft to the north-east and the panel sits at
+    // its far end, so the two read as one object.
+    const { left, top } = panelPosition({ x: 500, y: 500 }, WINDOW);
+    expect(left).toBe(500);
+    expect(top).toBeLessThan(500);
+  });
+
+  it('keeps the panel on screen near the right edge', () => {
+    // Without clamping, a spacecraft near the right of the map puts its panel
+    // mostly outside the window.
+    const { left } = panelPosition({ x: 1180, y: 500 }, WINDOW);
+    expect(left).toBeLessThanOrEqual(WINDOW.width - PANEL_WIDTH);
+  });
+
+  it('keeps the panel on screen near the top, where these craft mostly are', () => {
+    // They are polar orbiters; the top of the globe is not an edge case.
+    const { top } = panelPosition({ x: 400, y: 40 }, WINDOW);
+    expect(top).toBeGreaterThanOrEqual(0);
+  });
+
+  it('never returns a negative corner, however small the window', () => {
+    for (const point of [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: -50, y: -50 }]) {
+      const { left, top } = panelPosition(point, { width: 400, height: 400 });
+      expect(left).toBeGreaterThanOrEqual(0);
+      expect(top).toBeGreaterThanOrEqual(0);
+    }
   });
 });

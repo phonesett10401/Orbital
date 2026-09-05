@@ -105,9 +105,11 @@ export function moonLeaderLayer(): LayerSpecification {
     source: MOON_LEADER_SOURCE,
     layout: { 'line-cap': 'round' },
     paint: {
-      'line-color': MOON_CRAFT_COLOUR,
-      'line-width': 1.4,
-      'line-opacity': 0.85,
+      // Grey, and thin. It is a connector between the spacecraft and its panel,
+      // not a second highlight competing with the marker for attention.
+      'line-color': '#9aa4b2',
+      'line-width': 1,
+      'line-opacity': 0.75,
     },
   } as LayerSpecification;
 }

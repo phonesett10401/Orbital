@@ -160,6 +160,28 @@ export interface OrbitalState {
   selectMoonCraft(id: string | null): void;
 
   /**
+   * Where the lunar panel should float, in screen pixels, or null.
+   *
+   * The panel is tethered to the spacecraft rather than parked in a corner, so
+   * its position is a property of the camera and belongs where both the map
+   * and the panel can see it. Published by the map on every move (D137).
+   */
+  moonPanelAt: { x: number; y: number } | null;
+  setMoonPanelAt(at: { x: number; y: number } | null): void;
+
+  /**
+   * Whether bodies are drawn at their true size relative to each other.
+   *
+   * Off by default, and the default is not timidity: true sizes make the Sun
+   * 287 times Mercury, so at a readable Sun the inner planets are a fifth of a
+   * pixel. The toggle exists so the compression can be *checked* rather than
+   * taken on trust - and distances stay compressed in both modes, because
+   * there is no setting at which they can be true (D137).
+   */
+  trueScale: boolean;
+  setTrueScale(on: boolean): void;
+
+  /**
    * Where the camera is heading, while a trip is in progress.
    *
    * Held so the solar system layer can brighten the destination on the way
@@ -298,6 +320,18 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   },
 
   activeBody: 'earth',
+  trueScale: false,
+  setTrueScale(on) {
+    if (useOrbitalStore.getState().trueScale !== on) set({ trueScale: on });
+  },
+  moonPanelAt: null,
+  setMoonPanelAt(at) {
+    const current = useOrbitalStore.getState().moonPanelAt;
+    // Compared rather than set blindly: this runs on every camera frame, and a
+    // new object each time would re-render the panel sixty times a second.
+    if (current?.x === at?.x && current?.y === at?.y) return;
+    set({ moonPanelAt: at });
+  },
   moonCraft: [],
   setMoonCraft(craft) {
     set({ moonCraft: craft });
@@ -322,6 +356,7 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
       // travelled to. Leaving them would show a Moon panel over Mars (D135).
       moonCraft: [],
       selectedMoonId: null,
+      moonPanelAt: null,
     });
   },
 

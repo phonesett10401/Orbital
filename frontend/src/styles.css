@@ -1292,6 +1292,17 @@ body {
 
 .panel--moon {
   animation: moon-panel-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) 620ms both;
+  /* Floating beside its spacecraft, not parked in the corner. `left`/`top` are
+     set inline from the end of the callout line, so this only has to stop the
+     corner rules from fighting them. */
+  right: auto;
+  bottom: auto;
+  width: 300px;
+  max-height: 300px;
+  overflow-y: auto;
+  /* The line meets the panel's bottom-left corner, so the two read as one
+     object; the transform origin makes it grow from that corner too. */
+  transform-origin: 0 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1299,4 +1310,31 @@ body {
   .panel--moon {
     animation: none;
   }
+}
+
+/* True-size toggle, beside the body picker (D137). */
+.truescale {
+  margin-left: 10px;
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.truescale:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.truescale.is-active {
+  background: rgba(255, 209, 102, 0.16);
+  border-color: rgba(255, 209, 102, 0.5);
+  color: #ffd166;
 }

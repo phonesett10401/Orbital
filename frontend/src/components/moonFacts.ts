@@ -96,3 +96,32 @@ export function panelState(
   const found = craft.find((c) => c.id === selectedId);
   return found ? { kind: 'craft', craft: found } : { kind: 'lost' };
 }
+
+/** Roughly what the floating panel occupies, for keeping it on screen. */
+export const PANEL_WIDTH = 300;
+export const PANEL_HEIGHT = 300;
+
+/**
+ * Where the floating panel actually goes, given where the line ends.
+ *
+ * The line ends up and to the right of the spacecraft, and the panel hangs off
+ * that end - so its *bottom left* corner sits there, which is what makes the
+ * two read as one object rather than a line pointing near a box.
+ *
+ * Then it is clamped into the window. Without this, selecting a spacecraft in
+ * the top right corner of the map puts its panel mostly off screen, and the
+ * spacecraft near the top of the globe is exactly where the interesting ones
+ * are: these are polar orbiters (D137).
+ */
+export function panelPosition(
+  at: { x: number; y: number },
+  window: { width: number; height: number },
+  margin = 12,
+): { left: number; top: number } {
+  const left = at.x;
+  const top = at.y - PANEL_HEIGHT;
+  return {
+    left: Math.max(margin, Math.min(left, window.width - PANEL_WIDTH - margin)),
+    top: Math.max(margin, Math.min(top, window.height - PANEL_HEIGHT - margin)),
+  };
+}

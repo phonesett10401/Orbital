@@ -16,6 +16,7 @@ import { BodyPicker } from './components/BodyPicker';
 import { TimeControl } from './components/TimeControl';
 import { DetailPanel } from './components/DetailPanel';
 import { MoonPanel } from './components/MoonPanel';
+import { TrueScaleToggle } from './components/TrueScaleToggle';
 import { MoonSatelliteList } from './components/MoonSatelliteList';
 import { LayerToggle } from './components/LayerToggle';
 import { Legend } from './components/Legend';
@@ -61,6 +62,7 @@ export function App() {
               {onEarth ? chromeFor(activeLayer.id, []).subtitle : 'surface imagery'}
             </span>
             <BodyPicker />
+            <TrueScaleToggle />
           </div>
         </div>
         {onEarth && <SearchBar />}
