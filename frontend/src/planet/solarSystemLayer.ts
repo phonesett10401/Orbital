@@ -35,6 +35,13 @@ import {
   starSize,
 } from '../stars';
 import { readCamera } from '../cameraFrame';
+import {
+  RING_INNER,
+  RING_OUTER,
+  SATURN_POLE_DEC_DEG,
+  SATURN_POLE_RA_HOURS,
+  ringProfile,
+} from '../saturnRings';
 
 export const SOLAR_LAYER = 'orbital-solar-system';
 
@@ -205,6 +212,35 @@ export function createSolarSystemLayer(
   const ambient = new THREE.AmbientLight(0x223044, 1.1);
   scene.add(sunlight, ambient);
 
+/**
+ * Stop the far plane cutting the scene in half.
+ *
+ * Measured: **146 of 679 orbit vertices - 21% - fall outside the far plane**,
+ * at every zoom. D129 found why: MapLibre puts the far plane one globe radius
+ * past the centre, so anything more than one radius *behind* the Earth is cut.
+ * For a scene 18 radii across that removes the far side of every orbit and
+ * takes a crescent bite out of any body sitting away from the camera - which
+ * is what "the rings go void" was.
+ *
+ * The projection cannot be widened: the depth values MapLibre already wrote for
+ * the globe were written with this one, and remapping them would break which
+ * things hide behind the Earth. So the depth is *clamped* instead - a vertex
+ * past the far plane is drawn at the far plane rather than discarded. That is
+ * also the honest depth for it: it is the farthest thing in the scene, so
+ * sitting at the maximum is where it belongs, and the Earth still occludes it
+ * (D130).
+ */
+const clampToFarPlane = (material: THREE.Material): THREE.Material => {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <project_vertex>',
+      `#include <project_vertex>
+       gl_Position.z = min(gl_Position.z, gl_Position.w * 0.9999);`,
+    );
+  };
+  return material;
+};
+
   const spheres = new Map<string, THREE.Mesh>();
   let orbitsBuiltFor = 0;
   let orbitsBuiltAround: PlanetId | null = null;
@@ -217,11 +253,13 @@ export function createSolarSystemLayer(
       orbits.add(
         new THREE.Line(
           new THREE.BufferGeometry().setFromPoints(points),
-          new THREE.LineBasicMaterial({
-            color: COLOURS[planet] ?? 0x8899aa,
-            transparent: true,
-            opacity: 0.28,
-          }),
+          clampToFarPlane(
+            new THREE.LineBasicMaterial({
+              color: COLOURS[planet] ?? 0x8899aa,
+              transparent: true,
+              opacity: 0.28,
+            }),
+          ),
         ),
       );
     }
@@ -238,7 +276,7 @@ export function createSolarSystemLayer(
       // The Sun emits, so it stays unlit. Everything else is lit *by* it, which
       // is what turns a flat coloured disc into a body with a terminator - and
       // the phase is correct, because the light is where the Sun is.
-      const material =
+      const material = clampToFarPlane(
         id === 'sun'
           ? new THREE.MeshBasicMaterial({ color: COLOURS.sun, transparent: true })
           : new THREE.MeshStandardMaterial({
@@ -246,12 +284,100 @@ export function createSolarSystemLayer(
               transparent: true,
               roughness: 0.95,
               metalness: 0,
-            });
+            }),
+      );
       mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), material);
       spheres.set(id, mesh);
       bodies.add(mesh);
     }
     return mesh;
+  };
+
+  /**
+   * Saturn's rings.
+   *
+   * The one thing in this scene with real structure at the size it is drawn,
+   * and the reason it is worth the shader: a bright B ring, a dimmer A ring,
+   * and the Cassini division between them. `saturnRings.ts` holds the radii and
+   * the tests; this builds an annulus of the right proportions and points it
+   * the right way.
+   *
+   * **Not modelled in Blender, and not because of effort.** The rings are a
+   * flat annulus with a radial brightness profile - that is what they are, not
+   * a simplification of them - so a mesh would be the same annulus with more
+   * triangles and a texture baked at one resolution instead of sampled at the
+   * right one. What was actually wrong with the rings was D130's clipping, and
+   * no model fixes that (D131).
+   */
+  let ringMesh: THREE.Mesh | null = null;
+  let ringMaterial: THREE.ShaderMaterial | null = null;
+  const RING_UP = new THREE.Vector3(0, 0, 1);
+  const ringNormal = new THREE.Vector3();
+
+  const buildRing = () => {
+    const r = globeRadiiFor(bodyRadiusFor(radiusKmOf('saturn')));
+    const profile = new THREE.DataTexture(ringProfile(512), 512, 1, THREE.RGBAFormat);
+    profile.minFilter = THREE.LinearFilter;
+    profile.magFilter = THREE.LinearFilter;
+    profile.wrapS = THREE.ClampToEdgeWrapping;
+    profile.needsUpdate = true;
+
+    ringMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        profile: { value: profile },
+        inner: { value: RING_INNER * r },
+        outer: { value: RING_OUTER * r },
+        tint: { value: new THREE.Color(0xdccdaa) },
+        opacity: { value: 1 },
+      },
+      vertexShader: `
+        varying vec2 vLocal;
+        void main() {
+          // The ring lies in its own XY plane, so the local position is the
+          // radial coordinate the profile is indexed by.
+          vLocal = position.xy;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          gl_Position.z = min(gl_Position.z, gl_Position.w * 0.9999);
+        }
+      `,
+      fragmentShader: `
+        precision mediump float;
+        uniform sampler2D profile;
+        uniform float inner;
+        uniform float outer;
+        uniform float opacity;
+        uniform vec3 tint;
+        varying vec2 vLocal;
+        void main() {
+          float t = (length(vLocal) - inner) / (outer - inner);
+          if (t < 0.0 || t > 1.0) discard;
+          float a = texture2D(profile, vec2(t, 0.5)).r;
+          if (a <= 0.004) discard;
+          gl_FragColor = vec4(tint, a * opacity);
+        }
+      `,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+
+    ringMesh = new THREE.Mesh(
+      new THREE.RingGeometry(RING_INNER * r, RING_OUTER * r, 128, 1),
+      ringMaterial,
+    );
+    bodies.add(ringMesh);
+  };
+
+  /** Point the rings along Saturn's own pole and hang them on the planet. */
+  const placeRing = (at: readonly [number, number, number], date: Date, alpha: number, scale: number) => {
+    if (!ringMesh || !ringMaterial) return;
+    const dir = starDirection(SATURN_POLE_RA_HOURS, SATURN_POLE_DEC_DEG);
+    const pole = equatorialToGlobe({ x: dir[0], y: dir[1], z: dir[2] }, date);
+    ringNormal.set(pole[0], pole[1], pole[2]).normalize();
+    ringMesh.quaternion.setFromUnitVectors(RING_UP, ringNormal);
+    ringMesh.position.set(at[0], at[1], at[2]);
+    ringMesh.scale.setScalar(scale);
+    ringMaterial.uniforms.opacity.value = alpha;
   };
 
   return {
@@ -325,6 +451,22 @@ export function createSolarSystemLayer(
         const emphasis = !heading || placement.id === heading ? 1 : 0.35;
         (mesh.material as THREE.Material).opacity = fade * emphasis;
         mesh.scale.setScalar(heading === placement.id ? 1.6 : 1);
+      }
+
+      const saturn = placements.find((p) => p.id === 'saturn');
+      if (saturn) {
+        if (!ringMesh) buildRing();
+        if (ringMesh) ringMesh.visible = true;
+        placeRing(
+          saturn.at,
+          date,
+          fade * (!heading || heading === 'saturn' ? 1 : 0.35),
+          heading === 'saturn' ? 1.6 : 1,
+        );
+      } else if (ringMesh) {
+        // Absent from the placements means Saturn is the world being stood on,
+        // and the rings are underfoot rather than in the sky.
+        ringMesh.visible = false;
       }
       starMaterial.uniforms.opacity.value = fade;
       orbits.children.forEach((line) => {

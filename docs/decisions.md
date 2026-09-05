@@ -7038,3 +7038,71 @@ The far plane also clips the **Sun's sphere** when it sits away from the camera
 along the view axis - visible as a crescent bite out of a full disc. That is
 the same one-radius far plane, hitting the bodies rather than the sky, and it
 predates this work. Recorded rather than fixed.
+
+## D130 - Clamping depth, because the far plane was eating a fifth of the scene
+
+Phone's report was *"our star system rings went void and sometimes it looks
+unrealistic"*, with a suggestion to try Blender. The measurement came first, and
+it ruled Blender out in one number.
+
+Counting orbit vertices against the far plane from the live projection matrix:
+**146 of 679 - 21% - fall outside it, at every zoom.** D129 had already found
+why: the far plane sits one globe radius past the centre, so everything more
+than one radius *behind* the Earth is cut. For a scene 18 radii across that
+removes the far side of every orbit, and takes a crescent bite out of any body
+sitting away from the camera - the same crescent D129 noticed on the Sun and
+recorded without fixing.
+
+**A modelled ring would have been clipped identically.** The rings were not
+badly drawn; a fifth of them was not being drawn at all.
+
+### Clamped, not widened
+
+The obvious fix is a farther far plane, and it is wrong. MapLibre has already
+written depth values for the globe using *this* projection, so remapping depth
+would break which things hide behind the Earth - the sky included, which D129
+had just got right.
+
+So the depth is clamped instead, in the vertex shader, via `onBeforeCompile` so
+`MeshStandardMaterial` keeps its lighting:
+
+```glsl
+gl_Position.z = min(gl_Position.z, gl_Position.w * 0.9999);
+```
+
+A vertex past the far plane is drawn *at* the far plane rather than discarded.
+That is also the honest depth for it: it is the farthest thing in the scene, so
+the maximum is where it belongs, and the Earth still occludes it.
+
+## D131 - Saturn's rings are a measured profile, not a model
+
+The rings are the one thing in this scene with real structure at the size it is
+drawn, so they are the one thing worth building properly - and building them
+properly means measuring them, not modelling them.
+
+`saturnRings.ts` holds the real radii, in Saturn radii, from the published
+kilometre figures over an equatorial radius of 60,268 km: C ring from 1.239, B
+ring from 1.526, **Cassini division 1.951-2.027**, A ring to 2.269, with the
+Encke gap at 2.216. Ten tests, the sharpest of which asserts the Cassini
+division is a *dip* - if it stops being one, the rings have become a plain hoop
+and Saturn stops looking like Saturn.
+
+The shader samples a lookup table **built from the tested function**, rather
+than a second copy of the radii written in GLSL that could drift from it.
+
+The rings are pointed along Saturn's real pole (IAU: RA 40.589 degrees, Dec
+83.537), reusing `starDirection` and `equatorialToGlobe` - so they open and
+close over Saturn's 29-year orbit the way the real ones do, instead of sitting
+at a fixed decorative angle.
+
+### Blender, asked for a second time and declined a second time
+
+Phone suggested Blender for this specifically. The rings **are** a flat annulus
+with a radial brightness profile - that is what they are, not a simplification
+of them - so a mesh would be the same annulus with more triangles and a texture
+baked at one resolution instead of sampled at the right one. And the thing that
+actually looked wrong was D130's clipping, which no model fixes.
+
+The proportions to the planet are exact even though the planet's size is
+compressed: the same bargain `solarScale` struck. The arrangement is true, the
+scale is not.
