@@ -13,6 +13,10 @@ import { BODIES } from './bodies';
 import { ELEMENTS, PLANET_IDS, type PlanetId, heliocentricDistance } from './planets';
 import {
   AU_KM,
+  GLOBE_RADII_AT_NEPTUNE,
+  MAPLIBRE_MIN_ZOOM,
+  NEPTUNE_APHELION_AU,
+  globeRadiiFor,
   BODY_MAX,
   BODY_MIN,
   ORBIT_MAX,
@@ -62,7 +66,8 @@ describe('orbit distance', () => {
       expect(r, planet).toBeGreaterThan(0);
       expect(r, planet).toBeLessThanOrEqual(ORBIT_MAX * 1.02);
     }
-    expect(radiusFor(30.0699)).toBeCloseTo(ORBIT_MAX, 3);
+    // Neptune at its furthest is the thing that must fit, not its mean.
+    expect(radiusFor(NEPTUNE_APHELION_AU)).toBeCloseTo(ORBIT_MAX, 6);
   });
 
   it('keeps Mercury clear of the Sun rather than crushed onto it', () => {
@@ -133,6 +138,52 @@ describe('body size', () => {
     // The Sun must be a small fraction of Neptune's orbit, not thirty times it.
     expect(bodyRadiusFor(696_000)).toBeLessThan(ORBIT_MAX * 0.1);
     expect(bodyRadiusFor(696_000)).toBeGreaterThan(radiusFor(ELEMENTS.mercury.a) * 0.1);
+  });
+});
+
+describe('where MapLibre can actually draw it', () => {
+  it('keeps the whole system inside the measured reach', () => {
+    // Measured on screen at zoom -2: a ring at 20 globe radii shows 52% of
+    // itself, which is its entire near side; at 40 it shows 11%. Neptune sits
+    // at 18 so the outermost orbit is inside the frame rather than exactly on
+    // the boundary where a resize would push it out (D123).
+    expect(globeRadiiFor(ORBIT_MAX)).toBe(GLOBE_RADII_AT_NEPTUNE);
+    expect(GLOBE_RADII_AT_NEPTUNE).toBeLessThan(20);
+  });
+
+  it('fits Neptune at aphelion, not merely at its mean distance', () => {
+    // The bug this caught: ORBIT_K was normalised on the semi-major axis, so
+    // for the half of its orbit spent beyond the mean Neptune drew outside the
+    // frame. Small, and the kind that shows as a planet clipping the rim
+    // rather than as a wrong number anywhere.
+    const furthest = Math.max(
+      ...Array.from({ length: 200 }, (_, i) =>
+        heliocentricDistance('neptune', new Date(Date.UTC(2026, 0, 1) + i * 110 * 86_400_000)),
+      ),
+    );
+    expect(globeRadiiFor(radiusFor(furthest))).toBeLessThanOrEqual(GLOBE_RADII_AT_NEPTUNE);
+  });
+
+  it('leaves the satellite shell room underneath', () => {
+    // The shell stands off at about 2.4 radii. Mercury is the innermost orbit
+    // and must not be drawn inside it, or the two layers overlap at the one
+    // zoom where both are visible.
+    expect(globeRadiiFor(radiusFor(0.387))).toBeGreaterThan(2.4);
+  });
+
+  it('holds every planet between the shell and the reach', () => {
+    for (const planet of PLANET_IDS) {
+      const r = globeRadiiFor(radiusFor(ELEMENTS[planet].a));
+      expect(r, planet).toBeGreaterThan(2.4);
+      expect(r, planet).toBeLessThanOrEqual(GLOBE_RADII_AT_NEPTUNE);
+    }
+  });
+
+  it('names the floor MapLibre imposes rather than one we chose', () => {
+    // `setMinZoom(-6)` throws: "minZoom must be between -2 and the current
+    // maxZoom". It is a library cap, so treating it as a preference would be
+    // a decision nobody can act on.
+    expect(MAPLIBRE_MIN_ZOOM).toBe(-2);
   });
 });
 

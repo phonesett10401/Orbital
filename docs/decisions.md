@@ -6639,3 +6639,86 @@ Phase 4 is the handover spike - one untextured sphere in three.js and whether
 it can crossfade with MapLibre at all. It comes before the real scene precisely
 so that a failure lands against a stub instead of against eight modelled
 planets.
+
+---
+
+## D123 - The second renderer is not needed, and the spike is why
+
+Phase 4 was planned as a handover: a three.js scene for space, crossfading with
+MapLibre at a zoom boundary, because MapLibre draws one globe and a solar
+system is not one globe. It was placed before the real scene precisely so that
+a failure would land against a stub.
+
+**It did not fail. The premise did.**
+
+### The thing the plan missed was already in the repository
+
+`satelliteShellLayer` and `modelLayer` **already run three.js inside MapLibre's
+GL context**, on a unit sphere where a vertex is a direction and a radius is a
+multiple of the globe's own (`modelFrame.ts`). The shell stands off at about
+2.4 radii and has since D105.
+
+So the question was never whether two renderers can hand over. It was **how far
+the one already here reaches** - which nobody had asked, because the plan had
+already decided the answer was "not far enough".
+
+### Measured, not derived
+
+A probe layer drew rings at 2.4, 5, 10, 20, 40 and 80 globe radii and reported
+what fraction of each landed inside the clip volume. At MapLibre's floor:
+
+| ring | visible at z=-2 | at z=-1.6 |
+|---|---|---|
+| 2.4 (the shell today) | 64% | 64% |
+| 10 | 55% | 55% |
+| **20** | **52%** | 30% |
+| 40 | 11% | 5% |
+| 80 | 2% | 0% |
+
+52% is not half-hidden - it is the **entire near side**. The far half of every
+ring sits behind the far plane at any radius, which is not a limit but the
+existing behaviour: the shell already culls to the near side against the same
+horizon plane.
+
+**So the reach is about 20 globe radii, and the compressed system needs 18.**
+No second renderer, no crossfade, no camera continuity problem, and Phases 5
+and 6 get simpler rather than harder.
+
+### `minZoom` was costing half the reach
+
+MapLibre **refuses any minZoom below -2** - `setMinZoom(-6)` throws, it is a
+library cap rather than a setting. The view was sitting at -1.6, where the
+20-radius ring shows 30% instead of 52%. Lowered to -2, which is the difference
+between the outer solar system being in frame and not.
+
+### The probe was wrong twice before it was right
+
+**It sampled one vertex.** A single point at `(r,0,0)` reported "off-frame" for
+rings whose tops and bottoms were perfectly visible. A point on a ring's edge
+says nothing about the ring.
+
+**It printed depth to three places**, and every value came back as exactly
+`1.000` - which reads as "everything is at the far plane" and is really "not
+enough digits to tell". Two conclusions were nearly drawn from that noise.
+
+Fixed by sampling the whole ring and reporting the surviving fraction, which is
+the number that was wanted from the start. **A measurement that returns the
+same answer for every input is not a measurement.**
+
+### And the scale was normalised on the wrong number
+
+Writing the reach test surfaced a real error in D122's work: `ORBIT_K` was set
+so Neptune's **semi-major axis** landed on the frame edge, but Neptune spends
+half its orbit beyond the mean, reaching 30.33 AU at aphelion. Those positions
+drew outside the frame. Normalised on aphelion now, with a test that walks 60
+years of real positions rather than trusting the axis.
+
+Small, and exactly the kind that shows as a planet clipping the rim rather than
+as a wrong number anywhere a test would look.
+
+### The spike is deleted
+
+`reachProbe.ts` is gone. Its answer is the table above and two constants -
+`GLOBE_RADII_AT_NEPTUNE` and `MAPLIBRE_MIN_ZOOM` - both with the measurement in
+their docstrings. Keeping the instrument after the reading is how a codebase
+fills with tools nobody dares remove.

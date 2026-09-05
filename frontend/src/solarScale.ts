@@ -53,8 +53,18 @@ export const ORBIT_SOFTENING_AU = 0.3;
 /** Where Neptune sits, in the unit everything else is a fraction of. */
 export const ORBIT_MAX = 1.0;
 
-/** Set so that Neptune's 30.07 AU lands exactly on `ORBIT_MAX`. */
-export const ORBIT_K = ORBIT_MAX / Math.log(1 + 30.0699 / ORBIT_SOFTENING_AU);
+/**
+ * Neptune's **aphelion**, not its semi-major axis.
+ *
+ * a(1+e) = 30.06992276 x 1.00859048 = 30.328 AU. Normalising on the axis put
+ * Neptune's real positions slightly outside the frame for the half of its
+ * orbit spent beyond the mean - a small error, but the kind that shows as a
+ * planet clipping the rim rather than as a wrong number anywhere.
+ */
+export const NEPTUNE_APHELION_AU = 30.328;
+
+/** Set so Neptune at its furthest lands exactly on `ORBIT_MAX`. */
+export const ORBIT_K = ORBIT_MAX / Math.log(1 + NEPTUNE_APHELION_AU / ORBIT_SOFTENING_AU);
 
 /**
  * A heliocentric distance in AU, compressed to a drawable radius.
@@ -115,6 +125,51 @@ export const BODY_K = (BODY_MAX - BODY_MIN) / (BODY_LOG_MAX - BODY_LOG_MIN);
 export function bodyRadiusFor(radiusKm: number): number {
   const clamped = Math.max(0, radiusKm);
   return BODY_MIN + BODY_K * (Math.log(1 + clamped / BODY_SOFTENING_KM) - BODY_LOG_MIN);
+}
+
+// ---- where it is drawn ---------------------------------------------------
+
+/**
+ * Neptune's orbit, expressed in globe radii, for MapLibre's own renderer.
+ *
+ * **Phase 4 was planned as a second renderer and does not need one.** The
+ * plan was a three.js scene for space crossfading with MapLibre at a zoom
+ * boundary, because MapLibre draws one globe and a solar system is not one
+ * globe. But `satelliteShellLayer` and `modelLayer` already run three.js
+ * *inside* MapLibre's GL context, on a unit sphere where a radius is a
+ * multiple of the globe's own - so the question was never whether two
+ * renderers can hand over, only how far the one already here reaches (D123).
+ *
+ * Measured on screen, at MapLibre's hard floor of zoom -2, as the fraction of
+ * a ring's **near side** that lands inside the clip volume:
+ *
+ * | ring | visible |
+ * |---|---|
+ * | 2.4 (the satellite shell today) | 64% |
+ * | 10 | 55% |
+ * | **20** | **52% - the whole near side** |
+ * | 40 | 11% |
+ * | 80 | 2% |
+ *
+ * The far half of every ring is behind the far plane at any radius, which is
+ * not a limit but the existing behaviour: the shell already draws only the
+ * near side, culled against the same horizon plane.
+ *
+ * 18 rather than 20, so the outermost orbit is inside the frame rather than
+ * exactly on the boundary where a resize would push it out.
+ *
+ * **`minZoom` must be -2 for this to hold.** MapLibre refuses anything lower -
+ * it is a library cap, not a setting - and at -1.6 the 20-radius ring drops
+ * from 52% to 30%.
+ */
+export const GLOBE_RADII_AT_NEPTUNE = 18;
+
+/** MapLibre's own floor. Nothing below this exists to be configured. */
+export const MAPLIBRE_MIN_ZOOM = -2;
+
+/** A compressed radius in `radiusFor` units, as a multiple of the globe's. */
+export function globeRadiiFor(scaled: number): number {
+  return scaled * GLOBE_RADII_AT_NEPTUNE;
 }
 
 // ---- saying so -----------------------------------------------------------

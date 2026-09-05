@@ -127,6 +127,7 @@ import {
 } from './status';
 import { boundsToBBox, coversWholeWorld } from './viewport';
 import { bodyFor } from '../bodies';
+import { MAPLIBRE_MIN_ZOOM } from '../solarScale';
 import { GIBS_ATTRIBUTION, IMAGERY_FAR_MAX_ZOOM } from './basemap';
 import {
   IMAGERY_FAR,
@@ -275,7 +276,11 @@ export function PlanetView() {
           // zoom slider to -2, which is where the globe becomes a speck; -1.6
           // is enough to hold the whole constellation with the planet still
           // recognisable.
-          minZoom: -1.6,
+          // MapLibre's own floor, not a taste. It refuses anything lower, and
+          // the difference is not cosmetic: a ring at 18 globe radii shows 52%
+          // of its near side at -2 and 30% at -1.6, so the outer solar system
+          // is either in frame or it is not (D123).
+          minZoom: MAPLIBRE_MIN_ZOOM,
           attributionControl: { compact: true },
         });
 
@@ -479,6 +484,7 @@ export function PlanetView() {
               : { objects: [], selectedId: null };
           });
           map.addLayer(shell);
+
 
           model = createModelLayer(() => {
             const state = useOrbitalStore.getState();
