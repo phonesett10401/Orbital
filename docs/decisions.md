@@ -6482,3 +6482,85 @@ No space, no second renderer, no planet positions, nothing to scale. The Sun
 and the gas giants appear only as rows in a list. Phases 2 to 6 remain as
 planned, and Phase 4 - the handover spike - is still the one that decides
 whether the rest is worth building.
+
+---
+
+## D121 - The planets need nothing from anybody
+
+Phase 2 of the solar system: heliocentric positions for all eight planets,
+computed from JPL's approximate elements.
+
+**This is the satellite architecture one step further.** A satellite needs
+element sets fetched from somewhere and refreshed every few days; a planet's
+orbit is six numbers and six rates published once, which do not change. The
+module makes **no request, ever** - no upstream, no quota, no cache, no
+staleness, and no backend involvement of any kind. It is the only layer in
+Orbital that cannot fail.
+
+### Verified against JPL, not against itself
+
+`fixtures/horizons.json` holds heliocentric ecliptic vectors for all eight
+planets at five epochs, fetched from JPL Horizons. That distinction is the
+whole point: a suite comparing this module to itself would pass with the
+element table mistyped, and every digit in that table is somebody else's
+measurement.
+
+Earth is compared against Horizons body **3**, the Earth-Moon barycentre, not
+`399`. They differ by 4,700 km, and comparing against the wrong one would
+charge this code with an error it did not make.
+
+### Jupiter and Saturn are the worst, and that is physics
+
+Worst error seen, per planet, across five epochs:
+
+    mercury 0.1'   venus 0.3'   earth 0.3'   mars 0.6'
+    jupiter 5.3'   saturn 9.6'  uranus 1.2'  neptune 0.8'
+
+The two adjacent outliers are the **great inequality** - Jupiter and Saturn's
+5:2 near-resonance trading angular momentum on a 900-year cycle that linear
+elements cannot represent. The signature is exactly that: the two resonant
+bodies, with an error that *oscillates* with date rather than sitting at a
+constant offset. A mistyped element would do the opposite, and that is how the
+two were told apart rather than by hoping.
+
+Tolerances are therefore per planet and in **arcminutes of heliocentric
+angle**, not AU. One bound in AU is simultaneously far too loose for Mercury
+and too tight for Neptune, and a single number wide enough for Saturn would let
+Mercury be wrong by a quarter of its orbit.
+
+### A rate error needs time, and the first fixtures gave it none
+
+The first three reference epochs were 2000, 2026 and 2035 - all within a third
+of a century of J2000. Breaking Saturn's mean-longitude rate by a transposed
+digit, 1222.49 to 1222.94, **passed the entire suite**: 0.45 degrees per
+century has almost nothing to accumulate over 26 years, and Saturn's honest
+9.6' tolerance absorbed what little there was.
+
+Two epochs were added at 1900 and 2049, near both ends of the table's stated
+validity. The same break now fails two tests. **A rate is only observable over
+time, so a fixture set clustered near the epoch cannot see one at all.**
+
+### A check that was wrong twice before it was right
+
+The obvious fix looked like comparing `lRate` against the period from `a` -
+two columns checking each other. Set at a part in ten thousand it failed on
+Neptune *for being correct*, and the failure was briefly misread as the Saturn
+break being caught.
+
+The deviations are 2-19 ppm for the inner planets and 448, 512 and 633 ppm for
+Jupiter, Uranus and Neptune. Part of that is this file's own doing:
+`orbitalPeriodDays` applies Kepler's third law with the **solar mass alone**,
+and Jupiter is 1/1047 of a solar mass, so its period is about 478 ppm shorter
+than the formula returns - very nearly Jupiter's entire deviation.
+
+So the check stays at a part in a thousand and is documented for what it
+actually is: a detector of rows pasted against the wrong planet, not of
+transposed digits. Digit-level rate errors are the Horizons comparison's job,
+and only became its job when the fixtures widened.
+
+### What Phase 2 deliberately does not do
+
+Nothing is drawn. No scale is chosen - that is Phase 3, and the spread it has
+to compress is 0.39 to 30 AU in distance against 2,440 to 696,000 km in radius.
+Nothing is rendered until Phase 4 answers whether a second renderer can hand
+over to MapLibre at all.
