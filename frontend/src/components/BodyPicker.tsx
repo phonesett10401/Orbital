@@ -11,7 +11,7 @@
  * no ground (D120).
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { BODIES, type Body, bodyFor, isLandable } from '../bodies';
 import { useOrbitalStore } from '../state/store';
@@ -20,6 +20,29 @@ export function BodyPicker() {
   const activeBody = useOrbitalStore((s) => s.activeBody);
   const setFlyingTo = useOrbitalStore((s) => s.setFlyingTo);
   const [open, setOpen] = useState(false);
+
+  /**
+   * Closing is delayed; opening is not.
+   *
+   * The menu sits a few pixels below its button, and that gap is not part of
+   * any hover region - so moving the mouse toward a planet crossed dead space
+   * and `mouseleave` shut the list before it could be clicked. A CSS bridge
+   * covers the gap itself, and this covers the rest: a diagonal move toward a
+   * lower item clips the corner of the panel, which is a miss no bridge can
+   * fix (D127).
+   */
+  const closeTimer = useRef<number | null>(null);
+  const cancelClose = () => {
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const closeSoon = () => {
+    cancelClose();
+    closeTimer.current = window.setTimeout(() => setOpen(false), 220);
+  };
+  useEffect(() => cancelClose, []);
 
   const current = bodyFor(activeBody);
 
@@ -39,8 +62,11 @@ export function BodyPicker() {
   return (
     <div
       className="bodies"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={() => {
+        cancelClose();
+        setOpen(true);
+      }}
+      onMouseLeave={closeSoon}
     >
       <button
         className="bodies__current"

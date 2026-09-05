@@ -6860,3 +6860,40 @@ Phases 1 to 6: four worlds with surfaces, planet positions from constants, two
 compressions, a reach measurement that removed the need for a second renderer,
 the system itself, and now travel between them. Nothing in it fetches anything
 at runtime except the surface tiles.
+
+---
+
+## D127 - A hover menu is not tested until a pointer crosses a gap
+
+Phone: *"its hard to click because the list is gone in tiny area where my mouse
+moved."*
+
+The world picker opens on hover and its panel sits **6 px below the button**.
+That gap belongs to no hover region, so a pointer moving from the button toward
+a planet crossed dead space, `mouseleave` fired, and the list shut before it
+could be reached.
+
+Two fixes, because there are two ways to lose the pointer:
+
+- **A CSS bridge** - `::before` extending the panel's hit area up over the gap,
+  which covers a straight downward move.
+- **A 220 ms close delay** - because a diagonal move toward a lower item clips
+  the panel's corner and leaves the wrapper entirely, which no bridge can
+  cover. Opening stays instant; only closing waits.
+
+Rows also grew from 5 px of vertical padding to 7, so a near miss still lands.
+
+### Why the tests did not catch it
+
+`BodyPicker` had passing tests. Every one of them drove the component by
+calling its handlers or clicking its buttons directly - never by moving a
+pointer from one element to another. The bug lives entirely in the space
+*between* two elements, which is a place no `click()` ever visits.
+
+Verified afterwards both ways: synthetic events crossing the gap, and a real
+pointer path from the button down into the list, with all ten rows still
+reachable.
+
+**A menu that opens on hover is a claim about the pointer's journey, not about
+its destination.** Testing the destination is testing the half that was never
+in doubt.
