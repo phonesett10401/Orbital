@@ -285,18 +285,20 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
     for (const planet of PLANET_IDS) {
       if (planet === centre) continue;
       const points = orbitRing(planet, date, 96, centre).map((p) => new THREE.Vector3(...p));
-      orbits.add(
-        new THREE.Line(
-          new THREE.BufferGeometry().setFromPoints(points),
-          clampToFarPlane(
-            new THREE.LineBasicMaterial({
-              color: COLOURS[planet] ?? 0x8899aa,
-              transparent: true,
-              opacity: 0.28,
-            }),
-          ),
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(points),
+        clampToFarPlane(
+          new THREE.LineBasicMaterial({
+            color: COLOURS[planet] ?? 0x8899aa,
+            transparent: true,
+            opacity: 0.28,
+          }),
         ),
       );
+      // Same reason as the spheres: an orbit that reaches past the far plane is
+      // culled whole, so a ring would disappear rather than shorten.
+      line.frustumCulled = false;
+      orbits.add(line);
     }
     orbitsBuiltFor = date.getTime();
     orbitsBuiltAround = centre;
@@ -325,6 +327,15 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
             }),
       );
       mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), material);
+      // **Culling must be off, and D130 is the reason.**
+      //
+      // three.js culls on the CPU against the frustum it derives from this same
+      // projection matrix - including its far plane, which sits one globe radius
+      // past the centre. So the objects the shader clamp exists to keep drawing
+      // were being thrown away before the shader ever ran, and planets vanished
+      // at the angles that put them behind the Earth. The clamp handles the
+      // depth; this handles the culling; neither works alone (D133).
+      mesh.frustumCulled = false;
       spheres.set(id, mesh);
       bodies.add(mesh);
     }
@@ -403,6 +414,7 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
       new THREE.RingGeometry(RING_INNER * r, RING_OUTER * r, 128, 1),
       ringMaterial,
     );
+    ringMesh.frustumCulled = false;
     bodies.add(ringMesh);
   };
 

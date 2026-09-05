@@ -7163,3 +7163,63 @@ compression, and it renders the entire system as black discs. The Sun still
 sets the direction and the terminator; the ambient term was raised so the night
 side is legible rather than absent. The same bargain as `solarScale`, in light
 instead of distance.
+
+## D133 - Two bugs from the same habit: a written list, and a rule that ran twice
+
+Phone reported Earth's satellites orbiting Mars, and planets vanishing at some
+angles. They are unrelated in the code and identical in kind: in both cases a
+rule was stated in one place and enforced in another, and the two drifted.
+
+### Satellites on Mars: the list had gone stale, invisibly
+
+D120 hid Earth's layers behind `EARTH_ONLY_LAYERS`, a hand-written array. A
+missing entry there does not fail - it just leaves a layer on - so the list
+rotted silently as the app grew. Asking the running map which of Orbital's
+layers were still visible over Mars:
+
+| still visible on Mars | why it was missed |
+|---|---|
+| `orbital-satellite-shell` | **custom layer - absent from `getStyle()` entirely** |
+| `orbital-route-casing`, `-gap`, `-leader`, `-leader-casing` | only `orbital-route` was listed |
+| `orbital-satellites-label` | added after the list |
+| `orbital-origin`, `orbital-origin-label` | added after the list |
+
+The shell is the one Phone saw: two thousand Earth satellites in orbit around
+Mars, drawn by a custom layer that a style-derived rule **cannot see at all**.
+
+So the rule is inverted. Everything with the `orbital-` prefix is a statement
+about Earth unless it appears in `NOT_ABOUT_EARTH`, which holds three entries -
+the two imagery tiers and the solar system, the one thing that means *more* off
+Earth than on it. Custom layer ids are passed in by the caller, because
+MapLibre will not list them.
+
+Now a layer added tomorrow is hidden on Mars without anyone remembering, and
+only a genuinely body-agnostic one needs a deliberate line. **The direction the
+mistake points is the whole fix.** A test asserts exactly that, using a layer
+name that does not exist.
+
+The terminator is excepted for a different reason: it already has its own
+control that accounts for the body *and* the reader's setting, so listing it
+here as well would switch it back on for anyone who had turned it off.
+
+### Planets vanishing: the CPU threw away what the GPU was told to keep
+
+D130 clamped depth in the vertex shader so geometry past the far plane draws at
+the far plane instead of being discarded. It worked, and planets still
+disappeared - because **three.js culls on the CPU first**, against a frustum it
+derives from the same projection matrix, including the same far plane. The
+objects the clamp existed to save were being dropped before the shader ran.
+
+`frustumCulled = false` on the bodies, the orbit lines and the ring. The clamp
+handles the depth, this handles the culling, and neither is sufficient alone -
+which is why the first fix looked correct and was half a fix.
+
+### Checked and found already correct
+
+The feed does **not** keep polling while the camera is on another world -
+measured, because the quota is real: Earth's `fetchedAtMs` advanced over thirty
+seconds, Mars's advanced by **0 ms**. Worth recording as verified rather than
+assumed, since the instrument lied twice on the way there: the resource-timing
+buffer reported zero requests because it caps at 250 entries, and a patched
+`window.fetch` counted zero on Earth too, where polling was demonstrably
+happening.

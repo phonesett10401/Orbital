@@ -23,22 +23,43 @@
 import type { Body } from '../bodies';
 import { isLandable } from '../bodies';
 
-/** Layers Orbital adds that only make sense on Earth. */
-export const EARTH_ONLY_LAYERS = [
-  'orbital-aircraft',
-  'orbital-aircraft-label',
-  'orbital-aircraft-model',
-  'orbital-route',
-  'orbital-airport-halo',
-  'orbital-airport-ring',
-  'orbital-airport-label',
-  'orbital-coverage-fill',
-  'orbital-coverage-line',
-  'orbital-coverage-hatch',
-  'orbital-coverage-label',
-  'orbital-satellites',
-  'orbital-satellites-selection',
-] as const;
+/**
+ * The prefix every layer Orbital adds carries.
+ *
+ * The rule below is built on this rather than on a list, and the difference is
+ * the whole point - see `NOT_ABOUT_EARTH`.
+ */
+export const OWN_LAYER_PREFIX = 'orbital-';
+
+/**
+ * The only layers of Orbital's own that are **not** statements about Earth.
+ *
+ * Everything else with the prefix is switched off when the camera leaves, by
+ * derivation rather than by enumeration. That inversion is the fix for a real
+ * bug: the old hand-written list had drifted out of date, and the drift was
+ * invisible because a missing entry does not fail, it just leaves a layer on.
+ *
+ * Measured on Mars, the list was missing **`orbital-satellite-shell`** - two
+ * thousand Earth satellites in orbit around Mars - along with the route casing,
+ * the route gap, both leader layers, the satellite labels and the origin
+ * marker, while `orbital-route` itself was correctly hidden. Six of the seven
+ * had been added to the app after the list was written (D133).
+ *
+ * With the rule inverted, a new Earth layer is hidden automatically and only a
+ * genuinely body-agnostic one needs a line here - which is the direction the
+ * mistake should point.
+ */
+export const NOT_ABOUT_EARTH = new Set<string>([
+  'orbital-imagery-far',
+  'orbital-imagery-near',
+  // The solar system is the one thing that means *more* off Earth, not less:
+  // it is how you see where you have gone.
+  'orbital-solar-system',
+  // The terminator is Earth-only, but it already has its own control that
+  // accounts for the body *and* the reader's setting. Listing it here as well
+  // would turn it back on for anyone who had switched it off.
+  'orbital-terminator',
+]);
 
 /** The two imagery tiers Earth uses. Another world replaces both with one. */
 export const IMAGERY_FAR = 'orbital-imagery-far';
@@ -46,6 +67,20 @@ export const IMAGERY_NEAR = 'orbital-imagery-near';
 
 export interface StyleLike {
   layers: { id: string; type: string; source?: string }[];
+}
+
+/**
+ * Orbital's own layer ids, from the style plus any given by the caller.
+ *
+ * The second half is not optional in practice: **custom layers do not appear in
+ * `map.getStyle()`**, so a rule derived from the style alone cannot see the
+ * satellite shell, the aircraft model or the solar system - which is exactly
+ * how the shell kept drawing around Mars. The caller passes them in.
+ */
+export function ownLayerIds(style: StyleLike, customLayerIds: readonly string[] = []): string[] {
+  return [...style.layers.map((l) => l.id), ...customLayerIds].filter(
+    (id) => id.startsWith(OWN_LAYER_PREFIX) && !NOT_ABOUT_EARTH.has(id),
+  );
 }
 
 /**
@@ -70,6 +105,7 @@ export function cartographyLayerIds(style: StyleLike, vectorSource = 'openmaptil
 export function visibilityFor(
   body: Body,
   style: StyleLike,
+  customLayerIds: readonly string[] = [],
 ): Record<string, 'visible' | 'none'> {
   const onEarth = body.id === 'earth';
   const plan: Record<string, 'visible' | 'none'> = {};
@@ -77,7 +113,7 @@ export function visibilityFor(
   for (const id of cartographyLayerIds(style)) {
     plan[id] = onEarth ? 'visible' : 'none';
   }
-  for (const id of EARTH_ONLY_LAYERS) {
+  for (const id of ownLayerIds(style, customLayerIds)) {
     plan[id] = onEarth ? 'visible' : 'none';
   }
 

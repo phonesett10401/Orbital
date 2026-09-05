@@ -49,8 +49,8 @@ import {
   airportLayers,
 } from './airportLayer';
 import { createSatelliteIconCanvases } from './satelliteSprite';
-import { SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
-import { createSolarSystemLayer, type SolarLayer } from './solarSystemLayer';
+import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
+import { SOLAR_LAYER, createSolarSystemLayer, type SolarLayer } from './solarSystemLayer';
 import {
   SATELLITE_LABEL_LAYER,
   SATELLITE_LAYER,
@@ -97,7 +97,7 @@ import {
   coverageLayers,
   createHatchImage,
 } from './coverageLayer';
-import { createModelLayer, modelTarget } from './modelLayer';
+import { MODEL_LAYER, createModelLayer, modelTarget } from './modelLayer';
 import { createTerminatorControl } from './terminatorControl';
 import { createTerminatorLayer } from './terminatorLayer';
 import {
@@ -198,8 +198,11 @@ function applyBody(map: import('maplibre-gl').Map, bodyId: string): void {
     if (layer) map.addLayer(layer as never, below);
   }
 
+  // Custom layers are **absent from `getStyle()`**, so they have to be named
+  // here or the rule cannot see them - which is how two thousand Earth
+  // satellites ended up in orbit around Mars (D133).
   for (const [id, visibility] of Object.entries(
-    visibilityFor(body, style as never),
+    visibilityFor(body, style as never, [SHELL_LAYER, MODEL_LAYER, SOLAR_LAYER]),
   )) {
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
   }

@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { BODIES, EARTH, bodyFor, isLandable, showsEarthLayers } from './bodies';
 import {
-  EARTH_ONLY_LAYERS,
   IMAGERY_NEAR,
+  NOT_ABOUT_EARTH,
   cartographyLayerIds,
   maxZoomFor,
+  ownLayerIds,
   surfaceTilesFor,
   visibilityFor,
 } from './planet/bodySurface';
@@ -19,8 +20,23 @@ const style = {
     { id: 'orbital-imagery-far', type: 'raster', source: 'orbital-imagery-far' },
     { id: 'orbital-imagery-near', type: 'raster', source: 'orbital-imagery-near' },
     { id: 'orbital-aircraft', type: 'symbol', source: 'orbital-aircraft' },
+    { id: 'orbital-route', type: 'line', source: 'orbital-route' },
+    // The four that the old hand-written list forgot, plus the label layer.
+    { id: 'orbital-route-casing', type: 'line', source: 'orbital-route' },
+    { id: 'orbital-route-gap', type: 'line', source: 'orbital-route' },
+    { id: 'orbital-route-leader', type: 'line', source: 'orbital-route' },
+    { id: 'orbital-route-leader-casing', type: 'line', source: 'orbital-route' },
+    { id: 'orbital-satellites-label', type: 'symbol', source: 'orbital-satellites' },
+    { id: 'orbital-origin', type: 'circle', source: 'orbital-route' },
   ],
 };
+
+/** The layers MapLibre does not put in `getStyle()`, which the caller supplies. */
+const CUSTOM_LAYERS = [
+  'orbital-satellite-shell',
+  'orbital-aircraft-model',
+  'orbital-solar-system',
+];
 
 describe('which worlds can be entered', () => {
   it('lands only where there is a Web Mercator mosaic', () => {
@@ -74,8 +90,52 @@ describe('what is drawn when the camera leaves Earth', () => {
     // Aircraft, satellites, airports, coverage: over Mars these are not stale
     // or empty, they are meaningless. A layer drawn where its subject does not
     // exist is a stronger false claim than one drawn late (D120).
-    const plan = visibilityFor(bodyFor('mars'), style);
-    for (const id of EARTH_ONLY_LAYERS) expect(plan[id], id).toBe('none');
+    const plan = visibilityFor(bodyFor('mars'), style, CUSTOM_LAYERS);
+    for (const id of ownLayerIds(style, CUSTOM_LAYERS)) expect(plan[id], id).toBe('none');
+  });
+
+  it('switches off the satellite shell, which is a custom layer', () => {
+    // The bug this rule was rewritten for: two thousand Earth satellites were
+    // drawn in orbit around Mars. Custom layers are absent from `getStyle()`,
+    // so a rule derived from the style alone cannot see them - which is why
+    // the caller passes them in and why this test names one (D133).
+    const plan = visibilityFor(bodyFor('mars'), style, CUSTOM_LAYERS);
+    expect(plan['orbital-satellite-shell']).toBe('none');
+    expect(plan['orbital-aircraft-model']).toBe('none');
+  });
+
+  it('switches off every part of a route, not just the one named "route"', () => {
+    // The old list held `orbital-route` and none of the four layers drawn
+    // alongside it, so a selected flight left its casing, its gap and both
+    // leader lines over Mars.
+    const plan = visibilityFor(bodyFor('mars'), style, CUSTOM_LAYERS);
+    for (const id of [
+      'orbital-route',
+      'orbital-route-casing',
+      'orbital-route-gap',
+      'orbital-route-leader',
+      'orbital-route-leader-casing',
+      'orbital-satellites-label',
+      'orbital-origin',
+    ]) {
+      expect(plan[id], id).toBe('none');
+    }
+  });
+
+  it('hides a layer nobody has written yet, because the rule is derived', () => {
+    // The point of the inversion. A layer added tomorrow is off on Mars
+    // without anyone remembering to list it; only a body-agnostic one needs a
+    // deliberate entry.
+    const withNewLayer = {
+      layers: [...style.layers, { id: 'orbital-something-new', type: 'circle', source: 'x' }],
+    };
+    expect(visibilityFor(bodyFor('mars'), withNewLayer)['orbital-something-new']).toBe('none');
+  });
+
+  it('keeps the solar system on, because it is how you see where you went', () => {
+    const plan = visibilityFor(bodyFor('mars'), style, CUSTOM_LAYERS);
+    expect(plan['orbital-solar-system']).toBeUndefined();
+    expect(NOT_ABOUT_EARTH.has('orbital-solar-system')).toBe(true);
   });
 
   it('switches off the vector cartography, which describes only Earth', () => {
@@ -84,8 +144,8 @@ describe('what is drawn when the camera leaves Earth', () => {
   });
 
   it('turns all of it back on for Earth', () => {
-    const plan = visibilityFor(EARTH, style);
-    for (const id of [...EARTH_ONLY_LAYERS, 'water', 'road', 'place']) {
+    const plan = visibilityFor(EARTH, style, CUSTOM_LAYERS);
+    for (const id of [...ownLayerIds(style, CUSTOM_LAYERS), 'water', 'road', 'place']) {
       expect(plan[id], id).toBe('visible');
     }
   });
