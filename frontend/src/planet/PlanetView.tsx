@@ -241,6 +241,20 @@ function applySolarView(map: import('maplibre-gl').Map, inSolarView: boolean): v
   }
 }
 
+/**
+ * The body the solar system is drawn around, which is never a moon.
+ *
+ * The Moon rides with Earth here - 0.0026 AU apart, below anything this
+ * compression can show - and it has no orbital elements of its own, so
+ * anything asking `planets.ts` a question must ask it about Earth instead.
+ * One place, because asking it in two and getting it right in one is exactly
+ * what happened (D140).
+ */
+function solarOrigin(): PlanetId {
+  const body = useOrbitalStore.getState().activeBody;
+  return (body === 'moon' ? 'earth' : body) as PlanetId;
+}
+
 /** Close enough to see the spacecraft apart from its own shadow. */
 const MOON_CLOSE_ZOOM = 2.2;
 /** Long enough to read as travel, short enough not to be a wait. */
@@ -685,12 +699,7 @@ export function PlanetView() {
               return instant ? new Date(instant) : new Date();
             },
             () => useOrbitalStore.getState().flyingTo,
-            () => {
-              // The Moon rides with Earth: 0.0026 AU apart, far below anything
-              // this compression can show, and it has no orbit of its own here.
-              const body = useOrbitalStore.getState().activeBody;
-              return (body === 'moon' ? 'earth' : body) as PlanetId;
-            },
+            solarOrigin,
             // The *actual* world underfoot, which the origin above flattens to
             // Earth for the Moon. Sizes are anchored on this one, because it is
             // the globe MapLibre draws at radius 1 (D137).
@@ -884,6 +893,7 @@ export function PlanetView() {
             const plan = flightPlan(state.activeBody, destination);
             const runner = map;
             void (async () => {
+              try {
               for (const step of plan) {
                 if (swapsWorld(step)) {
                   useOrbitalStore.getState().setActiveBody(destination);
@@ -894,11 +904,17 @@ export function PlanetView() {
                   // placements the scene is drawn from - so the camera turns
                   // toward the real planet rather than toward a nice arc
                   // invented for the animation (D136).
+                  // **`solarOrigin`, not `activeBody`.** The Moon is not a
+                  // planet and has no elements, so passing it here threw
+                  // `ELEMENTS['moon'].a` on the first step - and because the
+                  // throw skipped the `setFlyingTo(null)` at the end, the app
+                  // was left believing a trip was still in progress and refused
+                  // every later one. Leaving the Moon was a one-way door
+                  // (D140).
                   const aim = step.aimAtDestination
-                    ? scenePlacements(
-                        new Date(),
-                        useOrbitalStore.getState().activeBody as PlanetId,
-                      ).find((p) => p.id === destination)
+                    ? scenePlacements(new Date(), solarOrigin()).find(
+                        (p) => p.id === destination,
+                      )
                     : undefined;
                   runner.easeTo({
                     zoom: step.zoom,
@@ -911,7 +927,13 @@ export function PlanetView() {
                 }
                 await new Promise((resolve) => setTimeout(resolve, step.durationMs));
               }
-              useOrbitalStore.getState().setFlyingTo(null);
+              } finally {
+                // **Always.** Whatever goes wrong mid-flight, the app must not
+                // be left thinking it is still travelling: that state is what
+                // blocks the next trip, so an error here costs the reader the
+                // whole picker rather than one animation.
+                useOrbitalStore.getState().setFlyingTo(null);
+              }
             })();
             return;
           }

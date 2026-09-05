@@ -7629,3 +7629,57 @@ Earth gets a surface profile of its own for the first time - ocean blue with ice
 at both ends. Latitude alone cannot draw continents so it does not try, but "a
 blue planet, white at the poles" is true and is what Earth looks like at twenty
 pixels. Without it the origin body drew as the default grey ball.
+
+## D140 - Three faults in the handover, one of them a one-way door
+
+Phone reported three things against D139's handover. They are unrelated in the
+code and all three were visible in one screenshot each, which is the argument
+for looking at the running app rather than the tests.
+
+### The globe and its own body, drawn together
+
+The planets start fading in at `SOLAR_MAX_ZOOM` (0.5) but the basemap does not
+hand over until `SOLAR_FULL_ZOOM` (-1.0). For that zoom and a half **both were
+drawn**: a full-size globe with a small sphere of the same world sitting inside
+it.
+
+Two thresholds for one transition, and only one of them was being asked. The
+origin body is now gated on the same number the handover uses, so the one
+appears in the frame the other disappears.
+
+### The Moon inside the Earth
+
+Earth and the Moon are **0.0026 AU apart**, which this compression cannot
+resolve at all: `radiusFor` maps that separation to under a thousandth of a
+globe radius, so drawn truthfully they occupy the same point and whichever is
+in front hides the other.
+
+They are not one object and are no longer drawn as one. The companion is placed
+beside its partner by a **fixed, admitted offset** - 0.55 globe radii, which
+leaves a clear gap of 0.2 between two bodies of radius 0.241 and 0.108.
+
+**This is the only invented arrangement in the scene**, and it is in
+`homeBodies` with its own name and its own tests rather than buried in the
+layer, because everything else here is a real position and the exception should
+be findable.
+
+### Leaving the Moon was a one-way door
+
+Phone found this after switching true size on, and that is not what caused it.
+
+D136's travel transition aims the camera by asking `scenePlacements` where the
+destination is, and it passed `activeBody` straight through. **The Moon is not
+a planet.** It has no orbital elements, so the first step of any trip from the
+Moon threw `ELEMENTS['moon'].a` - and because the throw skipped the
+`setFlyingTo(null)` at the end of the sequence, the app was left believing a
+trip was still in progress and **refused every trip afterwards**. The Moon was
+somewhere you could go and not leave.
+
+Two fixes, because the second one is the general lesson:
+
+1. `solarOrigin()` is now the single place that maps a moon to the planet it
+   rides with. The layer already had this rule; the flight had its own copy of
+   `activeBody` and no rule at all.
+2. The flight sequence clears `flyingTo` in a **`finally`**. Whatever fails
+   mid-flight, the app must not be left believing it is still travelling -
+   that state costs the reader the entire picker rather than one animation.

@@ -113,7 +113,12 @@ export function eclipticToGlobe(v: Vector, date: Date): Vec3 {
 
 /** A body's place in the drawn scene: a globe-frame vector, in globe radii. */
 export interface ScenePlacement {
-  id: PlanetId | 'sun';
+  /**
+   * `'moon'` is in here because the world under the camera is drawn as a body
+   * too, and that world can be a moon even though the ephemeris only knows
+   * planets (D140).
+   */
+  id: PlanetId | 'sun' | 'moon';
   /** Direction and distance from Earth, in multiples of the globe's radius. */
   at: Vec3;
   /** True heliocentric distance in AU, for the panel to state honestly. */

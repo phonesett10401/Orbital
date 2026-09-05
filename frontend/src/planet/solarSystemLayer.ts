@@ -71,6 +71,49 @@ function radiusKmOf(id: string): number {
   return BODIES.find((b) => b.id === id)?.radiusKm ?? 1_000;
 }
 
+/**
+ * The world under the camera, and its companion if it has one.
+ *
+ * Earth and the Moon are **0.0026 AU apart**, which this compression cannot
+ * resolve: `radiusFor` maps that separation to less than a thousandth of a
+ * globe radius, so drawn truthfully they occupy the same point and the one in
+ * front simply hides the other. That is what "the Moon and the Earth overlap"
+ * was.
+ *
+ * They are not one object, so they are not drawn as one. The companion is set
+ * beside its partner by a **fixed, admitted offset** - far enough apart to read
+ * as two worlds, and no claim at all about where the Moon actually is this
+ * week. Everything else in this scene is a real position; this is the one
+ * arrangement that is not, and it is here rather than buried in the layer so
+ * that it can be said out loud (D140).
+ */
+export function homeBodies(standingOn: string, _date: Date): ScenePlacement[] {
+  const pair: Record<string, string> = { earth: 'moon', moon: 'earth' };
+  const companion = pair[standingOn];
+  const home: ScenePlacement = {
+    id: standingOn as ScenePlacement['id'],
+    at: [0, 0, 0],
+    distanceAu: 0,
+  };
+  if (!companion) return [home];
+  return [
+    home,
+    {
+      id: companion as ScenePlacement['id'],
+      at: [COMPANION_OFFSET, 0, 0],
+      distanceAu: 0,
+    },
+  ];
+}
+
+/**
+ * How far apart the pair is drawn, in globe radii.
+ *
+ * Chosen so the two are clearly separate at the zoom the handover happens and
+ * still close enough to read as a pair rather than as two unrelated bodies.
+ */
+export const COMPANION_OFFSET = 0.55;
+
 export function createSolarSystemLayer(
   now: () => Date,
   destination: () => string | null = () => null,
@@ -526,14 +569,17 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
       // switches that globe off across this same range and this draws the body
       // properly scaled in its place - which is the whole of "the selected
       // planet should get smaller when I zoom out" (D139).
-      const placements: ScenePlacement[] = [
-        ...scenePlacements(date, centre),
-        {
-          id: standingOn() as PlanetId,
-          at: [0, 0, 0],
-          distanceAu: 0,
-        },
-      ];
+      // **Only once the globe has actually gone.** The planets start fading in
+      // at `SOLAR_MAX_ZOOM` but the basemap does not hand over until
+      // `SOLAR_FULL_ZOOM`, so for a zoom and a half both were drawn: a
+      // full-size globe with a small sphere of the same world sitting inside
+      // it. Gated on the same number the handover uses, so the one appears in
+      // the frame the other disappears (D140).
+      const handedOver = zoom <= SOLAR_FULL_ZOOM;
+      const placements: ScenePlacement[] = [...scenePlacements(date, centre)];
+      if (handedOver) {
+        placements.push(...homeBodies(standingOn(), date));
+      }
       const sun = placements.find((p) => p.id === 'sun');
       if (sun) sunlight.position.set(sun.at[0], sun.at[1], sun.at[2]);
       for (const placement of placements) {
