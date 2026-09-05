@@ -242,6 +242,21 @@ function applySolarView(map: import('maplibre-gl').Map, inSolarView: boolean): v
 }
 
 /**
+ * Put the globe's layers in whatever state the current zoom calls for.
+ *
+ * **Idempotent, and called from everywhere that could disturb it**: the zoom
+ * handler, startup, and after every `applyBody`. It has to be, because
+ * `applyBody` decides visibility from the *body* alone and knows nothing about
+ * the handover - so a body change, or the one `applyBody` does at startup,
+ * silently switched the globe back on underneath a solar view that had already
+ * hidden it. Reading the zoom here rather than tracking a flag means the two
+ * cannot disagree (D141).
+ */
+function syncGlobeVisibility(map: import('maplibre-gl').Map): void {
+  applySolarView(map, map.getZoom() <= SOLAR_HANDOVER_ZOOM);
+}
+
+/**
  * The body the solar system is drawn around, which is never a moon.
  *
  * The Moon rides with Earth here - 0.0026 AU apart, below anything this
@@ -665,15 +680,17 @@ export function PlanetView() {
           map.on('move', refreshLeader);
 
           // The globe hands over to the solar system as the camera pulls back.
-          let inSolarView = false;
-          const onHandover = () => {
+          let inSolarView = map.getZoom() <= SOLAR_HANDOVER_ZOOM;
+          map.on('zoom', () => {
             if (!map) return;
             const next = map.getZoom() <= SOLAR_HANDOVER_ZOOM;
             if (next === inSolarView) return;
             inSolarView = next;
             applySolarView(map, next);
-          };
-          map.on('zoom', onHandover);
+          });
+          // Once at startup: the map may already be zoomed out, and `applyBody`
+          // has just run without any knowledge of the handover.
+          syncGlobeVisibility(map);
 
           // The selected aircraft, as a mesh in MapLibre's own context (D67).
           // It reads the store itself, once per frame, rather than being told:
@@ -958,6 +975,9 @@ export function PlanetView() {
 
           if (state.activeBody !== previous.activeBody && map) {
             applyBody(map, state.activeBody);
+            // `applyBody` decides from the body alone; this puts the handover
+            // back if the camera is already out in the solar view (D141).
+            syncGlobeVisibility(map);
             // Lunar spacecraft are polled only while the Moon is underneath.
             // Three objects and a six-hour window behind them, so a slow
             // cadence is not a compromise - the backend is reading from memory

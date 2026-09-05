@@ -47,6 +47,30 @@ export const IMAGERY_FAR_MAX_ZOOM = 8;
 export const IMAGERY_NEAR_MAX_ZOOM = config.imageryCloseMaxZoom;
 
 /** Where the close imagery fades in over the far one. */
+/**
+ * Where the globe hands over to the solar system.
+ *
+ * Named here rather than imported, because `basemap.ts` imports nothing that
+ * draws. They match `solarSystemLayer`'s `SOLAR_FULL_ZOOM` and `SOLAR_MAX_ZOOM`,
+ * and a test holds the two files to the same numbers.
+ */
+export const SOLAR_HANDOVER_FULL = -1.0;
+export const SOLAR_HANDOVER_START = 0.5;
+
+/**
+ * MapLibre's own atmosphere around the globe.
+ *
+ * 0.8 is the library's default, and close in it is worth having - it is the
+ * soft edge that makes the globe look like a planet rather than a circle.
+ *
+ * **It has to go when the globe does.** D139 switches off every layer that
+ * paints the world you are standing on, but the atmosphere is not a layer: it
+ * belongs to the projection, so it survived, and what was left was a faint dark
+ * disc hanging in space exactly where the Earth had been - a halo around
+ * nothing (D141).
+ */
+export const ATMOSPHERE_BLEND = 0.8;
+
 export const IMAGERY_CROSSFADE_START = 5;
 export const IMAGERY_CROSSFADE_END = 7;
 
@@ -538,6 +562,18 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
 
   return {
     ...style,
+    // The globe's halo fades out with the globe. See `ATMOSPHERE_BLEND`.
+    sky: {
+      'atmosphere-blend': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        SOLAR_HANDOVER_FULL,
+        0,
+        SOLAR_HANDOVER_START,
+        ATMOSPHERE_BLEND,
+      ],
+    },
     projection: { type: 'globe' },
     sources: {
       ...style.sources,

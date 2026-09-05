@@ -7683,3 +7683,39 @@ Two fixes, because the second one is the general lesson:
 2. The flight sequence clears `flyingTo` in a **`finally`**. Whatever fails
    mid-flight, the app must not be left believing it is still travelling -
    that state costs the reader the entire picker rather than one animation.
+
+## D141 - A halo around nothing
+
+D139 switched off every layer that paints the world under the camera, and a
+faint dark disc stayed behind exactly where the Earth had been.
+
+**The atmosphere is not a layer.** It belongs to MapLibre's globe projection, so
+the handover - which works by layer visibility - could not touch it, and no
+amount of hiding layers ever would. Confirmed by A/B in the running app:
+`atmosphere-blend: 0.8`, the library's default, draws the disc;
+`atmosphere-blend: 0` does not.
+
+Close in it is worth having: it is the soft edge that makes the globe look like
+a planet rather than a circle. So it fades rather than going, on a zoom
+interpolate across the same two numbers the rest of the handover uses, declared
+in the style rather than toggled from code.
+
+A test asserts `basemap.ts` and `solarSystemLayer.ts` name the **same** two
+zooms. They are separate constants because `basemap.ts` imports nothing that
+draws, and separate constants for one transition are exactly how the overlap in
+D140 happened.
+
+### The handover was not idempotent, and that hid the fix
+
+The first attempt appeared not to work at all: reload at solar zoom and the
+globe was back, halo and all.
+
+`applyBody` decides layer visibility from the **body** alone and knows nothing
+about the handover. It runs at startup and on every body change - so it
+cheerfully switched the globe back on underneath a solar view that had already
+hidden it, and whichever ran last won.
+
+`syncGlobeVisibility` reads the current zoom and applies whichever state that
+calls for. It is called from the zoom handler, at startup, and after every
+`applyBody`. Reading the zoom rather than tracking a flag is the point: two
+pieces of state that must agree is what produced this, and now there is one.
