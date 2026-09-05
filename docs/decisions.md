@@ -6564,3 +6564,78 @@ Nothing is drawn. No scale is chosen - that is Phase 3, and the spread it has
 to compress is 0.39 to 30 AU in distance against 2,440 to 696,000 km in radius.
 Nothing is rendered until Phase 4 answers whether a second renderer can hand
 over to MapLibre at all.
+
+---
+
+## D122 - Two compressions, because distance and size are not one problem
+
+Phase 3: the scale decision, made on its own before anything is drawn - the
+same order the satellite shell was built in, and for the same reason. That
+compression was got wrong twice on paper and right before it reached a screen.
+
+### True scale is not awkward, it is impossible
+
+Measured from the element table and the body radii:
+
+| | spread |
+|---|---|
+| orbit radius, Mercury to Neptune | **77.7 : 1** |
+| body radius, Moon to Sun | **401 : 1** |
+
+With Neptune's orbit drawn 500 pixels across, **the Sun is 0.077 px and Earth
+is 0.0007 px**. Not small - absent. There is no viewport and no zoom at which
+the real numbers make a picture.
+
+### The two axes are independent, which is the whole finding
+
+**Earth's orbit is 23,000 times its own radius.** A single scale that fits the
+orbits makes the bodies vanish; one that makes the bodies visible puts Neptune
+far outside the frame. So distance and size get separate logarithmic
+compressions - and that is not an approximation of an orrery, it *is* what an
+orrery is.
+
+Chosen and checked: orbits run Mercury 0.179 to Neptune 1.000 with the tightest
+gap (Venus to Earth) at 26 px on a 500 px frame - still worth aiming a mouse
+at. Bodies run the Moon at 3 px to the Sun at 30 px, a **401 : 1 spread drawn
+as 10 : 1**, with Venus and Earth still within 5% of each other, which is the
+part a reader can check against what they already know.
+
+### Angle is true; only distance is compressed
+
+`radiusFor` takes a distance and nothing else. The angular position from
+`planets.ts` passes through untouched, so a conjunction is a real conjunction
+and a planet behind the Sun is really behind it. The same bargain
+`satelliteShell.ts` struck: **the arrangement is true and the distances are
+not.**
+
+### A units bug that was only ever going to be seen in a printed number
+
+The first version had body radii in **pixels** and orbit radii in **frame
+fractions** - two incompatible units - and `exaggerationOf` carried a magic
+factor of a thousand to make its output look plausible. The function is only
+ever displayed, never used in the maths, so nothing would have failed; the
+number would simply have been wrong on screen forever.
+
+It was found by asking what the constant was for, which is the only thing that
+finds a fudge factor. Both scales are now in one unit where 1.0 is Neptune's
+orbit, the factor is gone, and a test asserts the Sun is a fraction of
+Neptune's orbit rather than thirty times it.
+
+With the units fixed the honest exaggeration is **628x for Jupiter to 4,580x
+for Neptune**, Earth at 989x. Those numbers went into the docstring to replace
+a guessed "30,000 times" that had been written before anything was measured.
+
+### Saying so is not optional
+
+`SCALE_NOTE` exists because every other layer in this app states what it is
+doing to the truth: the satellite key says the shell is compressed, the panel
+says how old a position is, the coverage layer says where nobody is listening.
+A solar system drawn a thousand times out of proportion is not allowed to be
+the quiet one.
+
+### Next
+
+Phase 4 is the handover spike - one untextured sphere in three.js and whether
+it can crossfade with MapLibre at all. It comes before the real scene precisely
+so that a failure lands against a stub instead of against eight modelled
+planets.
