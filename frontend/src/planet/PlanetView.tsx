@@ -50,6 +50,7 @@ import {
 } from './airportLayer';
 import { createSatelliteIconCanvases } from './satelliteSprite';
 import { SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
+import { createSolarSystemLayer, type SolarLayer } from './solarSystemLayer';
 import {
   SATELLITE_LABEL_LAYER,
   SATELLITE_LAYER,
@@ -242,6 +243,7 @@ export function PlanetView() {
     let diagnostics: ReturnType<typeof createDiagnosticsPanel> | null = null;
     let model: ReturnType<typeof createModelLayer> | null = null;
     let shell: ShellLayer | null = null;
+    let solar: SolarLayer | null = null;
     let terminator: ReturnType<typeof createTerminatorLayer> | null = null;
     let cleanUpResize: (() => void) | null = null;
     let frame = 0;
@@ -484,6 +486,13 @@ export function PlanetView() {
               : { objects: [], selectedId: null };
           });
           map.addLayer(shell);
+
+          // The rest of the solar system, outside the satellite shell. Same
+          // mechanism, larger radius, no second renderer (D123, D125).
+          solar = createSolarSystemLayer(() => useOrbitalStore.getState().viewInstant
+            ? new Date(useOrbitalStore.getState().viewInstant as number)
+            : new Date());
+          map.addLayer(solar);
 
 
           model = createModelLayer(() => {

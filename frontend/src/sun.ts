@@ -22,6 +22,18 @@ export interface SubsolarPoint {
   lat: number;
   /** Longitude directly beneath the sun, in [-180, 180). */
   lon: number;
+  /**
+   * The sun's right ascension, in degrees.
+   *
+   * Exposed for `solarFrame.ts`, which needs Earth's rotation angle to orient
+   * an inertial solar system inside MapLibre's Earth-fixed globe frame. The
+   * sun is the one body whose position is known in *both* frames here - as a
+   * right ascension and as a subsolar longitude - so their difference is the
+   * rotation angle, and no separate sidereal-time routine is needed (D124).
+   */
+  rightAscension: number;
+  /** Obliquity of the ecliptic at this date, in degrees. */
+  obliquity: number;
 }
 
 function normalizeDegrees(value: number): number {
@@ -77,5 +89,5 @@ export function subsolarPoint(date: Date): SubsolarPoint {
   // apparent solar time is noon.
   const lon = wrapLongitude(-((utcMinutes + equationOfTime) / 4 - 180));
 
-  return { lat: declination, lon };
+  return { lat: declination, lon, rightAscension, obliquity };
 }

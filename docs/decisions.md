@@ -6722,3 +6722,82 @@ as a wrong number anywhere a test would look.
 `GLOBE_RADII_AT_NEPTUNE` and `MAPLIBRE_MIN_ZOOM` - both with the measurement in
 their docstrings. Keeping the instrument after the reading is how a codebase
 fills with tools nobody dares remove.
+
+---
+
+## D124 - An inertial sky inside a rotating frame
+
+`planets.ts` answers in heliocentric **ecliptic** coordinates, which do not
+turn. MapLibre's globe frame is **Earth-fixed** - a vertex is a longitude and
+latitude, so the frame spins once a day. Drawing one inside the other without
+accounting for that makes the planets orbit the sky every twenty-four hours:
+wrong in the way that looks most nearly right, because the motion is real and
+merely belongs to the Earth.
+
+### The rotation angle came free
+
+The usual answer is to implement GMST. There was a shorter one: **the Sun is
+the one body this app already knows in both frames.** `subsolarPoint` returns
+its right ascension - inertial - and its subsolar longitude - Earth-fixed - for
+the same instant, so their difference *is* Earth's rotation angle. It inherits
+tests against the equinoxes and solstices instead of introducing a second solar
+model to disagree with the first.
+
+### Earth is the origin, and that is where the reader is standing
+
+MapLibre draws Earth at the centre of its world, so every body's compressed
+heliocentric position has Earth's subtracted from it. The Sun ends up about one
+compressed AU away in the direction it really is, and the orbits stay proper
+rings about it. Not a distortion - a point of view.
+
+### Two errors, both caught by tests written before the drawing
+
+**A right angle out.** The first version rotated Earth's spin about the **Y**
+axis, mixing the maths convention (+Z north) with the globe convention (+Y
+north) inside one function. The ecliptic pole came out 90.7 degrees from the
+globe's pole instead of 23.44. The reordering to globe axes now happens once,
+at the end, and nothing before it may assume the destination frame.
+
+**A ring that did not close.** `orbitRing` derived each planet's period from
+its *current* distance rather than its semi-major axis, so an eccentric orbit
+closed 32 degrees short of itself - Mercury at aphelion implies a period a
+fifth longer than Mercury at perihelion does.
+
+Neither would have been visible as anything worse than "the picture looks a bit
+off". The decisive test is the one that compares the Sun's computed direction
+against `subsolarPoint` - a different algorithm with its own tests - so the two
+agreeing is not this code marking its own work.
+
+---
+
+## D125 - The solar system, in the renderer that was already there
+
+Phase 5. Sun, seven planets and their orbit paths, as one MapLibre custom layer
+beside the satellite shell - no second renderer, exactly as D123 measured.
+
+Where each body goes is `solarFrame.ts`, how big it is drawn is
+`solarScale.ts`, and neither imports MapLibre. The layer itself is the only
+part that cannot be tested without a GPU, so it holds nothing but GL.
+
+Orbit paths are built once a day rather than per frame: 96 propagations per
+planet per frame would be the entire budget. The bodies fade in between zoom
+0.5 and -1 so the system dissolves into view rather than appearing.
+
+### A fallback that faked a working feature
+
+The zoom is **not** in MapLibre's render arguments. Reading
+`args.zoom ?? 0` supplied a constant, and the result looked like success: the
+layer drew at every zoom, and its fade sat at 0.33 forever. Both the gate and
+the dissolve were dead, and nothing errored - the readout said
+`8 bodies, fade 0.33` at every zoom from 1 down to -2, which is the same shape
+an answer would be.
+
+It was caught by reading the same number four times in a row. **A value that
+never changes when its input does is not a value, and `?? 0` on a missing field
+is how one gets manufactured.** The zoom comes from `map.getZoom()` now, which
+is where the shell layer was already getting it.
+
+Verified on screen: the Sun about one compressed AU from Earth in the right
+direction, the planets on elliptical paths seen at an angle because the
+ecliptic is tilted and the camera is at Earth, and the aircraft still on the
+globe at the origin.
