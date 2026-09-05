@@ -18,14 +18,21 @@ import { useOrbitalStore } from '../state/store';
 
 export function BodyPicker() {
   const activeBody = useOrbitalStore((s) => s.activeBody);
-  const setActiveBody = useOrbitalStore((s) => s.setActiveBody);
+  const setFlyingTo = useOrbitalStore((s) => s.setFlyingTo);
   const [open, setOpen] = useState(false);
 
   const current = bodyFor(activeBody);
 
   const choose = (body: Body) => {
     if (!isLandable(body)) return;
-    setActiveBody(body.id);
+    if (body.id === activeBody) {
+      setOpen(false);
+      return;
+    }
+    // The picker only names a destination. The camera work belongs to the map,
+    // which is the only thing that can do it, and the swap happens at the apex
+    // (D126).
+    setFlyingTo(body.id);
     setOpen(false);
   };
 

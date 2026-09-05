@@ -135,6 +135,16 @@ export interface OrbitalState {
   activeBody: BodyId;
   setActiveBody(body: BodyId): void;
 
+  /**
+   * Where the camera is heading, while a trip is in progress.
+   *
+   * Held so the solar system layer can brighten the destination on the way
+   * out: the pull-out shows real positions, so the planet growing brighter is
+   * genuinely where it is (D126).
+   */
+  flyingTo: BodyId | null;
+  setFlyingTo(body: BodyId | null): void;
+
   /** Camera target requested by a search hit, consumed by the globe. */
   flyTo: { lat: number; lon: number; nonce: number; zoom?: number } | null;
   requestFlyTo(lat: number, lon: number, zoom?: number): void;
@@ -256,6 +266,11 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   viewport: null,
   setViewport(bbox) {
     set({ viewport: bbox });
+  },
+
+  flyingTo: null,
+  setFlyingTo(body) {
+    set({ flyingTo: body });
   },
 
   activeBody: 'earth',

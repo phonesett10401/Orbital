@@ -54,7 +54,11 @@ function radiusKmOf(id: string): number {
   return BODIES.find((b) => b.id === id)?.radiusKm ?? 1_000;
 }
 
-export function createSolarSystemLayer(now: () => Date): SolarLayer {
+export function createSolarSystemLayer(
+  now: () => Date,
+  destination: () => string | null = () => null,
+  origin: () => PlanetId = () => 'earth',
+): SolarLayer {
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
   let renderer: THREE.WebGLRenderer | null = null;
@@ -73,12 +77,13 @@ export function createSolarSystemLayer(now: () => Date): SolarLayer {
 
   const spheres = new Map<string, THREE.Mesh>();
   let orbitsBuiltFor = 0;
+  let orbitsBuiltAround: PlanetId | null = null;
 
-  const buildOrbits = (date: Date) => {
+  const buildOrbits = (date: Date, centre: PlanetId) => {
     orbits.clear();
     for (const planet of PLANET_IDS) {
-      if (planet === 'earth') continue;
-      const points = orbitRing(planet, date, 96).map((p) => new THREE.Vector3(...p));
+      if (planet === centre) continue;
+      const points = orbitRing(planet, date, 96, centre).map((p) => new THREE.Vector3(...p));
       orbits.add(
         new THREE.Line(
           new THREE.BufferGeometry().setFromPoints(points),
@@ -91,6 +96,7 @@ export function createSolarSystemLayer(now: () => Date): SolarLayer {
       );
     }
     orbitsBuiltFor = date.getTime();
+    orbitsBuiltAround = centre;
   };
 
   const sphereFor = (id: string): THREE.Mesh => {
@@ -144,13 +150,29 @@ export function createSolarSystemLayer(now: () => Date): SolarLayer {
       );
 
       const date = now();
-      if (Math.abs(date.getTime() - orbitsBuiltFor) > 86_400_000) buildOrbits(date);
+      const centre = origin();
+      // Rebuilt when the day changes *or* the world does: the rings are drawn
+      // relative to the body under the camera, so standing somewhere else is a
+      // different picture rather than the same one moved (D126).
+      if (
+        Math.abs(date.getTime() - orbitsBuiltFor) > 86_400_000 ||
+        orbitsBuiltAround !== centre
+      ) {
+        buildOrbits(date, centre);
+      }
 
-      const placements = scenePlacements(date);
+      // The destination is brightened while a trip is in progress, and dimmed
+      // relative to it. This is not decoration: the position it is drawn at is
+      // a real one from real elements, so what the reader sees growing brighter
+      // is genuinely where that planet is now (D126).
+      const heading = destination();
+      const placements = scenePlacements(date, centre);
       for (const placement of placements) {
         const mesh = sphereFor(placement.id);
         mesh.position.set(...placement.at);
-        (mesh.material as THREE.MeshBasicMaterial).opacity = fade;
+        const emphasis = !heading || placement.id === heading ? 1 : 0.35;
+        (mesh.material as THREE.MeshBasicMaterial).opacity = fade * emphasis;
+        mesh.scale.setScalar(heading === placement.id ? 1.6 : 1);
       }
       orbits.children.forEach((line) => {
         ((line as THREE.Line).material as THREE.LineBasicMaterial).opacity = 0.28 * fade;

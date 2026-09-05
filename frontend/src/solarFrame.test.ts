@@ -132,6 +132,39 @@ describe('the scene fits where it can be drawn', () => {
   });
 });
 
+describe('the origin is the world you are standing on', () => {
+  it('leaves out whichever body is the centre, not always Earth', () => {
+    // The first version hard-coded Earth, so standing on Mars drew the Sun an
+    // astronomical unit from where Earth would have been - correct rings
+    // around a Sun in the wrong place, which reads as a rendering glitch
+    // rather than a wrong assumption (D126).
+    const fromMars = scenePlacements(DATES[0], 'mars').map((p) => p.id);
+    expect(fromMars).not.toContain('mars');
+    expect(fromMars).toContain('earth');
+    expect(fromMars).toContain('sun');
+  });
+
+  it('puts the Sun at Mars s real distance when standing on Mars', () => {
+    const sun = scenePlacements(DATES[0], 'mars').find((p) => p.id === 'sun')!;
+    // Mars is 1.38 to 1.67 AU out, so the Sun is that far away - not one AU.
+    expect(sun.distanceAu).toBeGreaterThan(1.35);
+    expect(sun.distanceAu).toBeLessThan(1.70);
+  });
+
+  it('draws orbit rings about the same centre the bodies use', () => {
+    // A ring built around Earth while the bodies sit around Mars would put
+    // every planet off its own path.
+    const ring = orbitRing('jupiter', DATES[0], 32, 'mars');
+    const jupiter = scenePlacements(DATES[0], 'mars').find((p) => p.id === 'jupiter')!;
+    const nearest = Math.min(
+      ...ring.map((p) =>
+        Math.hypot(p[0] - jupiter.at[0], p[1] - jupiter.at[1], p[2] - jupiter.at[2]),
+      ),
+    );
+    expect(nearest).toBeLessThan(0.6);
+  });
+});
+
 describe('orbit paths', () => {
   it('closes the ring, because an orbit is closed', () => {
     for (const planet of ['mercury', 'mars', 'saturn'] as const) {

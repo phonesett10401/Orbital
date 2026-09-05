@@ -6801,3 +6801,62 @@ Verified on screen: the Sun about one compressed AU from Earth in the right
 direction, the planets on elliptical paths seen at an angle because the
 ecliptic is tilted and the camera is at Earth, and the aircraft still on the
 globe at the origin.
+
+---
+
+## D126 - Going to another world without pretending to travel there
+
+Phase 6, and the last of the solar system plan.
+
+MapLibre draws **one** globe, at the origin. Choosing Mars does not move a
+camera across the solar system - it makes Mars the globe. A literal flight is
+not available, and building something that looked like one would have been the
+most elaborate lie in the project.
+
+What is available is honest, and happens to be what every space application
+actually does: **pull out until the system is drawn around the globe, swap at
+the apex, zoom back in.** The swap is hidden at zoom -2 not to deceive but
+because that is the one instant with nothing to look at - the globe is twenty
+pixels across. Anywhere else means watching Earth's oceans turn into Martian
+basalt, which is the only part of this that would be a fiction.
+
+Measured on the running app: apex at 1,657 ms with the body changing exactly
+there, arrival at 2,914 ms.
+
+### The pull-out is not a loading screen
+
+The solar system layer draws real positions from real elements (D121, D124), so
+the destination brightening at the apex is genuinely where that planet is now.
+That is the honest version of "flying there": show the reader the actual sky
+before changing what is under their feet.
+
+### The bug the screenshot found, twice
+
+`scenePlacements` hard-coded Earth as the origin. Standing on Mars, it drew the
+Sun one astronomical unit from where **Earth** would have been - correct rings
+around a Sun in the wrong place, which reads as a rendering glitch rather than
+a wrong assumption. Caught by looking at a mid-flight screenshot and noticing
+the globe was not at the centre of its own orbits.
+
+Parameterising the origin fixed the geometry and **missed one line**: the Sun's
+reported `distanceAu` still came from Earth's position, so from Mars it said
+0.996 AU instead of 1.38. The same assumption twice, one of them in a field
+nobody was looking at, and only the test written straight afterwards caught the
+second.
+
+**When a hard-coded assumption is parameterised, the compiler will not find the
+other places it was written by hand.** Grepping for the name is the cheap step
+that was skipped.
+
+### The Moon rides with Earth
+
+0.0026 AU apart - far below anything this compression can resolve - and it has
+no heliocentric orbit of its own to draw. So standing on the Moon uses Earth as
+the scene's origin, stated in one line rather than left as a coincidence.
+
+### The plan is finished
+
+Phases 1 to 6: four worlds with surfaces, planet positions from constants, two
+compressions, a reach measurement that removed the need for a second renderer,
+the system itself, and now travel between them. Nothing in it fetches anything
+at runtime except the surface tiles.

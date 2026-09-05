@@ -129,6 +129,8 @@ import {
 import { boundsToBBox, coversWholeWorld } from './viewport';
 import { bodyFor } from '../bodies';
 import { MAPLIBRE_MIN_ZOOM } from '../solarScale';
+import { flightPlan, swapsWorld } from '../bodyFlight';
+import type { PlanetId } from '../planets';
 import { GIBS_ATTRIBUTION, IMAGERY_FAR_MAX_ZOOM } from './basemap';
 import {
   IMAGERY_FAR,
@@ -489,9 +491,19 @@ export function PlanetView() {
 
           // The rest of the solar system, outside the satellite shell. Same
           // mechanism, larger radius, no second renderer (D123, D125).
-          solar = createSolarSystemLayer(() => useOrbitalStore.getState().viewInstant
-            ? new Date(useOrbitalStore.getState().viewInstant as number)
-            : new Date());
+          solar = createSolarSystemLayer(
+            () => {
+              const instant = useOrbitalStore.getState().viewInstant;
+              return instant ? new Date(instant) : new Date();
+            },
+            () => useOrbitalStore.getState().flyingTo,
+            () => {
+              // The Moon rides with Earth: 0.0026 AU apart, far below anything
+              // this compression can show, and it has no orbit of its own here.
+              const body = useOrbitalStore.getState().activeBody;
+              return (body === 'moon' ? 'earth' : body) as PlanetId;
+            },
+          );
           map.addLayer(solar);
 
 
@@ -659,6 +671,29 @@ export function PlanetView() {
           // Changing world is rare and changes almost everything, so it is
           // handled first and the rest of this subscriber is skipped: the
           // layers it would touch have just been hidden (D120).
+          // A trip was asked for. Pull out, swap at the apex, zoom back in -
+          // the swap is hidden there because at zoom -2 the globe is twenty
+          // pixels across and there is nothing to see change (D126).
+          if (state.flyingTo && state.flyingTo !== previous.flyingTo && map) {
+            const destination = state.flyingTo;
+            const plan = flightPlan(state.activeBody, destination);
+            const runner = map;
+            void (async () => {
+              for (const step of plan) {
+                if (swapsWorld(step)) {
+                  useOrbitalStore.getState().setActiveBody(destination);
+                  continue;
+                }
+                if (step.zoom !== null) {
+                  runner.easeTo({ zoom: step.zoom, duration: step.durationMs });
+                }
+                await new Promise((resolve) => setTimeout(resolve, step.durationMs));
+              }
+              useOrbitalStore.getState().setFlyingTo(null);
+            })();
+            return;
+          }
+
           if (state.activeBody !== previous.activeBody && map) {
             applyBody(map, state.activeBody);
             // The terminator is a custom layer outside the style, so its

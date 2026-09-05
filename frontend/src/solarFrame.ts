@@ -17,14 +17,17 @@
  * rotation angle, so it comes free from a function that already has tests
  * against the equinoxes and solstices.
  *
- * ## What Earth being at the origin means
+ * ## The origin is whichever world you are standing on
  *
- * MapLibre draws Earth at the centre of its world, so the scene is built
- * around Earth rather than around the Sun: every body's compressed
- * heliocentric position has Earth's subtracted from it. That is not a
- * distortion, it is where the reader is standing. The Sun ends up about one
- * compressed AU away in the direction it really is, and the orbits stay proper
- * rings about it.
+ * MapLibre draws one globe at the centre of its world, so the scene is built
+ * around *that* body rather than around the Sun: every position has the
+ * origin body's subtracted from it. Not a distortion - a point of view.
+ *
+ * It defaults to Earth and **must be passed** once the camera can be
+ * elsewhere. The first version hard-coded Earth, so standing on Mars drew the
+ * Sun one astronomical unit from where Earth would have been: the orbits were
+ * correct rings around a Sun in the wrong place, which is the kind of error
+ * that looks like a rendering glitch rather than a wrong assumption (D126).
  */
 
 import { subsolarPoint } from './sun';
@@ -126,23 +129,28 @@ function compress(helio: Vector): Vector {
  * Earth is absent from the result by construction: it is the origin, and
  * MapLibre is already drawing it.
  */
-export function scenePlacements(date: Date): ScenePlacement[] {
-  const earth = compress(planetPosition('earth', date));
+export function scenePlacements(date: Date, origin: PlanetId = 'earth'): ScenePlacement[] {
+  const centre = compress(planetPosition(origin, date));
   const relative = (helio: Vector): Vec3 => {
     const c = compress(helio);
-    return eclipticToGlobe({ x: c.x - earth.x, y: c.y - earth.y, z: c.z - earth.z }, date);
+    return eclipticToGlobe({ x: c.x - centre.x, y: c.y - centre.y, z: c.z - centre.z }, date);
   };
 
+  // The Sun's distance is the *origin body's* heliocentric distance, not
+  // Earth's. This line kept saying Earth after the rest of the function had
+  // been parameterised - the same assumption twice, one of them in the field
+  // nobody was looking at (D126).
+  const centreHelio = planetPosition(origin, date);
   const out: ScenePlacement[] = [
-    { id: 'sun', at: relative({ x: 0, y: 0, z: 0 }), distanceAu: Math.hypot(
-      planetPosition('earth', date).x,
-      planetPosition('earth', date).y,
-      planetPosition('earth', date).z,
-    ) },
+    {
+      id: 'sun',
+      at: relative({ x: 0, y: 0, z: 0 }),
+      distanceAu: Math.hypot(centreHelio.x, centreHelio.y, centreHelio.z),
+    },
   ];
 
   for (const planet of PLANET_IDS) {
-    if (planet === 'earth') continue;
+    if (planet === origin) continue;
     const helio = planetPosition(planet, date);
     out.push({
       id: planet,
@@ -161,8 +169,13 @@ export function scenePlacements(date: Date): ScenePlacement[] {
  * take - inclination, eccentricity and all - rather than a circle standing in
  * for one.
  */
-export function orbitRing(planet: PlanetId, date: Date, samples = 96): Vec3[] {
-  const earth = compress(planetPosition('earth', date));
+export function orbitRing(
+  planet: PlanetId,
+  date: Date,
+  samples = 96,
+  origin: PlanetId = 'earth',
+): Vec3[] {
+  const centre = compress(planetPosition(origin, date));
   // From the semi-major axis, not from where the planet happens to be today.
   // Using the current distance closed an eccentric orbit's ring 32 degrees
   // short of itself, because Mercury at aphelion implies a period a fifth
@@ -174,7 +187,7 @@ export function orbitRing(planet: PlanetId, date: Date, samples = 96): Vec3[] {
     const at = new Date(date.getTime() + (periodMs * i) / samples);
     const c = compress(planetPosition(planet, at));
     points.push(
-      eclipticToGlobe({ x: c.x - earth.x, y: c.y - earth.y, z: c.z - earth.z }, date),
+      eclipticToGlobe({ x: c.x - centre.x, y: c.y - centre.y, z: c.z - centre.z }, date),
     );
   }
   return points;
