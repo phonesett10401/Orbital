@@ -6969,3 +6969,72 @@ The catalogue, the frame conversion, the sizes and the colours are all correct
 and covered by sixteen tests; only the placement is wrong. Shipping the ball
 would have been worse than the plain void, and deleting it would mean building
 the correct half again from nothing.
+
+## D129 - The sky is a sphere around the camera, not around the Earth
+
+D128 ended with the star catalogue built, tested and switched off, and with a
+conclusion that turned out to be half right: it said the fix was a screen-space
+backdrop. It is not. It is a sphere in exactly the same geometry, moved.
+
+### The measurement D128 was missing
+
+D128 measured *which sphere radii survive clipping* and found the answer was
+none that also contain the camera. It never measured **where the far plane
+actually is**. Reading it out of the projection matrix at run time:
+
+| zoom | camera from centre | near | far |
+|---|---|---|---|
+| 0 | 20r | 0.01 | 21 |
+| -1 | 40r | 0.01 | 41 |
+| -1.8 | 68r | 0.02 | 69 |
+
+The far plane is **exactly one globe radius past the centre, at every zoom**.
+That single fact explains the whole of D128's table: any sphere centred on the
+Earth is cut at the same place regardless of how big it is, so a backdrop drawn
+around the Earth cannot work at any radius. It also kills the idea of putting
+the sky behind the planet - there is no space behind the planet at all.
+
+### Why that is enough anyway
+
+A backdrop does not have to be behind the Earth's *centre*. It has to be behind
+the part of the Earth you can see. For a unit sphere with the camera `d` away,
+the visible surface runs from `d - 1` at the middle of the disc to
+`sqrt(d^2 - 1)` at the limb - **always less than `d`**. So the window between
+`d` and the far plane is entirely occluded by the visible globe and entirely
+drawn, and the measured gap of one radius is exactly that window. The sky is
+hung in the middle of it.
+
+Centring the sphere on the **camera** rather than the Earth fixes the other
+half. Every star is then the same distance away whichever way the camera turns,
+so there is no edge to be outside of, and moving the sphere with the camera
+gives zero parallax - which is what being at infinity means. Depth testing goes
+back **on**, so the Earth blocks the sky; depth writing stays off, so the sky
+blocks nothing.
+
+### The matrix knows where the camera is
+
+A custom layer is handed a world-to-clip matrix and nothing else - no camera
+position, no near, no far. All three are in the matrix. `cameraFrame.ts` takes
+them out: the camera centre is the one point a projection sends to zero, so
+`M . [C, 1] = 0` is three equations in three unknowns, and the depth planes come
+from Gribb-Hartmann. No MapLibre import, no GPU, **nine tests** - transposing
+the matrix read breaks five of them, which is the check that matters, because a
+row-major read of a symmetric perspective matrix still returns a plausible
+vector.
+
+One sign error found this way: the camera is *behind* its own near plane, so
+its signed distance is the near distance negated. The test asked for 0.75 and
+got -0.75.
+
+### Sizes that were being computed and thrown away
+
+`starSize` is magnitude-correct and tested, and none of it reached the screen:
+`PointsMaterial` has one size for the whole cloud. A dozen lines of shader with
+a per-vertex size attribute is what makes Sirius bigger than its neighbours.
+
+### What is still wrong, and is not this
+
+The far plane also clips the **Sun's sphere** when it sits away from the camera
+along the view axis - visible as a crescent bite out of a full disc. That is
+the same one-radius far plane, hitting the bodies rather than the sky, and it
+predates this work. Recorded rather than fixed.
