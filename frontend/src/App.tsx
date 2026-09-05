@@ -16,6 +16,7 @@ import { BodyPicker } from './components/BodyPicker';
 import { TimeControl } from './components/TimeControl';
 import { DetailPanel } from './components/DetailPanel';
 import { MoonPanel } from './components/MoonPanel';
+import { MoonSatelliteList } from './components/MoonSatelliteList';
 import { LayerToggle } from './components/LayerToggle';
 import { Legend } from './components/Legend';
 import { SearchBar } from './components/SearchBar';
@@ -40,6 +41,7 @@ export function App() {
   // subject is the fault D100 already caught once, in the place a reader is
   // most likely to believe it.
   const onEarth = showsEarthLayers(useOrbitalStore((s) => s.activeBody));
+  const onMoon = useOrbitalStore((s) => s.activeBody) === 'moon';
 
   return (
     <div className="app">
@@ -71,6 +73,9 @@ export function App() {
           almost no fields with an aircraft, and has one none of them do - a
           position published in advance rather than observed (D135). */}
       <MoonPanel />
+      {/* The corner the legend uses on Earth. Three spacecraft, often round
+          the far side where a marker cannot be clicked at all (D136). */}
+      {onMoon && <MoonSatelliteList />}
       {onEarth && <Legend />}
       <StatusBar />
     </div>

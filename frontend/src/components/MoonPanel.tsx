@@ -36,7 +36,7 @@ export function MoonPanel() {
 
   if (state.kind === 'lost') {
     return (
-      <aside className="panel" aria-live="polite">
+      <aside className="panel panel--moon" aria-live="polite">
         <div className="panel__header">
           <h2 className="panel__title">No longer tracked</h2>
           {close}
@@ -47,7 +47,7 @@ export function MoonPanel() {
   }
 
   return (
-    <aside className="panel" aria-live="polite">
+    <aside className="panel panel--moon" aria-live="polite">
       <div className="panel__header">
         <h2 className="panel__title">{state.craft.name}</h2>
         {close}

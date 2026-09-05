@@ -38,21 +38,26 @@ export function moonSatelliteLayers(): LayerSpecification[] {
       type: 'circle',
       source: MOON_SOURCE,
       paint: {
-        'circle-radius': 9,
+        'circle-radius': 5,
         'circle-color': MOON_CRAFT_COLOUR,
-        'circle-opacity': 0.18,
-        'circle-blur': 0.6,
+        'circle-opacity': 0.16,
+        'circle-blur': 0.7,
       },
     },
     {
+      // **The sub-point, deliberately small.** It marks the ground beneath the
+      // spacecraft, and the spacecraft itself is drawn 13 pixels above it by
+      // the 3D shell. At the size this started - a 9 pixel halo over a 4 pixel
+      // dot - the marker was wider than the height it was marking and covered
+      // the tether completely, so real altitude was computed, drawn, and
+      // invisible (D136).
       id: MOON_LAYER,
       type: 'circle',
       source: MOON_SOURCE,
       paint: {
-        'circle-radius': 4,
+        'circle-radius': 2.2,
         'circle-color': MOON_CRAFT_COLOUR,
-        'circle-stroke-color': '#20160a',
-        'circle-stroke-width': 1,
+        'circle-opacity': 0.85,
       },
     },
     {
@@ -62,7 +67,7 @@ export function moonSatelliteLayers(): LayerSpecification[] {
       layout: {
         'text-field': ['get', 'label'],
         'text-size': 11,
-        'text-offset': [0, 1.4],
+        'text-offset': [0, 1.1],
         'text-anchor': 'top',
         'text-allow-overlap': false,
       },
@@ -73,4 +78,36 @@ export function moonSatelliteLayers(): LayerSpecification[] {
       },
     },
   ] as LayerSpecification[];
+}
+
+export const MOON_LEADER_SOURCE = 'orbital-moon-leader';
+export const MOON_LEADER_LAYER = 'orbital-moon-leader';
+
+export function moonLeaderSource(): SourceSpecification {
+  return {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+  } as SourceSpecification;
+}
+
+/**
+ * The callout line from the selected spacecraft.
+ *
+ * Drawn under the markers so it reads as leaving the spacecraft rather than
+ * crossing it, and thin: it is a pointer, not a track. Nothing about its
+ * geometry is here - `moonLeader.ts` computes it in screen space, because a 45
+ * degree callout means 45 degrees to the eye (D136).
+ */
+export function moonLeaderLayer(): LayerSpecification {
+  return {
+    id: MOON_LEADER_LAYER,
+    type: 'line',
+    source: MOON_LEADER_SOURCE,
+    layout: { 'line-cap': 'round' },
+    paint: {
+      'line-color': MOON_CRAFT_COLOUR,
+      'line-width': 1.4,
+      'line-opacity': 0.85,
+    },
+  } as LayerSpecification;
 }

@@ -62,6 +62,8 @@ export const LAYER_HOME_BODY: Record<string, string> = {
   'orbital-moon-satellites': 'moon',
   'orbital-moon-satellites-halo': 'moon',
   'orbital-moon-satellites-label': 'moon',
+  'orbital-moon-leader': 'moon',
+  'orbital-moon-shell': 'moon',
 };
 
 /** Which world a layer is a statement about. Earth unless stated otherwise. */

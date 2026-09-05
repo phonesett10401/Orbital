@@ -67,3 +67,37 @@ describe('not flying', () => {
     expect(NOT_FLYING.phase).toBe('done');
   });
 });
+
+describe('the trip is a journey, not a zoom', () => {
+  it('turns toward the destination on the way out', () => {
+    // Without this the centre never moves and the trip reads as the picture
+    // shrinking and growing again rather than the reader going anywhere.
+    const leaving = flightPlan('earth', 'mars')[0];
+    expect(leaving.phase).toBe('leaving');
+    expect(leaving.aimAtDestination).toBe(true);
+  });
+
+  it('has the destination already centred when the world swaps', () => {
+    // Swapping first and turning afterwards would put the new world somewhere
+    // behind the camera and then whip round to it.
+    const plan = flightPlan('earth', 'mars');
+    const swapIndex = plan.findIndex((step) => step.phase === 'swapping');
+    expect(plan[swapIndex - 1].aimAtDestination).toBe(true);
+    expect(plan[swapIndex].aimAtDestination).toBe(false);
+  });
+
+  it('does not steer again while arriving', () => {
+    // The camera is already pointed at it; a second aim would be a visible
+    // correction at the moment the surface appears.
+    const arriving = flightPlan('earth', 'mars').find((s) => s.phase === 'arriving');
+    expect(arriving?.aimAtDestination).toBe(false);
+  });
+
+  it('gives the outward leg longer than the arrival', () => {
+    // The crossing is the part worth watching; the descent is not.
+    const plan = flightPlan('earth', 'jupiter');
+    const out = plan.find((s) => s.phase === 'leaving');
+    const arrive = plan.find((s) => s.phase === 'arriving');
+    expect(out!.durationMs).toBeGreaterThan(arrive!.durationMs);
+  });
+});

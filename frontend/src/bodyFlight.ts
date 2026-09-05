@@ -37,8 +37,8 @@ export const APEX_ZOOM = -2;
 /** Where it settles on arrival - close enough to read a surface, not a crater. */
 export const ARRIVE_ZOOM = 1.5;
 
-export const OUT_MS = 1_300;
-export const IN_MS = 1_300;
+export const OUT_MS = 2_200;
+export const IN_MS = 1_500;
 
 export type FlightPhase = 'leaving' | 'swapping' | 'arriving' | 'done';
 
@@ -47,6 +47,17 @@ export interface FlightStep {
   /** Camera target for this step, or null when only the world changes. */
   zoom: number | null;
   durationMs: number;
+  /**
+   * Whether this step also steers the camera at the destination.
+   *
+   * The trip used to be a zoom out and a zoom in with the centre never moving,
+   * which is exactly what it looked like: the reader was not going anywhere,
+   * the picture was just getting smaller and then bigger again. Turning toward
+   * the destination while pulling back is what makes it a journey - the planet
+   * you are going to drifts to the middle of the screen and grows, and it is
+   * the *real* direction, because the position it is drawn at is real (D136).
+   */
+  aimAtDestination: boolean;
 }
 
 /**
@@ -59,9 +70,12 @@ export interface FlightStep {
 export function flightPlan(from: BodyId, to: BodyId): FlightStep[] {
   if (from === to) return [];
   return [
-    { phase: 'leaving', zoom: APEX_ZOOM, durationMs: OUT_MS },
-    { phase: 'swapping', zoom: null, durationMs: 0 },
-    { phase: 'arriving', zoom: ARRIVE_ZOOM, durationMs: IN_MS },
+    // Out and *across*, together, so the pull-back and the turn are one move.
+    { phase: 'leaving', zoom: APEX_ZOOM, durationMs: OUT_MS, aimAtDestination: true },
+    // The swap happens with the destination already centred, so the world that
+    // appears is under the camera rather than somewhere behind it.
+    { phase: 'swapping', zoom: null, durationMs: 0, aimAtDestination: false },
+    { phase: 'arriving', zoom: ARRIVE_ZOOM, durationMs: IN_MS, aimAtDestination: false },
   ];
 }
 

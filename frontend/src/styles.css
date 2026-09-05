@@ -1186,3 +1186,117 @@ body {
   text-transform: uppercase;
   opacity: 0.55;
 }
+
+/* Lunar spacecraft list — the corner the legend uses on Earth (D136). */
+.moonlist {
+  position: absolute;
+  left: 16px;
+  bottom: 44px;
+  z-index: 2;
+  width: 232px;
+  padding: 12px;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+
+.moonlist__title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.moonlist__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moonlist__item {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: baseline;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 6px 6px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.moonlist__item:hover,
+.moonlist__item:focus-visible {
+  background: rgba(255, 209, 102, 0.10);
+}
+
+.moonlist__item.is-active {
+  background: rgba(255, 209, 102, 0.16);
+}
+
+.moonlist__dot {
+  grid-row: 1 / span 2;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffd166;
+  box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.18);
+}
+
+.moonlist__name {
+  font-weight: 600;
+}
+
+.moonlist__altitude {
+  color: var(--text-dim);
+  font-size: 11px;
+  /* "105 km" wraps to two lines without this - the auto column is sized by
+     the longest name beside it, not by its own content. */
+  white-space: nowrap;
+}
+
+.moonlist__operator {
+  grid-column: 2 / span 2;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+/*
+ * The lunar panel arrives after the camera does (D136).
+ *
+ * `both` is the whole trick: it holds the from-state through the delay, so the
+ * panel is genuinely absent while the map is still moving rather than sitting
+ * there at full opacity waiting. The delay is a little under the ease so the
+ * two overlap slightly, which reads as one motion instead of two.
+ */
+@keyframes moon-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.panel--moon {
+  animation: moon-panel-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) 620ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Someone who has asked for less motion still needs the panel to appear. */
+  .panel--moon {
+    animation: none;
+  }
+}

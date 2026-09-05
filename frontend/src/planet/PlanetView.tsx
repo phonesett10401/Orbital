@@ -54,11 +54,23 @@ import { SOLAR_LAYER, createSolarSystemLayer, type SolarLayer } from './solarSys
 import {
   MOON_LABEL_LAYER,
   MOON_LAYER,
+  MOON_LEADER_SOURCE,
   MOON_SOURCE,
+  moonLeaderLayer,
+  moonLeaderSource,
   moonSatelliteLayers,
   moonSource,
 } from './moonLayer';
-import { drawable as drawableCraft, toFeatures as moonFeatures } from '../moonSatellites';
+import { createMoonShellLayer, type MoonShellLayer } from './moonShellLayer';
+import {
+  leaderEnd as moonLeaderEnd,
+  leaderFeature as moonLeaderFeature,
+} from '../moonLeader';
+import {
+  drawable as drawableCraft,
+  toFeatures as moonFeatures,
+  type MoonSatellite,
+} from '../moonSatellites';
 import { fetchMoonSatellites } from '../api/client';
 import {
   SATELLITE_LABEL_LAYER,
@@ -140,6 +152,7 @@ import { bodyFor } from '../bodies';
 import { MAPLIBRE_MIN_ZOOM } from '../solarScale';
 import { flightPlan, swapsWorld } from '../bodyFlight';
 import type { PlanetId } from '../planets';
+import { lonLatOf, scenePlacements } from '../solarFrame';
 import { GIBS_ATTRIBUTION, IMAGERY_FAR_MAX_ZOOM } from './basemap';
 import {
   IMAGERY_FAR,
@@ -185,7 +198,47 @@ const VIEWPORT_UPDATE_MS = 500;
  * empty Moon and an unreachable backend look identical, and of the two the
  * last known position is the more useful lie to avoid telling (D134).
  */
-function startMoonPoll(map: import('maplibre-gl').Map): { stop: () => void } {
+/** A scene direction as a MapLibre centre. `solarFrame` owns the conversion. */
+function lonLatCenter(at: readonly [number, number, number]): [number, number] {
+  const { lon, lat } = lonLatOf(at as [number, number, number]);
+  return [lon, lat];
+}
+
+/** Close enough to see the spacecraft apart from its own shadow. */
+const MOON_CLOSE_ZOOM = 2.2;
+/** Long enough to read as travel, short enough not to be a wait. */
+const MOON_EASE_MS = 900;
+
+/**
+ * Keep the callout line pinned to the selected spacecraft.
+ *
+ * Recomputed on every camera move, because the line is 45 degrees **on screen**
+ * and the only way to stay that way while the globe turns is to redo the screen
+ * arithmetic each time. `moonLeader.ts` owns the geometry (D136).
+ */
+function drawMoonLeader(
+  map: import('maplibre-gl').Map,
+  craft: MoonSatellite | undefined,
+): void {
+  const source = map.getSource(MOON_LEADER_SOURCE);
+  if (!source || !('setData' in source)) return;
+  // Called on the source, not pulled off it: `setData` is a method and loses
+  // its binding the moment it is held in a variable.
+  const target = source as { setData: (data: unknown) => void };
+  if (!craft) {
+    target.setData(moonLeaderFeature(null, null));
+    return;
+  }
+  const from = map.project([craft.lon, craft.lat]);
+  const to = moonLeaderEnd({ x: from.x, y: from.y });
+  const end = map.unproject([to.x, to.y]);
+  target.setData(moonLeaderFeature([craft.lon, craft.lat], [end.lng, end.lat]));
+}
+
+function startMoonPoll(
+  map: import('maplibre-gl').Map,
+  onCraft: (craft: MoonSatellite[]) => void,
+): { stop: () => void } {
   let stopped = false;
   const controller = new AbortController();
 
@@ -201,7 +254,9 @@ function startMoonPoll(map: import('maplibre-gl').Map): { stop: () => void } {
       // What the status bar counts and the panel reads: the craft actually
       // drawable, not the ones that exist. A craft whose ephemeris window has
       // run out is absent from both, rather than frozen in either.
-      useOrbitalStore.getState().setMoonCraft(drawableCraft(snapshot.objects ?? []));
+      const craft = drawableCraft(snapshot.objects ?? []);
+      useOrbitalStore.getState().setMoonCraft(craft);
+      onCraft(craft);
     } catch {
       // Keep what is drawn. See the note above.
     }
@@ -305,6 +360,13 @@ export function PlanetView() {
     let solar: SolarLayer | null = null;
     let terminator: ReturnType<typeof createTerminatorLayer> | null = null;
     let moonPoll: { stop: () => void } | null = null;
+    let moonShell: MoonShellLayer | null = null;
+    // Redrawn as the camera moves, because the callout is 45 degrees on screen.
+    const refreshLeader = () => {
+      if (!map) return;
+      const state = useOrbitalStore.getState();
+      drawMoonLeader(map, state.moonCraft.find((c) => c.id === state.selectedMoonId));
+    };
     let cleanUpResize: (() => void) | null = null;
     let frame = 0;
     let stallTimer = 0;
@@ -536,7 +598,15 @@ export function PlanetView() {
           // during a body swap is what D120 went to some trouble to avoid;
           // they simply stay hidden until the Moon is the world below (D134).
           map.addSource(MOON_SOURCE, moonSource());
+          map.addSource(MOON_LEADER_SOURCE, moonLeaderSource());
+          map.addLayer(moonLeaderLayer());
           for (const layer of moonSatelliteLayers()) map.addLayer(layer);
+          // Drawn at their real altitude, which on the Moon needs no
+          // compression at all - everything up there is below 1.13 radii
+          // (D136). Added after the flat markers so the tethers sit over them.
+          moonShell = createMoonShellLayer();
+          map.addLayer(moonShell);
+          map.on('move', refreshLeader);
 
           // The selected aircraft, as a mesh in MapLibre's own context (D67).
           // It reads the store itself, once per frame, rather than being told:
@@ -762,13 +832,48 @@ export function PlanetView() {
                   continue;
                 }
                 if (step.zoom !== null) {
-                  runner.easeTo({ zoom: step.zoom, duration: step.durationMs });
+                  // Where the destination actually is, from the same
+                  // placements the scene is drawn from - so the camera turns
+                  // toward the real planet rather than toward a nice arc
+                  // invented for the animation (D136).
+                  const aim = step.aimAtDestination
+                    ? scenePlacements(
+                        new Date(),
+                        useOrbitalStore.getState().activeBody as PlanetId,
+                      ).find((p) => p.id === destination)
+                    : undefined;
+                  runner.easeTo({
+                    zoom: step.zoom,
+                    duration: step.durationMs,
+                    ...(aim ? { center: lonLatCenter(aim.at) } : {}),
+                    // Linear-ish, because a journey that eases out in the
+                    // middle reads as arriving and then continuing.
+                    easing: (t: number) => t * (2 - t),
+                  });
                 }
                 await new Promise((resolve) => setTimeout(resolve, step.durationMs));
               }
               useOrbitalStore.getState().setFlyingTo(null);
             })();
             return;
+          }
+
+          // Selecting a lunar spacecraft is a move, not a jump: the camera
+          // travels to it, the callout is drawn, and only then does the panel
+          // open - so the reader watches one thing happen rather than three
+          // at once (D136).
+          if (state.selectedMoonId !== previous.selectedMoonId && map) {
+            const runner = map;
+            const chosen = state.moonCraft.find((c) => c.id === state.selectedMoonId);
+            if (chosen) {
+              runner.easeTo({
+                center: [chosen.lon, chosen.lat],
+                zoom: Math.max(runner.getZoom(), MOON_CLOSE_ZOOM),
+                duration: MOON_EASE_MS,
+                easing: (t: number) => 1 - (1 - t) ** 3,
+              });
+            }
+            drawMoonLeader(runner, chosen);
           }
 
           if (state.activeBody !== previous.activeBody && map) {
@@ -778,7 +883,17 @@ export function PlanetView() {
             // cadence is not a compromise - the backend is reading from memory
             // and the positions move about half a degree a minute (D134).
             moonPoll?.stop();
-            moonPoll = state.activeBody === 'moon' ? startMoonPoll(map) : null;
+            moonPoll =
+              state.activeBody === 'moon'
+                ? startMoonPoll(map, (craft) => {
+                    moonShell?.setCraft(craft);
+                    // The callout has to follow the spacecraft, not just the
+                    // camera. These move about half a degree of ground track a
+                    // minute, so between polls the line was left pointing at
+                    // where the craft had been - 77 px adrift when measured.
+                    refreshLeader();
+                  })
+                : null;
             if (state.activeBody !== 'moon') useOrbitalStore.getState().setMoonCraft([]);
             // The terminator is a custom layer outside the style, so its
             // visibility is not in the plan `applyBody` applies. Night is an

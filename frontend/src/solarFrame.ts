@@ -203,3 +203,23 @@ export function orbitRing(
   }
   return points;
 }
+
+/**
+ * Where on the globe a scene direction points, in degrees.
+ *
+ * The exact inverse of `modelFrame.sphereVector`, which puts north along +Y
+ * and the prime meridian along +Z. Needed because a trip to another planet has
+ * to move the camera *toward* it, and MapLibre steers by longitude and
+ * latitude rather than by a vector (D136).
+ *
+ * The length is discarded on purpose: a planet's direction is what a camera
+ * can aim at, and its compressed distance is not a place the camera can go.
+ */
+export function lonLatOf(v: Vec3): { lon: number; lat: number } {
+  const [x, y, z] = v;
+  const length = Math.hypot(x, y, z);
+  if (length === 0) return { lon: 0, lat: 0 };
+  const lat = Math.asin(Math.max(-1, Math.min(1, y / length))) / DEG;
+  const lon = Math.atan2(x, z) / DEG;
+  return { lon, lat };
+}

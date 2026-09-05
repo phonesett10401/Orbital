@@ -7385,3 +7385,102 @@ hides the layers.
 Both polls in `usePolling` are now gated on being on Earth. Measured after:
 **0 requests on the Moon against 3 on Earth**, same instrument, same session,
 with the Earth reading taken as a control rather than assumed.
+
+## D136 - Going there, standing off it, and reaching one
+
+Three requests from Phone, and a question that deserved a number rather than a
+yes.
+
+### The question: are the planets drawn at real size?
+
+No, and the table is worth keeping because the answer is not close:
+
+| body | true (x Earth) | drawn (x Earth) |
+|---|---|---|
+| Mercury | 0.38 | 0.56 |
+| Mars | 0.53 | 0.69 |
+| Jupiter | **10.97** | 2.66 |
+| Sun | **109.20** | 4.49 |
+
+Distances are further from true than sizes are, and cannot be otherwise:
+Neptune's orbit at true scale is **706,076 globe radii**, against a far plane
+that sits one radius past the centre (D129). That is not a tuning problem.
+
+Sizes *could* be true to each other. They are not, because the Sun is 287 times
+Mercury: with the Sun at a readable 60 pixels, Mercury would be 0.2 of one. The
+compression is what makes the small bodies exist on screen at all, and
+`SCALE_NOTE` has always said so.
+
+### Moving to a planet instead of zooming out and back in
+
+The trip was a zoom to -2, a world swap, and a zoom back in, with the centre
+**never moving** - which is exactly what it looked like. Nobody was going
+anywhere; the picture got smaller and then bigger.
+
+Now the outward leg steers at the destination while it pulls back, so the
+planet drifts to the middle of the screen and grows. The direction is the real
+one: it comes from the same `scenePlacements` the scene is drawn from, through
+`lonLatOf`, the exact inverse of the sphere convention. Measured on a trip to
+Mars: the centre walked 0 to -69 degrees while the zoom went 1 to -2, and -69
+is where Mars actually was.
+
+The swap still happens at the apex, now with the destination already centred,
+so the new world appears under the camera rather than behind it.
+
+### Real altitude around the Moon, which needs no compression at all
+
+Earth's satellite shell compresses altitude logarithmically because GEO is 6.6
+Earth radii (D96). Nothing in lunar orbit is like that:
+
+| spacecraft | altitude | Moon radii |
+|---|---|---|
+| LRO | 71-105 km | 1.041-1.060 |
+| Chandrayaan-2 | 102 km | 1.059 |
+| Danuri | 213 km | 1.123 |
+
+The whole fleet fits under 1.13 radii, so it is drawn **exactly where it is** -
+the only place in Orbital where a height on screen is the height something is
+at. `exaggeration()` returns 1 as an executable claim rather than a comment.
+
+A tether runs from the sub-point up to the spacecraft, because without it a
+marker a few pixels above the surface reads as a marker *on* it. And the
+sub-point marker had to shrink from a 9-pixel halo over a 4-pixel dot to a 2.2
+pixel dot: **at the original size the marker was wider than the height it was
+marking and covered the tether completely.** Real altitude had been computed,
+drawn, and made invisible by a decoration.
+
+The result behaves like the thing it is: the height is clearest at the limb,
+where it is seen edge-on, and vanishes at the centre of the disc where it
+points at the viewer.
+
+### A list, and reaching a spacecraft that is round the back
+
+Three spacecraft, frequently on the far side where a marker cannot be clicked
+because it is genuinely not visible. The list in the corner is how you reach
+one anyway, and it answers what the map cannot: what else is up there.
+
+Selecting one is a **move**: the camera eases to it, the callout is drawn, and
+the panel arrives after the camera does - a delayed CSS animation with `both`,
+which holds the from-state through the delay so the panel is absent rather than
+sitting at full opacity waiting. Reduced-motion turns the animation off rather
+than the panel.
+
+### The callout is 45 degrees on the screen, not on the Moon
+
+Phone asked for a line leaving the spacecraft north-east at 45 degrees. A
+*bearing* of 45 degrees is a rhumb line that curves under this projection and
+points somewhere different at every latitude - and these spacecraft are polar,
+so it would be worst exactly where they spend their time. What a reader means
+is the diagonal they can see.
+
+So the geometry is done in screen space and unprojected: project the craft,
+step equal pixels up and right, unproject. `leaderAngleDeg` exists to assert it,
+because a callout that drifts to 44 degrees is not visibly wrong.
+
+Two faults found by looking, both invisible to the type checker:
+
+1. `setData` pulled off a source into a variable **loses its binding** and
+   throws on the first camera move.
+2. The line was refreshed on camera movement only, so between thirty-second
+   polls it pointed at where the spacecraft had been - **measured at 77 pixels
+   adrift**. It now refreshes when the positions do; measured after at 0.

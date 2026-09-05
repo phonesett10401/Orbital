@@ -13,7 +13,13 @@ import { describe, expect, it } from 'vitest';
 import { sphereVector } from './planet/modelFrame';
 import { PLANET_IDS } from './planets';
 import { GLOBE_RADII_AT_NEPTUNE } from './solarScale';
-import { earthRotationDeg, eclipticToGlobe, orbitRing, scenePlacements } from './solarFrame';
+import {
+  earthRotationDeg,
+  eclipticToGlobe,
+  lonLatOf,
+  orbitRing,
+  scenePlacements,
+} from './solarFrame';
 import { subsolarPoint } from './sun';
 
 const DATES = [
@@ -182,5 +188,35 @@ describe('orbit paths', () => {
     const ring = orbitRing('mercury', DATES[0], 96);
     const radii = ring.map((p) => Math.hypot(...p));
     expect(Math.max(...radii) / Math.min(...radii)).toBeGreaterThan(1.1);
+  });
+});
+
+describe('aiming the camera at a direction', () => {
+  it('is the exact inverse of the sphere convention', () => {
+    // If these two ever disagree, a trip to another planet flies somewhere
+    // that is not the planet - and it still looks like a trip (D136).
+    for (const [lon, lat] of [[0, 0], [45, 30], [-120, -60], [179, 89], [-179, -89]]) {
+      const round = lonLatOf(sphereVector(lon, lat));
+      expect(round.lon, `lon ${lon},${lat}`).toBeCloseTo(lon, 6);
+      expect(round.lat, `lat ${lon},${lat}`).toBeCloseTo(lat, 6);
+    }
+  });
+
+  it('ignores how far away the direction is', () => {
+    // A planet's compressed distance is not a place the camera can go; only
+    // the direction is meaningful.
+    const near = lonLatOf([1, 0, 0]);
+    const far = lonLatOf([50, 0, 0]);
+    expect(near).toEqual(far);
+  });
+
+  it('puts the poles on the axis without a longitude blowing up', () => {
+    expect(lonLatOf([0, 1, 0]).lat).toBeCloseTo(90, 9);
+    expect(lonLatOf([0, -1, 0]).lat).toBeCloseTo(-90, 9);
+    expect(Number.isFinite(lonLatOf([0, 1, 0]).lon)).toBe(true);
+  });
+
+  it('answers something usable for a zero vector rather than NaN', () => {
+    expect(lonLatOf([0, 0, 0])).toEqual({ lon: 0, lat: 0 });
   });
 });
