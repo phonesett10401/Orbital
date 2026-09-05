@@ -22,10 +22,18 @@ import * as THREE from 'three';
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 
 import { BODIES } from '../bodies';
-import { orbitRing, scenePlacements } from '../solarFrame';
+import { equatorialToGlobe, orbitRing, scenePlacements } from '../solarFrame';
 import { bodyRadiusFor, globeRadiiFor } from '../solarScale';
 import { PLANET_IDS, type PlanetId } from '../planets';
 import { usesGlobeFrame } from './modelFrame';
+import {
+  STARS,
+  STAR_COUNT,
+  STAR_SPHERE_RADII,
+  starColour,
+  starDirection,
+  starSize,
+} from '../stars';
 
 export const SOLAR_LAYER = 'orbital-solar-system';
 
@@ -75,6 +83,77 @@ export function createSolarSystemLayer(
   const bodies = new THREE.Group();
   scene.add(orbits, bodies);
 
+  /**
+   * The sky, built once and rotated per frame.
+   *
+   * 5,070 real stars. Depth testing is off and the render order is negative,
+   * so they are a backdrop rather than geometry: MapLibre's far plane cuts
+   * everything past about 20 radii, which is exactly the half of a surrounding
+   * sphere a backdrop would need, so the points sit near instead and simply
+   * never occlude (D128).
+   */
+  const starGeometry = new THREE.BufferGeometry();
+  const starPositions = new Float32Array(STAR_COUNT * 3);
+  const starColours = new Float32Array(STAR_COUNT * 3);
+  const starSizes = new Float32Array(STAR_COUNT);
+  for (let i = 0; i < STAR_COUNT; i += 1) {
+    const [r, g, b] = starColour(STARS.ci[i]);
+    starColours[i * 3] = r;
+    starColours[i * 3 + 1] = g;
+    starColours[i * 3 + 2] = b;
+    starSizes[i] = starSize(STARS.mag[i]);
+  }
+  starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+  starGeometry.setAttribute('color', new THREE.BufferAttribute(starColours, 3));
+  const stars = new THREE.Points(
+    starGeometry,
+    new THREE.PointsMaterial({
+      vertexColors: true,
+      size: 0.06,
+      sizeAttenuation: true,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    }),
+  );
+  stars.renderOrder = -1;
+
+  // **Not added to the scene, and the measurement says why.**
+  //
+  // A backdrop has to be at infinity. This projection cannot reach it: the
+  // camera sits **83 globe radii** from the centre at zoom -2, and sampling the
+  // clip volume shows a sphere at 30 radii is 24% visible, at 50 it is 1%, and
+  // at 80 nothing renders at all. A sphere small enough to survive is a sphere
+  // the camera is outside - so it draws as a ball of points with a visible
+  // edge, which is exactly what it looked like (D128).
+  //
+  // The catalogue, the frame conversion and the colours are all correct and
+  // tested; only the placement is wrong, and the fix is a screen-space backdrop
+  // rather than geometry - stars projected from the camera's own orientation,
+  // which is a different piece of work. Left here, off, rather than shipped
+  // looking wrong or deleted and rebuilt from scratch.
+  const STARS_AS_GEOMETRY_WORK = false;
+  if (STARS_AS_GEOMETRY_WORK) scene.add(stars);
+  let starsBuiltFor = 0;
+
+  const placeStars = (date: Date) => {
+    for (let i = 0; i < STAR_COUNT; i += 1) {
+      const dir = starDirection(STARS.ra[i], STARS.dec[i]);
+      const v = equatorialToGlobe({ x: dir[0], y: dir[1], z: dir[2] }, date);
+      starPositions[i * 3] = v[0] * STAR_SPHERE_RADII;
+      starPositions[i * 3 + 1] = v[1] * STAR_SPHERE_RADII;
+      starPositions[i * 3 + 2] = v[2] * STAR_SPHERE_RADII;
+    }
+    starGeometry.attributes.position.needsUpdate = true;
+    starsBuiltFor = date.getTime();
+  };
+
+  // Light from the Sun, so a planet has a day and a night side that are
+  // actually correct rather than a flat disc of colour.
+  const sunlight = new THREE.PointLight(0xfff2d0, 3.2, 0, 0);
+  const ambient = new THREE.AmbientLight(0x223044, 1.1);
+  scene.add(sunlight, ambient);
+
   const spheres = new Map<string, THREE.Mesh>();
   let orbitsBuiltFor = 0;
   let orbitsBuiltAround: PlanetId | null = null;
@@ -105,10 +184,19 @@ export function createSolarSystemLayer(
       // Radius from `solarScale`, in the same unit as the orbit distances -
       // which is the units fix D122 made, and why no conversion appears here.
       const r = globeRadiiFor(bodyRadiusFor(radiusKmOf(id)));
-      mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(r, 16, 12),
-        new THREE.MeshBasicMaterial({ color: COLOURS[id] ?? 0xaaaaaa, transparent: true }),
-      );
+      // The Sun emits, so it stays unlit. Everything else is lit *by* it, which
+      // is what turns a flat coloured disc into a body with a terminator - and
+      // the phase is correct, because the light is where the Sun is.
+      const material =
+        id === 'sun'
+          ? new THREE.MeshBasicMaterial({ color: COLOURS.sun, transparent: true })
+          : new THREE.MeshStandardMaterial({
+              color: COLOURS[id] ?? 0xaaaaaa,
+              transparent: true,
+              roughness: 0.95,
+              metalness: 0,
+            });
+      mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), material);
       spheres.set(id, mesh);
       bodies.add(mesh);
     }
@@ -165,15 +253,22 @@ export function createSolarSystemLayer(
       // relative to it. This is not decoration: the position it is drawn at is
       // a real one from real elements, so what the reader sees growing brighter
       // is genuinely where that planet is now (D126).
+      // The sky turns with the Earth, so it is rebuilt when the rotation has
+      // moved enough to see - about every four minutes of real time.
+      if (Math.abs(date.getTime() - starsBuiltFor) > 240_000) placeStars(date);
+
       const heading = destination();
       const placements = scenePlacements(date, centre);
+      const sun = placements.find((p) => p.id === 'sun');
+      if (sun) sunlight.position.set(...sun.at);
       for (const placement of placements) {
         const mesh = sphereFor(placement.id);
         mesh.position.set(...placement.at);
         const emphasis = !heading || placement.id === heading ? 1 : 0.35;
-        (mesh.material as THREE.MeshBasicMaterial).opacity = fade * emphasis;
+        (mesh.material as THREE.Material).opacity = fade * emphasis;
         mesh.scale.setScalar(heading === placement.id ? 1.6 : 1);
       }
+      (stars.material as THREE.PointsMaterial).opacity = fade;
       orbits.children.forEach((line) => {
         ((line as THREE.Line).material as THREE.LineBasicMaterial).opacity = 0.28 * fade;
       });

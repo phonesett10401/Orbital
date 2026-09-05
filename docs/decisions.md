@@ -6897,3 +6897,75 @@ reachable.
 **A menu that opens on hover is a claim about the pointer's journey, not about
 its destination.** Testing the destination is testing the half that was never
 in doubt.
+
+---
+
+## D128 - Real stars, real light, and a backdrop this projection cannot hold
+
+Phone asked for Blender and a star background instead of the plain void. One of
+those was the wrong tool and the other turned out to be two separate problems.
+
+### Blender was declined, with a reason
+
+Blender makes meshes. The planets draw as 8 to 30 pixel discs, where a modelled
+Jupiter is indistinguishable from a sphere - megabytes shipped to render a
+circle. The only genuine modelling job in the scene is Saturn's rings, which is
+a flat annulus and six lines of three.js. What actually improves the picture is
+lighting, textures and a sky, none of which Blender provides.
+
+### Lighting, which was the real win
+
+Every body used `MeshBasicMaterial` - **unlit** - which is why they read as flat
+coloured discs. A point light at the Sun's own computed position, a standard
+material on the planets and the Sun left emissive gives every body a day and a
+night side, correctly oriented, because the light is where the Sun is. One
+material swap, and it is physically true rather than decorative.
+
+### The stars are real, and that part works
+
+5,070 naked-eye stars from the HYG catalogue, public domain: real right
+ascensions, declinations, magnitudes and B-V colour indices. So the sky is
+**Orion where Orion is**, turning with the Earth. A scattering of random points
+would have looked similar and been worth nothing to anyone who looked twice -
+the same choice this project keeps making with SGP4 and Keplerian elements.
+
+Three things the tests caught or would have:
+
+- **The Sun is in the catalogue**, row zero, magnitude -26.7. Left in it draws
+  a star at RA 0 Dec 0 that is not there.
+- **Right ascension is in hours**, not degrees. Read as degrees the whole sky
+  compresses into a 24-degree stripe.
+- **Stars are equatorial, not ecliptic.** They take Earth's rotation but *not*
+  the obliquity; applying it leans the sky 23 degrees against the ecliptic,
+  which is a plausible-looking sky in the wrong place. `eclipticToGlobe` now
+  delegates to `equatorialToGlobe`, so the two paths differ by exactly the
+  tilt and cannot drift.
+
+### The placement does not work, and the numbers say why
+
+A backdrop has to be at infinity. This projection cannot reach it.
+
+Measured: the camera sits **83 globe radii** from the centre at zoom -2.
+Sampling the clip volume from the real projection matrix:
+
+| sphere radius | visible |
+|---|---|
+| 9 | 50% |
+| 20 | 52% |
+| 30 | 24% |
+| 50 | **1%** |
+| 80 | **0%** |
+
+A sphere large enough to contain the camera does not render at all; one small
+enough to render is a sphere the camera is **outside**, so it draws as a ball
+of points with a visible edge - which is exactly what the first attempt looked
+like.
+
+The fix is a screen-space backdrop: stars projected from the camera's own
+orientation rather than placed as geometry. That is a different piece of work.
+
+**So the rendering is held back behind a flag, not deleted and not shipped.**
+The catalogue, the frame conversion, the sizes and the colours are all correct
+and covered by sixteen tests; only the placement is wrong. Shipping the ball
+would have been worse than the plain void, and deleting it would mean building
+the correct half again from nothing.

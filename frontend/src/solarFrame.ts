@@ -91,13 +91,24 @@ export function earthRotationDeg(date: Date): number {
  *    the prime meridian along +Z, so the result is reordered to match rather
  *    than left in the maths convention where +Z is north.
  */
-export function eclipticToGlobe(v: Vector, date: Date): Vec3 {
-  const sun = subsolarPoint(date);
-  const equatorial = rotateX(v, sun.obliquity * DEG);
-  const fixed = rotateZ(equatorial, -earthRotationDeg(date) * DEG);
-  // Maths convention (+Z north, +X toward the equinox) into the globe frame
-  // (+Y north, +Z on the prime meridian, +X east of it).
+/**
+ * An **equatorial** vector, in the globe frame.
+ *
+ * The star catalogue is already equatorial - right ascension and declination -
+ * so it needs Earth's rotation but not the obliquity tilt. Applying the tilt
+ * to a star would lean the whole sky by 23 degrees against the ecliptic, which
+ * is exactly the error that looks like a plausible sky (D128).
+ */
+export function equatorialToGlobe(v: Vector, date: Date): Vec3 {
+  const fixed = rotateZ(v, -earthRotationDeg(date) * DEG);
   return [fixed.y, fixed.z, fixed.x];
+}
+
+export function eclipticToGlobe(v: Vector, date: Date): Vec3 {
+  // Tilt into the equatorial frame, then hand over: the two paths differ by
+  // exactly the obliquity and share everything after it, so they cannot drift.
+  const sun = subsolarPoint(date);
+  return equatorialToGlobe(rotateX(v, sun.obliquity * DEG), date);
 }
 
 /** A body's place in the drawn scene: a globe-frame vector, in globe radii. */
