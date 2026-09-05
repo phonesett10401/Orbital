@@ -61,7 +61,11 @@ import {
   moonSatelliteLayers,
   moonSource,
 } from './moonLayer';
-import { createMoonShellLayer, type MoonShellLayer } from './moonShellLayer';
+import {
+  MOON_SHELL_LAYER,
+  createMoonShellLayer,
+  type MoonShellLayer,
+} from './moonShellLayer';
 import {
   leaderEnd as moonLeaderEnd,
   leaderFeature as moonLeaderFeature,
@@ -159,6 +163,7 @@ import {
   maxZoomFor,
   surfaceTilesFor,
   visibilityFor,
+  globeLayerIds,
 } from './bodySurface';
 
 /** How often to republish the viewport, matching the globe view's cadence. */
@@ -202,6 +207,38 @@ const VIEWPORT_UPDATE_MS = 500;
 function lonLatCenter(at: readonly [number, number, number]): [number, number] {
   const { lon, lat } = lonLatOf(at as [number, number, number]);
   return [lon, lat];
+}
+
+/**
+ * The zoom at which the globe gives way to the solar system (D139).
+ *
+ * The same point the solar layer reaches full opacity, so one picture fades out
+ * exactly as the other finishes fading in.
+ */
+const SOLAR_HANDOVER_ZOOM = -1.0;
+
+/**
+ * Switch between standing on a world and looking at the system it belongs to.
+ *
+ * MapLibre draws the world under the camera at radius 1 whatever the zoom, so
+ * pulling back does not shrink it: at the point where the solar system appears,
+ * the Earth is still a full globe sitting beside a Sun drawn at 1.08 radii, and
+ * it looks the same size as it. Phone reported exactly that.
+ *
+ * The globe cannot be resized, so it is switched off instead, and the solar
+ * layer draws the same body properly scaled among its neighbours. `applyBody`
+ * does the restoring, because it already knows what each world should show.
+ */
+function applySolarView(map: import('maplibre-gl').Map, inSolarView: boolean): void {
+  const style = map.getStyle();
+  if (!style) return;
+  if (!inSolarView) {
+    applyBody(map, useOrbitalStore.getState().activeBody);
+    return;
+  }
+  for (const id of globeLayerIds(style as never, [SHELL_LAYER, MODEL_LAYER, MOON_SHELL_LAYER])) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+  }
 }
 
 /** Close enough to see the spacecraft apart from its own shadow. */
@@ -613,6 +650,17 @@ export function PlanetView() {
           map.addLayer(moonShell);
           map.on('move', refreshLeader);
 
+          // The globe hands over to the solar system as the camera pulls back.
+          let inSolarView = false;
+          const onHandover = () => {
+            if (!map) return;
+            const next = map.getZoom() <= SOLAR_HANDOVER_ZOOM;
+            if (next === inSolarView) return;
+            inSolarView = next;
+            applySolarView(map, next);
+          };
+          map.on('zoom', onHandover);
+
           // The selected aircraft, as a mesh in MapLibre's own context (D67).
           // It reads the store itself, once per frame, rather than being told:
           // the aircraft is moving between polls and the symbol it replaces is
@@ -647,6 +695,7 @@ export function PlanetView() {
             // Earth for the Moon. Sizes are anchored on this one, because it is
             // the globe MapLibre draws at radius 1 (D137).
             () => useOrbitalStore.getState().trueScale,
+            () => useOrbitalStore.getState().activeBody,
           );
           map.addLayer(solar);
 

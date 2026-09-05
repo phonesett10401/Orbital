@@ -7565,3 +7565,67 @@ neighbours already do.
 The two ages are now the same number, and the marker sits **exactly** along its
 own heading from the end of its track - ahead of the line, which is where an
 extrapolated position belongs.
+
+## D139 - The world you are standing on takes its place in its own system
+
+Phone: *"I want the selected planet to go smaller and not being left big when I
+zoom out."* Earth, pulled back to where the solar system appears, sat there as a
+full globe beside a Sun drawn at 1.08 radii - the same size as a body a hundred
+and nine times larger.
+
+### Why it could not be fixed by scaling
+
+MapLibre draws the world under the camera at **radius 1, at every zoom**. That
+is what its globe is. So the only knobs are the sizes of everything else, and
+neither direction works:
+
+- **Scale the bodies up** to match, which was tried first and made things worse:
+  the Sun becomes 4.5 radii in an 18-radius scene and Saturn's rings overlap
+  the Earth.
+- **Spread the orbits out** to compensate. Bounded: at zoom -2 the camera is 83
+  radii out with a half-angle of about 18 degrees, so only about **27 radii** of
+  scene is ever on screen. Not nearly enough - the Sun's true share of Neptune's
+  orbit is 0.015%, and with Earth pinned at 1 the smallest the Sun can be is
+  4.5.
+
+**With a globe fixed at radius 1 there is no consistent scale.** The globe has
+to go, and the solar layer draws that body properly among its neighbours.
+
+### The afternoon spent chasing the wrong object
+
+The globe would not switch off. Imagery faded to zero, all 135 cartography
+layers hidden, `background` made visible and bright red - which coloured nothing
+- the terminator disabled, the satellite shell and the solar layer hidden. A
+textured disc kept sitting at screen centre, exactly the size of the globe.
+
+It was **the aircraft**. Two thousand icons at that zoom cluster into a
+blue-green speckled disc the size of the planet they are on. Every ground layer
+had been off for some time; what remained was the traffic.
+
+Three things kept the misreading alive, all of them instrument faults rather
+than reasoning faults:
+
+- Screenshots taken before a repaint settled, showing a stale frame while the
+  readout beside them had already updated.
+- A probe that hid layers while an earlier version of this very handover put
+  them back on the next zoom event.
+- A probe asking for layer `road`, which is a **test-fixture id** and does not
+  exist in the Liberty style - producing an error that looked like the
+  handover throwing.
+
+The thing that finally settled it was hiding one more group and finding a
+completely empty screen.
+
+### What it does now
+
+`globeLayerIds` is the set that paints the world you are on: the cartography,
+Orbital's own layers, and both imagery tiers - everything `visibilityFor`
+already hides when the camera leaves Earth, plus the imagery, minus the solar
+system, which is what the view hands over *to*. Below zoom -1 they go off and
+the solar layer draws the origin body at the centre on the shared scale.
+`applyBody` restores them, because it already knows what each world shows.
+
+Earth gets a surface profile of its own for the first time - ocean blue with ice
+at both ends. Latitude alone cannot draw continents so it does not try, but "a
+blue planet, white at the poles" is true and is what Earth looks like at twenty
+pixels. Without it the origin body drew as the default grey ball.

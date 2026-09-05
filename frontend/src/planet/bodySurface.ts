@@ -170,3 +170,33 @@ export function surfaceTilesFor(body: Body): string | null {
 export function maxZoomFor(body: Body): number {
   return isLandable(body) ? body.surface!.maxZoom : 5;
 }
+
+/**
+ * Everything that belongs to the world you are standing on, for the handover
+ * to the solar system (D139).
+ *
+ * The same set `visibilityFor` hides when the camera leaves Earth, plus the two
+ * imagery tiers - because here the globe itself is what has to go, and imagery
+ * is what paints it. The solar system is the one thing kept: it is what the
+ * view is handing over *to*.
+ *
+ * **The aircraft layers are in this set and that is not incidental.** At the
+ * zoom where the solar system appears, two thousand aircraft icons cluster into
+ * a speckled disc exactly the size of the globe - which is what a whole
+ * afternoon of debugging mistook for the globe itself, while every ground layer
+ * was already switched off.
+ */
+export function globeLayerIds(
+  style: StyleLike,
+  customLayerIds: readonly string[] = [],
+): string[] {
+  return [
+    ...cartographyLayerIds(style),
+    ...ownLayerIds(style, customLayerIds),
+    IMAGERY_FAR,
+    IMAGERY_NEAR,
+  ].filter((id) => id !== SOLAR_LAYER);
+}
+
+/** The solar system's own layer, which the handover must never hide. */
+export const SOLAR_LAYER = 'orbital-solar-system';

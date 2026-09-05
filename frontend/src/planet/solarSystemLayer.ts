@@ -22,7 +22,12 @@ import * as THREE from 'three';
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 
 import { BODIES } from '../bodies';
-import { equatorialToGlobe, orbitRing, scenePlacements } from '../solarFrame';
+import {
+  equatorialToGlobe,
+  orbitRing,
+  scenePlacements,
+  type ScenePlacement,
+} from '../solarFrame';
 import { drawnBodyRadius } from '../solarScale';
 import { PLANET_IDS, type PlanetId } from '../planets';
 import { usesGlobeFrame } from './modelFrame';
@@ -71,6 +76,8 @@ export function createSolarSystemLayer(
   destination: () => string | null = () => null,
   origin: () => PlanetId = () => 'earth',
   trueScale: () => boolean = () => false,
+  /** The world actually under the camera, which may be a moon. */
+  standingOn: () => string = () => 'earth',
 ): SolarLayer {
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
@@ -513,7 +520,20 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
       stars.visible = Boolean(view && sky);
 
       const heading = destination();
-      const placements = scenePlacements(date, centre);
+      // **The world under the camera, drawn among its neighbours.** MapLibre
+      // keeps its globe at radius 1 however far the camera pulls back, so it
+      // cannot shrink and ends up looking the size of the Sun. The basemap
+      // switches that globe off across this same range and this draws the body
+      // properly scaled in its place - which is the whole of "the selected
+      // planet should get smaller when I zoom out" (D139).
+      const placements: ScenePlacement[] = [
+        ...scenePlacements(date, centre),
+        {
+          id: standingOn() as PlanetId,
+          at: [0, 0, 0],
+          distanceAu: 0,
+        },
+      ];
       const sun = placements.find((p) => p.id === 'sun');
       if (sun) sunlight.position.set(sun.at[0], sun.at[1], sun.at[2]);
       for (const placement of placements) {

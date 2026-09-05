@@ -78,6 +78,18 @@ export const SURFACES: Record<string, SurfaceBand[]> = {
     { from: 72, to: 82, colour: [208, 164, 135] }, // the cap's hazy edge
     { from: 82, to: 90, colour: [238, 242, 245] }, // north cap
   ],
+  // Ocean, with ice at both ends. Latitude alone cannot draw continents, so it
+  // does not try - what it can say truthfully is that Earth is mostly water and
+  // white at the poles, which at this size is what Earth looks like (D139).
+  earth: [
+    { from: -90, to: -72, colour: [232, 238, 242] }, // Antarctica
+    { from: -72, to: -55, colour: [124, 156, 176] }, // the Southern Ocean
+    { from: -55, to: -12, colour: [46, 106, 152] },
+    { from: -12, to: 18, colour: [56, 122, 168] },
+    { from: 18, to: 55, colour: [64, 116, 148] },
+    { from: 55, to: 72, colour: [124, 156, 176] },
+    { from: 72, to: 90, colour: [226, 234, 240] }, // the Arctic ice
+  ],
   mercury: [
     { from: -90, to: -45, colour: [139, 129, 119] },
     { from: -45, to: 45, colour: [162, 149, 138] },

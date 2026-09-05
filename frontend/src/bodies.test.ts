@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { BODIES, EARTH, bodyFor, isLandable, showsEarthLayers } from './bodies';
 import {
   IMAGERY_NEAR,
+  globeLayerIds,
   NOT_ABOUT_EARTH,
   cartographyLayerIds,
   maxZoomFor,
@@ -233,5 +234,26 @@ describe('the tiles and how far in the camera may go', () => {
     for (const id of ['mercury', 'moon', 'mars'] as const) {
       expect(bodyFor(id).surface!.attribution).toContain('OpenPlanetaryMap');
     }
+  });
+});
+
+describe('handing the view over to the solar system', () => {
+  it('hides everything that paints the globe', () => {
+    const ids = globeLayerIds(style, CUSTOM_LAYERS);
+    for (const id of ['orbital-imagery-far', 'orbital-imagery-near', 'water', 'road']) {
+      expect(ids, id).toContain(id);
+    }
+  });
+
+  it('includes the aircraft, which are what the globe looked like', () => {
+    // Two thousand icons at that zoom cluster into a speckled disc the size of
+    // the globe. Leaving them on leaves something that reads as a full-size
+    // planet however thoroughly the ground beneath it is switched off (D139).
+    expect(globeLayerIds(style, CUSTOM_LAYERS)).toContain('orbital-aircraft');
+    expect(globeLayerIds(style, CUSTOM_LAYERS)).toContain('orbital-satellite-shell');
+  });
+
+  it('never hides the solar system, which is what the view hands over to', () => {
+    expect(globeLayerIds(style, CUSTOM_LAYERS)).not.toContain('orbital-solar-system');
   });
 });

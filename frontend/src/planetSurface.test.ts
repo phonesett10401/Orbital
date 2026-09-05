@@ -145,3 +145,22 @@ describe('the texture the sphere samples', () => {
     expect(luminance(at(12))).toBeLessThan(luminance(at(0)));
   });
 });
+
+describe('Earth, which is now drawn as a body like the others', () => {
+  it('is mostly blue, because it mostly is', () => {
+    const [r, , b] = surfaceColour('earth', 0);
+    expect(b).toBeGreaterThan(r * 1.5);
+  });
+
+  it('is white at both poles', () => {
+    const bright = ([r, g, b]: [number, number, number]) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    expect(bright(surfaceColour('earth', 85))).toBeGreaterThan(bright(surfaceColour('earth', 0)) * 1.8);
+    expect(bright(surfaceColour('earth', -85))).toBeGreaterThan(bright(surfaceColour('earth', 0)) * 1.8);
+  });
+
+  it('has a profile at all, so it is not drawn as a grey ball', () => {
+    // Without one it falls back to the default grey, which is what the world
+    // under the camera looked like the first time it was drawn as a body.
+    expect(hasSurface('earth')).toBe(true);
+  });
+});
