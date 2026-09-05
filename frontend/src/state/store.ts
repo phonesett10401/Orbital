@@ -16,6 +16,7 @@
  */
 
 import { create } from 'zustand';
+import { withBestFix } from '../trackFix';
 import type { MoonSatellite } from '../moonSatellites';
 
 import type {
@@ -252,6 +253,26 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   setSelectedDetail(detail) {
     // Ignore a response that arrived after the user moved on.
     if (detail && detail.id !== get().selectedId) return;
+
+    // **The track can know more than the feed does.** It comes from the
+    // provider's own flight history rather than our budgeted poll, so it is
+    // routinely fresher - and once the feed's report ages past two minutes the
+    // marker stops dead-reckoning while the line keeps growing, leaving the
+    // aeroplane behind the end of its own track. Measured at 77 seconds and
+    // about twenty kilometres. The freshest observation wins (D138).
+    const objects = get().objects;
+    const current = detail ? objects.get(detail.id) : undefined;
+    const improved = current ? withBestFix(current, detail?.track, Date.now()) : current;
+    if (current && improved && improved !== current) {
+      const next = new Map(objects);
+      next.set(detail!.id, improved);
+      set({
+        selectedDetail: detail,
+        objects: next,
+        objectsVersion: get().objectsVersion + 1,
+      });
+      return;
+    }
     set({ selectedDetail: detail });
   },
 
@@ -285,6 +306,20 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
 
     for (const object of response.objects) {
       next.set(object.id, toRenderable(object, previous.get(object.id), nowMs));
+    }
+
+    // **Re-applied on every snapshot, not just when the detail lands.** The
+    // feed rebuilds this map every poll, so a fix adopted once was overwritten
+    // ten seconds later and the marker fell back behind its own track -
+    // measured doing exactly that before this line existed (D138).
+    const selected = get().selectedId;
+    const track = get().selectedDetail?.track;
+    if (selected && track) {
+      const current = next.get(selected);
+      if (current) {
+        const improved = withBestFix(current, track, nowMs);
+        if (improved !== current) next.set(selected, improved);
+      }
     }
 
     set({

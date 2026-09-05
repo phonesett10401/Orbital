@@ -7484,3 +7484,84 @@ Two faults found by looking, both invisible to the type checker:
 2. The line was refreshed on camera movement only, so between thirty-second
    polls it pointed at where the spacecraft had been - **measured at 77 pixels
    adrift**. It now refreshes when the positions do; measured after at 0.
+
+## D138 - The aeroplane behind its own track: two clocks, not one bug
+
+Phone has reported this for a long time and asked for it to be taken slowly:
+the marker sits behind the end of the line it is drawing.
+
+`interpolate.ts` already carries a note about this exact symptom - defect #21,
+fixed in D71 by making the dead-reckoning cut-off and the "stale" threshold the
+same number. That fix was right and this is a different cause underneath it.
+
+### The measurement
+
+One selected aircraft, read out of the running app:
+
+| | age |
+|---|---|
+| feed's last report, which the marker uses | **128 s** |
+| newest point on the same aircraft's track | **51 s** |
+
+77 seconds apart, and at 268 m/s that is about **twenty kilometres** of line in
+front of a stationary aeroplane.
+
+### Why the two disagree
+
+They are not the same source. The marker's position comes from Orbital's object
+feed, polled on the OpenSky credit budget (D21). The track comes from the
+**provider's own flight history**, fetched when the panel opens (D77), which is
+not on our budget and is routinely fresher.
+
+For most of a flight nobody notices, because the marker dead-reckons forward
+from its last report and lands roughly where the track ends. Then the report
+ages past `MAX_EXTRAPOLATION_MS` and dead reckoning **stops** - correctly, since
+two minutes of silence is not something to keep flying a marker through (D71).
+The marker parks. The track does not.
+
+So the bug only appears once the feed falls behind, which is exactly when the
+panel is saying "last reported four minutes ago" - and it was saying that above
+a line whose newest point was fifty seconds old. **Two statements about one
+aircraft that cannot both be true.**
+
+### Moving the aeroplane, not trimming the line
+
+Trimming the track back to the marker's age would make the picture agree by
+**throwing away real observations**: the newest points on that line are reports
+of where the aircraft actually was. The feed being behind is not a reason to
+pretend better data does not exist.
+
+A track point *is* a report, so the newest one wins. Both halves adopt it:
+
+- **Backend** (`flights.enrich`): when the newest track point is newer than the
+  reported position, the detail takes its position and `lastSeen` from it, and
+  says so with `positionSource: "track"` - the same treatment the derived
+  heading and speed already get (D80, D81). This is what makes the panel
+  self-consistent.
+- **Frontend** (`trackFix.ts`): the selected object adopts the fix, keeping
+  `fromLat`/`fromLon` so the correction is a **glide rather than a jump**, and
+  dead reckoning restarts from the newer fix.
+
+### Two things found by measuring rather than reasoning
+
+**The fix was being overwritten.** Applied only when the detail arrived, it
+lasted until the next poll ten seconds later, when `applySnapshot` rebuilt the
+whole map from the feed. Re-applied on every snapshot.
+
+**The rule was reading the clock.** `betterFix` called `Date.now()` internally,
+which made it untestable against a fixture whose `NOW` sits in 2027 - the store
+tests failed because the object was "from the future" and nothing could improve
+on it. The clock is a parameter now, which is what the rest of this file's
+neighbours already do.
+
+### After
+
+| | before | after |
+|---|---|---|
+| marker's fix age | 128 s | **16 s** |
+| track head age | 51 s | **16 s** |
+| bearing from track head to marker | - | **129 deg, against a heading of 129** |
+
+The two ages are now the same number, and the marker sits **exactly** along its
+own heading from the end of its track - ahead of the line, which is where an
+extrapolated position belongs.

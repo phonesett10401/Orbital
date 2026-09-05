@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 import time
 from dataclasses import dataclass
 
@@ -191,6 +192,30 @@ def _last_usable_pair(
     return None
 
 
+def _newest_point(track: tuple[TrackPoint, ...]) -> TrackPoint | None:
+    """The latest point on a track, without trusting the ordering.
+
+    Ordered oldest to newest by contract. Taking the last element on trust
+    would, for a provider that ever returned the other order, move the aircraft
+    back to where it departed from - which looks like bad data rather than an
+    assumption (D138).
+    """
+    newest: TrackPoint | None = None
+    for point in track:
+        if point.timestamp is None:
+            continue
+        if newest is None or point.timestamp > newest.timestamp:
+            newest = point
+    return newest
+
+
+def _is_newer(candidate: datetime, current: datetime | None) -> bool:
+    """Whether one instant beats another, tolerating a missing one."""
+    if current is None:
+        return True
+    return candidate > current
+
+
 def course_from_track(track: tuple[TrackPoint, ...]) -> float | None:
     """The direction of travel at the end of a track, or None."""
     pair = _last_usable_pair(track)
@@ -246,6 +271,27 @@ class FlightHistory:
             "track_source": TrackSource.PROVIDER,
             "origin": flight.origin,
         }
+
+        # **The track can be newer than the position we are reporting.** It
+        # comes from the provider's own flight history; the position comes from
+        # our poll, which runs on the OpenSky credit budget and can be minutes
+        # behind. Left alone, the panel says "last reported four minutes ago"
+        # above a line whose newest point is fifty seconds old - two statements
+        # about the same aircraft that cannot both be true, and the client
+        # freezes the marker on the older one while drawing the newer line
+        # (D138).
+        #
+        # A track point *is* a report, so the newest one wins.
+        newest = _newest_point(flight.track)
+        if newest is not None and _is_newer(newest.timestamp, detail.last_seen):
+            update["lat"] = newest.lat
+            update["lon"] = newest.lon
+            update["last_seen"] = newest.timestamp
+            meta = dict(detail.meta)
+            # Said out loud, like the derived heading and speed below: this is
+            # not the field the feed gave us.
+            meta["positionSource"] = "track"
+            update["meta"] = meta
 
         # A heading that contradicts the aircraft's own track loses to it. The
         # 777 that started this reported 12 m/s on a heading of 7 degrees while

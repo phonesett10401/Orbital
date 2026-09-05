@@ -300,3 +300,61 @@ describe('lunar spacecraft', () => {
     expect(useOrbitalStore.getState().selectedMoonId).toBe('-85');
   });
 });
+
+describe('a track fresher than the feed', () => {
+  // Against the wall clock, not the fixture's `NOW` - which sits in 2027, so
+  // an object built with it is "from the future" and nothing can improve on
+  // it. Written that way first, these tests failed for that reason alone.
+  const REAL = Date.now();
+  const stale = (id: string) =>
+    object(id, { lastSeen: new Date(REAL - 300_000).toISOString() });
+  const track = (secondsAgo: number, lat: number, lon: number) => [
+    {
+      lat,
+      lon,
+      altitude: 10_000,
+      timestamp: new Date(REAL - secondsAgo * 1000).toISOString(),
+    },
+  ];
+
+  it('moves the marker to the head of its own line', () => {
+    // The measured bug: the feed frozen minutes back while the track kept
+    // going, leaving the aeroplane behind the end of its own track (D138).
+    const store = useOrbitalStore.getState();
+    store.applySnapshot(response([stale('a1')]), REAL);
+    store.select('a1');
+    store.setSelectedDetail({ id: 'a1', track: track(30, 51.5, -0.2) } as never);
+    const moved = useOrbitalStore.getState().objects.get('a1');
+    expect(moved?.lat).toBe(51.5);
+    expect(moved?.lon).toBe(-0.2);
+  });
+
+  it('survives the next poll, which rebuilds the whole map', () => {
+    // A fix adopted once was overwritten ten seconds later and the marker fell
+    // back behind its track. This is the line that keeps it.
+    const store = useOrbitalStore.getState();
+    store.applySnapshot(response([stale('a1')]), REAL);
+    store.select('a1');
+    store.setSelectedDetail({ id: 'a1', track: track(30, 51.5, -0.2) } as never);
+    store.applySnapshot(response([stale('a1')]), REAL + 10_000);
+    expect(useOrbitalStore.getState().objects.get('a1')?.lat).toBe(51.5);
+  });
+
+  it('leaves an unselected aircraft alone', () => {
+    const store = useOrbitalStore.getState();
+    store.applySnapshot(response([stale('a1'), stale('a2')]), REAL);
+    store.select('a1');
+    store.setSelectedDetail({ id: 'a1', track: track(30, 51.5, -0.2) } as never);
+    expect(useOrbitalStore.getState().objects.get('a2')?.lat).toBe(10);
+  });
+
+  it('does nothing when the feed is already ahead of the track', () => {
+    // The common case. If this ever starts moving markers, every aircraft on
+    // screen acquires a wobble once per detail poll.
+    const store = useOrbitalStore.getState();
+    store.applySnapshot(response([object('a1')]), NOW);
+    store.select('a1');
+    store.setSelectedDetail({ id: 'a1', track: track(30, 51.5, -0.2) } as never);
+    expect(useOrbitalStore.getState().objects.get('a1')?.lat).toBe(10);
+  });
+});

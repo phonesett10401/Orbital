@@ -506,3 +506,59 @@ class TestCleanTrack:
         )
         enriched = await FlightHistory(provider).enrich(detail_with(heading=90.0))
         assert enriched.origin is not None and enriched.origin.icao == "YSSY"
+
+
+class TestTheNewestPositionWins:
+    """The track can be newer than the position the feed gave us (D138).
+
+    Measured in the running app: the feed's last report 128 seconds old and
+    frozen, the newest point on the same aircraft's track 51 seconds old and
+    about twenty kilometres further on. The panel said "last reported four
+    minutes ago" above a line whose newest point was under a minute old, and
+    the client drew the aeroplane behind the end of its own track.
+    """
+
+    @pytest.mark.anyio
+    async def test_adopts_a_track_point_newer_than_the_report(self) -> None:
+        # The track runs two minutes past the reported position.
+        track = (point(1.0, 2.0, offset=0), point(5.0, 6.0, offset=120))
+        history = FlightHistory(StubProvider(track))
+        enriched = await history.enrich(detail())
+        assert (enriched.lat, enriched.lon) == (5.0, 6.0)
+        assert enriched.last_seen == NOW + timedelta(seconds=120)
+
+    @pytest.mark.anyio
+    async def test_says_the_position_did_not_come_from_the_feed(self) -> None:
+        # Said out loud, like the derived heading and speed: every other number
+        # in the panel is the source's own, and one that is not must be
+        # identifiable.
+        track = (point(1.0, 2.0, offset=0), point(5.0, 6.0, offset=120))
+        enriched = await FlightHistory(StubProvider(track)).enrich(detail())
+        assert enriched.meta["positionSource"] == "track"
+        # And it does not clobber what the provider already reported.
+        assert enriched.meta["originCountry"] == "Testland"
+
+    @pytest.mark.anyio
+    async def test_leaves_the_position_alone_when_the_feed_is_ahead(self) -> None:
+        # The common case, and the one that must change nothing: a track whose
+        # newest point is older than the report we already have.
+        track = (point(9.0, 9.0, offset=-300), point(8.0, 8.0, offset=-60))
+        enriched = await FlightHistory(StubProvider(track)).enrich(detail())
+        assert (enriched.lat, enriched.lon) == (1.0, 2.0)
+        assert enriched.last_seen == NOW
+        assert "positionSource" not in enriched.meta
+
+    @pytest.mark.anyio
+    async def test_does_not_trust_the_track_ordering(self) -> None:
+        # A provider returning a track newest-first would otherwise move the
+        # aircraft back to where it departed from - which reads as bad data
+        # rather than as an assumption about ordering.
+        track = (point(5.0, 6.0, offset=120), point(1.0, 2.0, offset=0))
+        enriched = await FlightHistory(StubProvider(track)).enrich(detail())
+        assert (enriched.lat, enriched.lon) == (5.0, 6.0)
+
+    @pytest.mark.anyio
+    async def test_a_missing_track_changes_nothing(self) -> None:
+        enriched = await FlightHistory(StubProvider(None)).enrich(detail())
+        assert (enriched.lat, enriched.lon) == (1.0, 2.0)
+        assert enriched.last_seen == NOW
