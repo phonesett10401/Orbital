@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api import aircraft, health, search
+from app.api import aircraft, health, moon, search
 from app.api import satellites as satellites_api
 from app.config import Settings, get_settings
 from app.ingestion.poller import Poller
@@ -24,10 +24,37 @@ from app.ingestion.flightroutes import FlightRoutes
 from app.ingestion.store import ObjectStore
 from app.logging_config import configure_logging
 from app.providers import registry
+from app.providers.lunar import LunarTracker
 from app.providers.satellites import SatelliteProvider
 from app.providers.base import Provider
 
 logger = logging.getLogger(__name__)
+
+
+async def _refresh_lunar(tracker: LunarTracker) -> None:
+    """Keep the lunar ephemeris windows ahead of the clock.
+
+    Hourly, which is far more often than a six-hour window strictly needs -
+    cheap insurance, because a refresh that finds nothing to do makes no
+    request at all. Failures are logged and retried: a window already held
+    stays usable for hours, so losing one refresh is not losing the layer.
+    """
+    while True:
+        try:
+            refreshed = await tracker.refresh()
+            if refreshed:
+                logger.info(
+                    "lunar ephemeris refreshed: %d of %d spacecraft",
+                    refreshed,
+                    len(tracker.craft),
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "lunar ephemeris refresh failed, keeping what we have: %s", exc
+            )
+        await asyncio.sleep(3600)
 
 
 async def _refresh_elements(provider: "SatelliteProvider", interval: float) -> None:
@@ -104,6 +131,13 @@ def create_app(
                 cache_path=settings.satellite_element_cache_path,
             )
 
+        # Three spacecraft around the Moon, from JPL Horizons. A background
+        # refresh for the same reason the elements have one: no route may wait
+        # on an upstream (D134).
+        lunar = LunarTracker() if settings.lunar_layer_enabled else None
+        lunar_task: asyncio.Task | None = None
+
+        app.state.lunar = lunar
         app.state.satellites = satellites
         app.state.settings = settings
         app.state.store = store
@@ -116,6 +150,8 @@ def create_app(
             satellite_task = asyncio.create_task(
                 _refresh_elements(satellites, settings.satellite_element_refresh_seconds)
             )
+        if lunar is not None:
+            lunar_task = asyncio.create_task(_refresh_lunar(lunar))
         logger.info(
             "Orbital ready: provider=%s preset=%s satellites=%s",
             active_provider.name,
@@ -130,6 +166,12 @@ def create_app(
                 satellite_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await satellite_task
+            if lunar_task is not None:
+                lunar_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await lunar_task
+            if lunar is not None:
+                await lunar.aclose()
             if satellites is not None:
                 await satellites.aclose()
             await route_lookup.aclose()
@@ -164,6 +206,7 @@ def create_app(
     # and 0.4 MB per minute (D38).
     app.add_middleware(GZipMiddleware, minimum_size=settings.gzip_min_bytes)
 
+    app.include_router(moon.router)
     app.include_router(aircraft.router)
     app.include_router(satellites_api.router)
     app.include_router(health.router)

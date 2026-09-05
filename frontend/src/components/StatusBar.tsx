@@ -28,6 +28,7 @@ function formatAge(seconds: number | null): string {
 export function StatusBar() {
   const viewInstant = useOrbitalStore((s) => s.viewInstant);
   const activeBody = useOrbitalStore((s) => s.activeBody);
+  const moonCraft = useOrbitalStore((s) => s.moonCraft);
   const activeLayer = useOrbitalStore((s) => s.activeLayer);
   const feed = useOrbitalStore((s) => s.feed);
   const count = useOrbitalStore((s) => s.objects.size);
@@ -60,7 +61,11 @@ export function StatusBar() {
         <span className="status__count">
           <strong>{body.name}</strong>
         </span>
-        <span className="status__item">surface imagery &mdash; no live objects here</span>
+        <span className="status__item">
+          {activeBody === 'moon' && moonCraft > 0
+            ? `surface imagery · ${moonCraft} spacecraft in orbit, from JPL Horizons`
+            : 'surface imagery — no live objects here'}
+        </span>
       </div>
     );
   }

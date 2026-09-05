@@ -211,6 +211,15 @@ class Settings(BaseSettings):
         ),
     )
     satellite_timeout_seconds: float = Field(default=60.0, gt=0)
+    lunar_layer_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether the three spacecraft in orbit around the Moon are tracked "
+            "from JPL Horizons. On by default because it costs one background "
+            "task and three requests every six hours, against a free service "
+            "with no quota and no credentials (D134)."
+        ),
+    )
     satellite_element_cache_path: Path = Field(
         default=Path(".cache") / "orbital-elements.json",
         description=(

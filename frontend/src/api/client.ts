@@ -18,6 +18,7 @@ import type {
   SearchResponse,
   TrackedObjectDetail,
 } from '../types';
+import type { MoonSnapshot } from '../moonSatellites';
 
 export class ApiError extends Error {
   constructor(
@@ -133,6 +134,16 @@ export function searchObjects(
 export function search(query: string, signal?: AbortSignal): Promise<SearchResponse> {
   const params = new URLSearchParams({ q: query, limit: '8' });
   return request<SearchResponse>(`/api/search?${params}`, signal);
+}
+
+/**
+ * The spacecraft in orbit around the Moon.
+ *
+ * No bounding box and no thinning: there are three of them, and every argument
+ * the aircraft endpoint carries exists to survive eleven thousand (D134).
+ */
+export function fetchMoonSatellites(signal?: AbortSignal): Promise<MoonSnapshot> {
+  return request<MoonSnapshot>('/api/moon/satellites', signal);
 }
 
 export function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {

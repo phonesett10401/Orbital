@@ -51,6 +51,9 @@ import {
 import { createSatelliteIconCanvases } from './satelliteSprite';
 import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
 import { SOLAR_LAYER, createSolarSystemLayer, type SolarLayer } from './solarSystemLayer';
+import { MOON_SOURCE, moonSatelliteLayers, moonSource } from './moonLayer';
+import { toFeatures as moonFeatures } from '../moonSatellites';
+import { fetchMoonSatellites } from '../api/client';
 import {
   SATELLITE_LABEL_LAYER,
   SATELLITE_LAYER,
@@ -164,6 +167,51 @@ const VIEWPORT_UPDATE_MS = 500;
  * imagery toggle. The style stays; the tiles and the visibilities change
  * (D120).
  */
+/**
+ * Poll the lunar spacecraft while the Moon is the world below.
+ *
+ * Thirty seconds, against a backend that answers from a six-hour window held
+ * in memory - so this costs one local request and no upstream call at all. The
+ * positions move about half a degree of ground track a minute, which at the
+ * zoom a lunar map is read at is a fraction of the marker.
+ *
+ * A failure leaves the last positions on the map rather than clearing them: an
+ * empty Moon and an unreachable backend look identical, and of the two the
+ * last known position is the more useful lie to avoid telling (D134).
+ */
+function startMoonPoll(map: import('maplibre-gl').Map): { stop: () => void } {
+  let stopped = false;
+  const controller = new AbortController();
+
+  const draw = async () => {
+    try {
+      const snapshot = await fetchMoonSatellites(controller.signal);
+      if (stopped) return;
+      const features = moonFeatures(snapshot.objects ?? []);
+      const source = map.getSource(MOON_SOURCE);
+      if (source && 'setData' in source) {
+        (source as { setData: (data: unknown) => void }).setData(features);
+      }
+      // The count the status bar reports is the number actually drawable, not
+      // the number of spacecraft that exist: a craft whose ephemeris window
+      // has run out is absent, and the footer should say so by counting.
+      useOrbitalStore.getState().setMoonCraft(features.features.length);
+    } catch {
+      // Keep what is drawn. See the note above.
+    }
+  };
+
+  void draw();
+  const timer = window.setInterval(draw, 30_000);
+  return {
+    stop: () => {
+      stopped = true;
+      controller.abort();
+      window.clearInterval(timer);
+    },
+  };
+}
+
 function applyBody(map: import('maplibre-gl').Map, bodyId: string): void {
   const body = bodyFor(bodyId as never);
   const style = map.getStyle();
@@ -250,6 +298,7 @@ export function PlanetView() {
     let shell: ShellLayer | null = null;
     let solar: SolarLayer | null = null;
     let terminator: ReturnType<typeof createTerminatorLayer> | null = null;
+    let moonPoll: { stop: () => void } | null = null;
     let cleanUpResize: (() => void) | null = null;
     let frame = 0;
     let stallTimer = 0;
@@ -476,6 +525,13 @@ export function PlanetView() {
           });
           for (const layer of satelliteLayers()) map.addLayer(layer);
 
+          // The three spacecraft in orbit around the Moon. Added here with
+          // everything else rather than on arrival, because adding layers
+          // during a body swap is what D120 went to some trouble to avoid;
+          // they simply stay hidden until the Moon is the world below (D134).
+          map.addSource(MOON_SOURCE, moonSource());
+          for (const layer of moonSatelliteLayers()) map.addLayer(layer);
+
           // The selected aircraft, as a mesh in MapLibre's own context (D67).
           // It reads the store itself, once per frame, rather than being told:
           // the aircraft is moving between polls and the symbol it replaces is
@@ -699,6 +755,13 @@ export function PlanetView() {
 
           if (state.activeBody !== previous.activeBody && map) {
             applyBody(map, state.activeBody);
+            // Lunar spacecraft are polled only while the Moon is underneath.
+            // Three objects and a six-hour window behind them, so a slow
+            // cadence is not a compromise - the backend is reading from memory
+            // and the positions move about half a degree a minute (D134).
+            moonPoll?.stop();
+            moonPoll = state.activeBody === 'moon' ? startMoonPoll(map) : null;
+            if (state.activeBody !== 'moon') useOrbitalStore.getState().setMoonCraft(0);
             // The terminator is a custom layer outside the style, so its
             // visibility is not in the plan `applyBody` applies. Night is an
             // Earth fact here - the texture is Earth's city lights.

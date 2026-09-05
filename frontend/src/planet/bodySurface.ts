@@ -49,6 +49,26 @@ export const OWN_LAYER_PREFIX = 'orbital-';
  * genuinely body-agnostic one needs a line here - which is the direction the
  * mistake should point.
  */
+/**
+ * Layers that belong to a body other than Earth.
+ *
+ * D133 made every `orbital-` layer Earth's unless excepted, which was right
+ * until something was drawn about somewhere else. The lunar spacecraft are not
+ * body-agnostic and they are not Earth's: they belong to the Moon, and they
+ * should be **on there and nowhere else** - including not over Mars, which is
+ * the same mistake D133 fixed, one body along (D134).
+ */
+export const LAYER_HOME_BODY: Record<string, string> = {
+  'orbital-moon-satellites': 'moon',
+  'orbital-moon-satellites-halo': 'moon',
+  'orbital-moon-satellites-label': 'moon',
+};
+
+/** Which world a layer is a statement about. Earth unless stated otherwise. */
+export function homeBodyOf(layerId: string): string {
+  return LAYER_HOME_BODY[layerId] ?? 'earth';
+}
+
 export const NOT_ABOUT_EARTH = new Set<string>([
   'orbital-imagery-far',
   'orbital-imagery-near',
@@ -113,8 +133,9 @@ export function visibilityFor(
   for (const id of cartographyLayerIds(style)) {
     plan[id] = onEarth ? 'visible' : 'none';
   }
+  // Each of Orbital's own layers is shown on the one world it describes.
   for (const id of ownLayerIds(style, customLayerIds)) {
-    plan[id] = onEarth ? 'visible' : 'none';
+    plan[id] = homeBodyOf(id) === body.id ? 'visible' : 'none';
   }
 
   // Earth has two imagery tiers that cross-fade; every other world has one

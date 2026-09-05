@@ -7223,3 +7223,86 @@ assumed, since the instrument lied twice on the way there: the resource-timing
 buffer reported zero requests because it caps at 250 entries, and a patched
 `window.fetch` counted zero on Earth too, where polling was demonstrably
 happening.
+
+## D134 - Spacecraft around the Moon, which needed a third kind of data path
+
+Phone asked for satellites on the Moon "if there are ones". There are, and
+getting them required a path unlike either of the two this project already had.
+
+### Why neither existing path works
+
+Aircraft come from a feed that answers "where is everything now" and costs
+money per question. Satellites come from orbital elements propagated locally by
+SGP4, which costs nothing and works for days.
+
+**A lunar orbiter can do neither.** There are no TLEs for these craft, and
+there cannot be: the format and SGP4 itself are Earth-orbit only, and a TLE has
+nowhere to name a different central body. No amount of local propagation
+produces a lunar orbit. What exists instead is an ephemeris - a table of where
+the spacecraft *will be*, published by the people flying it.
+
+So this fetches a six-hour window and reads positions out of it. Between
+refreshes it needs nothing, and JPL being down is not an outage until the
+window runs out. That is the satellite layer's best property, arrived at from
+the opposite direction.
+
+### What is actually up there, checked rather than listed
+
+Verified against Horizons on 2026-09-05, because this is a question with a
+moving answer:
+
+| spacecraft | Horizons id | altitude |
+|---|---|---|
+| LRO | -85 | 105 km |
+| Danuri (KPLO) | -155 | 161 km |
+| Chandrayaan-2 Orbiter | -152 | 106 km |
+
+**Two were excluded by measurement, and that is the part worth keeping.**
+CAPSTONE answers "No ephemeris for center after A.D. 2026-AUG-14" - its
+published ephemeris stops three weeks before today, so drawing it would be
+inventing a position for a spacecraft nobody is currently publishing one for.
+ARTEMIS P1 and P2 cannot be used as an observer centre at all: Horizons wants a
+station file it does not have. A list copied from an encyclopedia would have
+shown five.
+
+### Asking the question backwards, so Horizons does the frame work
+
+The app needs **selenographic** latitude and longitude. Asking for the
+spacecraft's position as a vector gives an inertial frame, and converting that
+to the Moon's body-fixed one means implementing lunar rotation *and* libration
+- serious work, easy to get subtly wrong, and impossible to check by eye.
+
+Horizons will do it, if the question is inverted: ask for **the Moon as seen
+from the spacecraft**, quantity 14, and the answer is the sub-observer point -
+the place on the Moon directly beneath the craft, body-fixed, libration
+included. Quantity 20 gives the range, and the altitude is that minus the
+Moon's radius. The frame problem is solved by changing who is observing whom.
+
+The parser is tested against a **real captured response**, not a handwritten
+one: Horizons' header is long, changes between releases, and carries the
+numbers in a shape nobody would invent correctly from memory.
+
+### Breaking it to check the tests
+
+Three deliberate breaks. Removing the shortest-arc wrap failed two tests, as
+intended. Dropping the Moon's radius from the altitude appeared to fail
+nothing - which was **the harness, not the tests**: the `sed` pattern did not
+match the real indentation, so the code was never modified. Applied properly,
+with the substitution asserted first, it failed the altitude test. That is the
+third time this project has been misled by a break-test that did not run, and
+the second time in this file's history that an assertion on the edit itself was
+what caught it.
+
+### The layer belongs to a body, not to Earth or to everywhere
+
+D133 had just made every `orbital-` layer Earth's unless excepted. These are
+neither Earth's nor body-agnostic, so a plain exception would have drawn lunar
+spacecraft over **Mars** - D133's own bug, one body along. `homeBodyOf` gives
+each layer the world it describes, and the test asserts all three cases: shown
+on the Moon, hidden on Mars, hidden on Earth.
+
+The status bar's "surface imagery - no live objects here" became false the
+moment the Moon had objects, which is the D120 fault again in the one line a
+reader checks to find out what they are looking at. It now counts what is
+actually drawable, so a spacecraft whose window has run out is reflected in the
+number rather than silently missing from it.

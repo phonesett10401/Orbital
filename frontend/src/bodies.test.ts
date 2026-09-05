@@ -132,6 +132,31 @@ describe('what is drawn when the camera leaves Earth', () => {
     expect(visibilityFor(bodyFor('mars'), withNewLayer)['orbital-something-new']).toBe('none');
   });
 
+  it('draws the lunar spacecraft on the Moon and on no other world', () => {
+    // D133 one body along: these are not Earth's and not body-agnostic, so
+    // "everything orbital- is Earth's" would have hidden them everywhere,
+    // and a plain exception would have drawn them over Mars (D134).
+    const withMoon = {
+      layers: [
+        ...style.layers,
+        { id: 'orbital-moon-satellites', type: 'circle', source: 'x' },
+        { id: 'orbital-moon-satellites-label', type: 'symbol', source: 'x' },
+      ],
+    };
+    for (const id of ['orbital-moon-satellites', 'orbital-moon-satellites-label']) {
+      expect(visibilityFor(bodyFor('moon'), withMoon)[id], `moon ${id}`).toBe('visible');
+      expect(visibilityFor(bodyFor('mars'), withMoon)[id], `mars ${id}`).toBe('none');
+      expect(visibilityFor(EARTH, withMoon)[id], `earth ${id}`).toBe('none');
+    }
+  });
+
+  it('still hides Earth layers on the Moon', () => {
+    // The Moon getting layers of its own must not make it a second Earth.
+    const plan = visibilityFor(bodyFor('moon'), style, CUSTOM_LAYERS);
+    expect(plan['orbital-aircraft']).toBe('none');
+    expect(plan['orbital-satellite-shell']).toBe('none');
+  });
+
   it('keeps the solar system on, because it is how you see where you went', () => {
     const plan = visibilityFor(bodyFor('mars'), style, CUSTOM_LAYERS);
     expect(plan['orbital-solar-system']).toBeUndefined();

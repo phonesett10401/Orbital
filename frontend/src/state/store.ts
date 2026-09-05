@@ -136,6 +136,18 @@ export interface OrbitalState {
   setActiveBody(body: BodyId): void;
 
   /**
+   * How many spacecraft are currently tracked around the Moon.
+   *
+   * Here rather than only on the map because the status bar has to say it, and
+   * the line it replaces - "no live objects here" - became false the moment
+   * the Moon got objects. That is the D120 fault exactly, one body along:
+   * chrome describing the wrong subject in the one line a reader checks
+   * (D134).
+   */
+  moonCraft: number;
+  setMoonCraft(count: number): void;
+
+  /**
    * Where the camera is heading, while a trip is in progress.
    *
    * Held so the solar system layer can brighten the destination on the way
@@ -274,6 +286,10 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   },
 
   activeBody: 'earth',
+  moonCraft: 0,
+  setMoonCraft(count) {
+    if (useOrbitalStore.getState().moonCraft !== count) set({ moonCraft: count });
+  },
   setActiveBody(body) {
     // Changing world clears everything held, for the same reason changing
     // layer does: the objects describe Earth and nothing about them survives
