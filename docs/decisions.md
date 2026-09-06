@@ -7837,3 +7837,34 @@ the picture. Everything else is a visibility switch, which cannot fade.
 Measured after: at -0.1 the globe alone with its traffic and `not drawn - zoom
 -0.1 past -1`; at -1.15 the globe gone and the planets at 0.30; at -1.7 the full
 system with no globe and no halo.
+
+## D145 - The atmosphere is off, and what was left is the photograph
+
+Phone: *"the sun light should not apply when we zoom into our earth and left the
+sun system view."*
+
+Two things were producing light on the globe, and only one of them is ours.
+
+**Ours:** MapLibre's globe atmosphere. D141 faded it with the globe and kept it
+at close zoom, arguing that the soft edge is what makes a globe look like a
+planet. That was my aesthetic judgement, Phone has now seen both, and it is
+their call. It is off at every zoom - a flat 0 rather than a zoom expression,
+which also deletes a pair of constants that had to stay in step with the solar
+layer. The halo can no longer outlive the globe by drifting, which was the whole
+of D141.
+
+**Not ours:** a warm rim along the limb, brightest where Australia or Greenland
+meets the edge of the sphere. That is **land in the NASA imagery** catching the
+limb, and it is still there with the sky removed from the style entirely -
+checked by rotating the globe, where it follows the land rather than the edge.
+Recorded so nobody hunts it a second time.
+
+### Three wrong candidates, each eliminated by a measurement
+
+- **The sky.** Setting every sky property to black left the rim untouched.
+- **The 3D layers.** Hiding the satellite shell, the terminator and the aircraft
+  left it untouched.
+- **A day/night effect.** The globe looked half-dark centred on the Pacific and
+  half-lit centred on Africa, which reads as a terminator and is not one: the
+  Pacific is ocean, and ocean is dark in this imagery. Rotating rather than
+  staring is what separated those two explanations.

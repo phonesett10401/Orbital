@@ -66,18 +66,22 @@ export const SOLAR_HANDOVER_FULL = -1.0;
 export const SOLAR_HANDOVER_START = -0.7;
 
 /**
- * MapLibre's own atmosphere around the globe.
+ * MapLibre's own atmosphere around the globe. **Off.**
  *
- * 0.8 is the library's default, and close in it is worth having - it is the
- * soft edge that makes the globe look like a planet rather than a circle.
+ * 0.8 is the library's default and D141 kept it at close zoom, on the argument
+ * that a soft edge makes the globe look like a planet rather than a circle.
+ * Phone asked for the opposite - *"the sun light should not apply when we zoom
+ * into our earth"* - and having seen both, that is the call that counts (D145).
  *
- * **It has to go when the globe does.** D139 switches off every layer that
- * paints the world you are standing on, but the atmosphere is not a layer: it
- * belongs to the projection, so it survived, and what was left was a faint dark
- * disc hanging in space exactly where the Earth had been - a halo around
- * nothing (D141).
+ * It also removes a zoom expression and a pair of constants that had to agree
+ * with the solar layer, so the halo can no longer outlive the globe by drifting
+ * out of step with it. That was the whole of D141.
+ *
+ * The warm rim that remains at the limb is **not this**: it is land catching
+ * the edge of the sphere in the NASA imagery, and it is present with the sky
+ * removed entirely. Checked, so nobody hunts it again.
  */
-export const ATMOSPHERE_BLEND = 0.8;
+export const ATMOSPHERE_BLEND = 0;
 
 export const IMAGERY_CROSSFADE_START = 5;
 export const IMAGERY_CROSSFADE_END = 7;
@@ -589,18 +593,8 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
 
   return {
     ...style,
-    // The globe's halo fades out with the globe. See `ATMOSPHERE_BLEND`.
-    sky: {
-      'atmosphere-blend': [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        SOLAR_HANDOVER_FULL,
-        0,
-        SOLAR_HANDOVER_START,
-        ATMOSPHERE_BLEND,
-      ],
-    },
+    // No atmosphere at any zoom. See `ATMOSPHERE_BLEND`.
+    sky: { 'atmosphere-blend': ATMOSPHERE_BLEND },
     projection: { type: 'globe' },
     sources: {
       ...style.sources,

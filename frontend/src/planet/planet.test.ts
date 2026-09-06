@@ -1265,25 +1265,13 @@ describe('our own layers pass the validator too', () => {
 describe('the globe halo', () => {
   const style = withImagery(bareStyle);
 
-  it('fades out exactly where the globe hands over', () => {
-    // The atmosphere belongs to the projection rather than to a layer, so
-    // D139's handover - which switches off every layer painting the world you
-    // are on - could not touch it. What was left was a faint disc hanging in
-    // space where the Earth had been: a halo around nothing (D141).
-    const blend = (style as { sky?: { 'atmosphere-blend'?: unknown } }).sky?.[
-      'atmosphere-blend'
-    ] as unknown[];
-    expect(blend[0]).toBe('interpolate');
-    expect(blend[2]).toEqual(['zoom']);
-    expect(blend[3]).toBe(SOLAR_HANDOVER_FULL);
-    expect(blend[4]).toBe(0);
-    expect(blend[6]).toBe(ATMOSPHERE_BLEND);
-  });
-
-  it('keeps the atmosphere close in, where it is worth having', () => {
-    // It is the soft edge that makes the globe look like a planet rather than
-    // a circle. Only the far end of the range loses it.
-    expect(ATMOSPHERE_BLEND).toBeGreaterThan(0.5);
+  it('is off at every zoom', () => {
+    // D141 faded it with the globe; Phone asked for it gone entirely, having
+    // seen both. A flat value rather than a zoom expression, so it cannot drift
+    // out of step with the handover the way the faded version could (D145).
+    const sky = (style as { sky?: Record<string, unknown> }).sky;
+    expect(sky?.['atmosphere-blend']).toBe(0);
+    expect(ATMOSPHERE_BLEND).toBe(0);
   });
 
   it('hands over at the same zoom the solar layer starts drawing', () => {
@@ -1294,14 +1282,11 @@ describe('the globe halo', () => {
   });
 
   it('dissolves the globe just before the handover rather than long before', () => {
-    // Close above it, so the transition is a dissolve and not a long stretch
-    // of half-transparent Earth.
     expect(SOLAR_HANDOVER_START).toBeGreaterThan(SOLAR_HANDOVER_FULL);
     expect(SOLAR_HANDOVER_START - SOLAR_HANDOVER_FULL).toBeLessThan(0.5);
   });
 
   it('fades the planets in below the handover, not above it', () => {
-    // The globe is gone by the time anything else is drawn.
     expect(SOLAR_FULL_ZOOM).toBeLessThan(SOLAR_MAX_ZOOM);
   });
 });
