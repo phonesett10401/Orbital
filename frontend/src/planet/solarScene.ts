@@ -45,7 +45,7 @@ import { orbitRing, scenePlacements, type ScenePlacement } from '../solarFrame';
 import { onScreen, project } from '../solarMarkers';
 import { drawnBodyRadius } from '../solarScale';
 import { FAINTEST_MAGNITUDE, STARS, starColour, starDirection } from '../stars';
-import { COLOURS, type BodyMarker } from './solarSystemLayer';
+import { COLOURS, homeBodies, type BodyMarker } from './solarBodies';
 
 /**
  * Where the stars sit, in globe radii.
@@ -266,15 +266,14 @@ export function createSolarScene(canvas: HTMLCanvasElement): SolarScene {
         buildOrbits(date, origin);
       }
 
-      const placements: ScenePlacement[] = scenePlacements(date, origin);
       // The world underfoot is one of the bodies here, drawn at its own scale
-      // rather than as the globe MapLibre kept at radius 1 (D137). It is the
-      // origin, so it sits at the centre.
-      placements.push({
-        id: standingOn,
-        at: [0, 0, 0],
-        distanceAu: 0,
-      } as ScenePlacement);
+      // rather than as a globe kept at radius 1 whatever the zoom (D137) - and
+      // with its companion beside it, because the Earth and the Moon cannot be
+      // told apart at this compression (D140).
+      const placements: ScenePlacement[] = [
+        ...scenePlacements(date, origin),
+        ...homeBodies(standingOn),
+      ];
 
       const sun = placements.find((p) => p.id === 'sun');
       if (sun) sunlight.position.set(sun.at[0], sun.at[1], sun.at[2]);

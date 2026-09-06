@@ -39,51 +39,10 @@
 
 import catalogue from './fixtures/stars.json';
 
-/**
- * Where in the gap the sky is hung, as a fraction of it.
- *
- * The gap is narrow - see `skyRadius` - so this is a half rather than a value
- * close to either end, which keeps the sky clear of the globe's limb at one
- * side and of the far plane at the other.
- */
-export const SKY_GAP_FRACTION = 0.5;
 
 /** Dimmest star kept. Six is what an unaided eye reaches on a good night. */
 export const FAINTEST_MAGNITUDE = 6.0;
 
-/**
- * The radius to draw the sky at, or null when there is no room for one.
- *
- * ## The far plane is the back of the globe
- *
- * Measured, not assumed: MapLibre's globe projection puts the far plane exactly
- * one globe radius past the centre, at every zoom. The readout gives `cam 68r
- * near 0.02 far 69` at zoom -1.8 and `cam 20r far 21` at zoom 0 - so the space
- * behind the Earth is not merely small, it does not exist (D129).
- *
- * ## Which is enough, because of where a sphere's near side is
- *
- * A backdrop does not have to be behind the Earth's *centre*; it has to be
- * behind the part of the Earth you can see. For a unit sphere with the camera
- * `d` away, the visible surface runs from `d - 1` at the middle of the disc to
- * `sqrt(d^2 - 1)` at the limb - always **less than `d`**. So any radius between
- * `d` and the far plane is occluded by the whole visible globe and still drawn,
- * and the measured gap of one radius is exactly that window.
- *
- * Null when the window is empty, which is the honest answer rather than a sky
- * painted across the planet.
- */
-export function skyRadius(
-  near: number,
-  far: number,
-  cameraToOrigin: number,
-): number | null {
-  if (!Number.isFinite(far) || !Number.isFinite(cameraToOrigin)) return null;
-  if (far <= cameraToOrigin) return null;
-  const radius = cameraToOrigin + (far - cameraToOrigin) * SKY_GAP_FRACTION;
-  if (radius <= near) return null;
-  return radius;
-}
 
 export interface StarCatalogue {
   ra: number[];

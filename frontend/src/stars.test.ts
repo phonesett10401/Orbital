@@ -6,7 +6,6 @@ import {
   FAINTEST_MAGNITUDE,
   STARS,
   STAR_COUNT,
-  skyRadius,
   starColour,
   starDirection,
   starSize,
@@ -145,35 +144,9 @@ describe('how a star is drawn', () => {
   });
 });
 
-describe('where the sky sits', () => {
-  it('sits beyond the globe surface the camera can actually see', () => {
-    // The visible surface of a unit sphere never reaches the camera's own
-    // distance to the centre, so this is the condition for the Earth to occlude
-    // the sky - and it is what the fixed radius of 9 failed (D128).
-    const radius = skyRadius(0.02, 69, 68) as number;
-    expect(radius).toBeGreaterThan(68);
-  });
+/*
+ * The block that tested `skyRadius` is gone with the function (D164): it found
+ * a sky radius that survived MapLibre's far plane, and the solar system does
+ * not borrow that camera any more.
+ */
 
-  it('stays inside the far plane, because a clipped backdrop is not one', () => {
-    // Measured: MapLibre puts the far plane one globe radius past the centre.
-    for (const [cam, far] of [[20, 21], [40, 41], [68, 69]]) {
-      const radius = skyRadius(0.02, far, cam) as number;
-      expect(radius).toBeLessThan(far);
-      expect(radius).toBeGreaterThan(cam);
-    }
-  });
-
-  it('refuses when the far plane is not past the camera distance', () => {
-    expect(skyRadius(0.02, 68, 68)).toBeNull();
-    expect(skyRadius(0.02, 60, 68)).toBeNull();
-    expect(skyRadius(0.02, Number.NaN, 68)).toBeNull();
-  });
-
-  it('tracks the camera rather than sitting at a fixed distance', () => {
-    // The fixed radius was the whole bug. If this ever stops varying with the
-    // camera, the sky has gone back to being geometry around the Earth.
-    const near = skyRadius(0.02, 21, 20) as number;
-    const far = skyRadius(0.02, 69, 68) as number;
-    expect(far).toBeGreaterThan(near * 2);
-  });
-});

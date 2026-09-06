@@ -29,7 +29,7 @@ import { bodyFor, isLandable } from '../bodies';
 import { stackLabels } from '../labelStack';
 import type { PlanetId } from '../planets';
 import { createSolarScene, type SolarScene } from '../planet/solarScene';
-import type { BodyMarker } from '../planet/solarSystemLayer';
+import type { BodyMarker } from '../planet/solarBodies';
 import {
   initialCamera,
   orbit,
@@ -54,6 +54,7 @@ export function SolarSystemPage() {
   const flyingTo = useOrbitalStore((s) => s.flyingTo);
 
   const canvas = useRef<HTMLCanvasElement | null>(null);
+  const dragState = useRef({ x: 0, y: 0, button: 0, active: false });
   const scene = useRef<SolarScene | null>(null);
   const camera = useRef<SolarCamera>(initialCamera());
   const [markers, setMarkers] = useState<BodyMarker[]>([]);
@@ -115,31 +116,35 @@ export function SolarSystemPage() {
 
   if (!open) return null;
 
-  const dragFrom = { x: 0, y: 0, button: 0, active: false };
+  // **A ref, not a local.** Declared in the render body it is rebuilt on every
+  // render, and this component re-renders whenever a body moves a pixel - so a
+  // drag would lose its own starting point somewhere between pointerdown and
+  // the next pointermove, and the scene would jump or stop following.
+  const drag = dragState.current;
 
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    dragFrom.x = event.clientX;
-    dragFrom.y = event.clientY;
-    dragFrom.button = event.button;
-    dragFrom.active = true;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    drag.button = event.button;
+    drag.active = true;
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!dragFrom.active) return;
-    const dx = event.clientX - dragFrom.x;
-    const dy = event.clientY - dragFrom.y;
-    dragFrom.x = event.clientX;
-    dragFrom.y = event.clientY;
+    if (!drag.active) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
     const height = event.currentTarget.clientHeight;
     camera.current =
-      dragFrom.button === 2
+      drag.button === 2
         ? orbit(camera.current, -dx * 0.005, -dy * 0.005)
         : pan(camera.current, dx, dy, height);
   };
 
   const endDrag = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    dragFrom.active = false;
+    drag.active = false;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }

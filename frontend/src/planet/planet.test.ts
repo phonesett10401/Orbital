@@ -58,11 +58,8 @@ import {
   whenBasemap,
   whenFlat,
   ATMOSPHERE_BLEND,
-  SOLAR_HANDOVER_FULL,
-  SOLAR_HANDOVER_START,
 } from './basemap';
 import { createBasemapControl } from './basemapControl';
-import { SOLAR_FULL_ZOOM, SOLAR_MAX_ZOOM } from './solarSystemLayer';
 import { isRenderable, unrenderableMessage, whenRenderable } from './container';
 import { readoutLines, requestCounts, tileUrlFor, vectorSourceState } from './diagnostics';
 import { boundsToBBox, coversWholeWorld, wrapLongitude } from './viewport';
@@ -232,24 +229,20 @@ describe('withImagery', () => {
 
   it('turns the imagery off in the other direction', () => {
     // The switch has to cut both ways, or flat mode is a photograph with
-    // cartography drawn twice over it. It sits inside the handover dissolve
-    // now, so the switch is the interpolate's *output* rather than the whole
-    // property - the shape the near tier has always used, because `zoom` may
-    // only be the input to a top-level expression.
+    // cartography drawn twice over it. It used to be wrapped in the handover
+    // dissolve, so this reached for the interpolate's last *output*; with the
+    // dissolve gone (D164) the switch is the whole property again.
     const far = style.layers.find((l) => l.id === 'orbital-imagery-far');
-    const opacity = asRaster(far!).paint?.['raster-opacity'] as unknown[];
-    expect(opacity[opacity.length - 1]).toEqual(whenFlat(0, 1));
+    expect(asRaster(far!).paint?.['raster-opacity']).toEqual(whenFlat(0, 1));
   });
 
-  it('dissolves the globe as the handover approaches', () => {
-    // Without this the globe cuts out in one frame while the planets fade in
-    // over the next half zoom, which reads as a glitch rather than a handover.
+  it('shows the imagery at every zoom, with nothing to hand over to', () => {
+    // This used to assert a fade to nothing at the handover, so a custom layer
+    // could draw the solar system in the space the globe left. There is no such
+    // layer: the solar system is a page with its own camera (D163, D164).
     const far = style.layers.find((l) => l.id === 'orbital-imagery-far');
-    const opacity = asRaster(far!).paint?.['raster-opacity'] as unknown[];
-    expect(opacity[0]).toBe('interpolate');
-    expect(opacity[2]).toEqual(['zoom']);
-    expect(opacity[3]).toBe(SOLAR_HANDOVER_FULL);
-    expect(opacity[4]).toBe(0);
+    const opacity = asRaster(far!).paint?.['raster-opacity'];
+    expect(JSON.stringify(opacity)).not.toContain('zoom');
   });
 
   it('crossfades the close imagery in over the far one', () => {
@@ -1274,19 +1267,9 @@ describe('the globe halo', () => {
     expect(ATMOSPHERE_BLEND).toBe(0);
   });
 
-  it('hands over at the same zoom the solar layer starts drawing', () => {
-    // **One number for one transition.** They were two, a zoom and a half
-    // apart, which left a band where a full-size globe sat among planets a
-    // twentieth of its size. If these drift again, that band comes back (D144).
-    expect(SOLAR_HANDOVER_FULL).toBe(SOLAR_MAX_ZOOM);
-  });
-
-  it('dissolves the globe just before the handover rather than long before', () => {
-    expect(SOLAR_HANDOVER_START).toBeGreaterThan(SOLAR_HANDOVER_FULL);
-    expect(SOLAR_HANDOVER_START - SOLAR_HANDOVER_FULL).toBeLessThan(0.5);
-  });
-
-  it('fades the planets in below the handover, not above it', () => {
-    expect(SOLAR_FULL_ZOOM).toBeLessThan(SOLAR_MAX_ZOOM);
-  });
+  // The three tests that were here asserted the globe/solar handover: that the
+  // two thresholds were one number, that the globe dissolved just before it,
+  // and that the planets faded in below it. **There is no handover.** The solar
+  // system is a page with its own camera (D163, D164), so the globe is the
+  // globe at every zoom this map reaches and nothing fades into anything.
 });

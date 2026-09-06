@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BODIES } from './bodies';
-import { homeBodies } from './planet/solarSystemLayer';
+import { homeBodies } from './planet/solarBodies';
 import { ELEMENTS, PLANET_IDS, type PlanetId, heliocentricDistance } from './planets';
 import {
   AU_KM,
@@ -268,12 +268,10 @@ describe('the sizes bodies are drawn at', () => {
 });
 
 describe('the world under the camera and its companion', () => {
-  const AT = new Date('2026-09-05T00:00:00Z');
-
   it('draws the Moon beside the Earth rather than inside it', () => {
     // 0.0026 AU is below anything this compression can resolve, so drawn
     // truthfully they occupy the same point and one hides the other (D140).
-    const placed = homeBodies('earth', AT);
+    const placed = homeBodies('earth');
     expect(placed.map((p) => p.id).sort()).toEqual(['earth', 'moon']);
     const earth = placed.find((p) => p.id === 'earth')!;
     const moon = placed.find((p) => p.id === 'moon')!;
@@ -283,16 +281,16 @@ describe('the world under the camera and its companion', () => {
 
   it('puts whichever one you are standing on at the centre', () => {
     // MapLibre's globe is at the origin, so the body replacing it must be too.
-    expect(homeBodies('earth', AT)[0]).toMatchObject({ id: 'earth', at: [0, 0, 0] });
-    expect(homeBodies('moon', AT)[0]).toMatchObject({ id: 'moon', at: [0, 0, 0] });
+    expect(homeBodies('earth')[0]).toMatchObject({ id: 'earth', at: [0, 0, 0] });
+    expect(homeBodies('moon')[0]).toMatchObject({ id: 'moon', at: [0, 0, 0] });
   });
 
   it('shows the pair from either side of it', () => {
-    expect(homeBodies('moon', AT).map((p) => p.id).sort()).toEqual(['earth', 'moon']);
+    expect(homeBodies('moon').map((p) => p.id).sort()).toEqual(['earth', 'moon']);
   });
 
   it('gives a world with no companion just itself', () => {
-    expect(homeBodies('mars', AT)).toHaveLength(1);
-    expect(homeBodies('mars', AT)[0].id).toBe('mars');
+    expect(homeBodies('mars')).toHaveLength(1);
+    expect(homeBodies('mars')[0].id).toBe('mars');
   });
 });

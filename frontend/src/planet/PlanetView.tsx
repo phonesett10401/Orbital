@@ -50,23 +50,9 @@ import {
 } from './airportLayer';
 import { createSatelliteIconCanvases } from './satelliteSprite';
 import { setVisibility } from './layerSync';
-import { publishMarkerSource, publishZoomSource } from './solarMarkerFeed';
 import { prefersReducedMotion } from '../motion';
-import {
-  PAN_DAMPING,
-  SETTLE_IDLE_MS,
-  SYSTEM_HOME,
-  settleMs,
-  settleTarget,
-} from '../viewSettle';
 import { journeyMs } from '../journey';
 import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
-import {
-  SOLAR_LAYER,
-  SOLAR_MAX_ZOOM,
-  createSolarSystemLayer,
-  type SolarLayer,
-} from './solarSystemLayer';
 import {
   MOON_LABEL_LAYER,
   MOON_LAYER,
@@ -78,7 +64,6 @@ import {
   moonSource,
 } from './moonLayer';
 import {
-  MOON_SHELL_LAYER,
   createMoonShellLayer,
   type MoonShellLayer,
 } from './moonShellLayer';
@@ -179,8 +164,6 @@ import {
   maxZoomFor,
   surfaceTilesFor,
   visibilityFor,
-  globeLayerIds,
-  BACKGROUND_LAYER,
 } from './bodySurface';
 
 /** How often to republish the viewport, matching the globe view's cadence. */
@@ -232,52 +215,39 @@ function lonLatCenter(at: readonly [number, number, number]): [number, number] {
  * The same point the solar layer reaches full opacity, so one picture fades out
  * exactly as the other finishes fading in.
  */
-const SOLAR_HANDOVER_ZOOM = SOLAR_MAX_ZOOM;
+/**
+ * Zoom out past this and the reader leaves for the solar system page (D164).
+ *
+ * Where the old handover was, so the gesture is the one that was already
+ * learned - but it opens a page rather than swapping layers underneath a
+ * camera that had to serve both.
+ */
+const LEAVE_FOR_SYSTEM_ZOOM = -1.0;
 
 /**
- * Switch between standing on a world and looking at the system it belongs to.
+ * Where the camera lands on the way back, comfortably clear of leaving again.
  *
- * MapLibre draws the world under the camera at radius 1 whatever the zoom, so
- * pulling back does not shrink it: at the point where the solar system appears,
- * the Earth is still a full globe sitting beside a Sun drawn at 1.08 radii, and
- * it looks the same size as it. Phone reported exactly that.
- *
- * The globe cannot be resized, so it is switched off instead, and the solar
- * layer draws the same body properly scaled among its neighbours. `applyBody`
- * does the restoring, because it already knows what each world should show.
+ * Returning to the zoom it left at would put the reader one notch from
+ * departing a second time, which reads as the view refusing to be left.
  */
-function applySolarView(map: import('maplibre-gl').Map, inSolarView: boolean): void {
-  const style = map.getStyle();
-  if (!style) return;
-  if (!inSolarView) {
-    applyBody(map, useOrbitalStore.getState().activeBody);
-    // Restored here rather than by `applyBody`, which decides visibility from
-    // the cartography and Orbital's own layers and has never had an opinion
-    // about the background (D143).
-    if (map.getLayer(BACKGROUND_LAYER)) {
-      map.setLayoutProperty(BACKGROUND_LAYER, 'visibility', 'visible');
-    }
-    return;
-  }
-  for (const id of globeLayerIds(style as never, [SHELL_LAYER, MODEL_LAYER, MOON_SHELL_LAYER])) {
-    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
-  }
-}
+const RETURN_FROM_SYSTEM_ZOOM = 1.0;
 
-/**
- * Put the globe's layers in whatever state the current zoom calls for.
+/*
+ * **The handover is gone** (D164).
  *
- * **Idempotent, and called from everywhere that could disturb it**: the zoom
- * handler, startup, and after every `applyBody`. It has to be, because
- * `applyBody` decides visibility from the *body* alone and knows nothing about
- * the handover - so a body change, or the one `applyBody` does at startup,
- * silently switched the globe back on underneath a solar view that had already
- * hidden it. Reading the zoom here rather than tracking a flag means the two
- * cannot disagree (D141).
+ * Everything between this comment and `solarOrigin` below used to hide the
+ * globe as the camera pulled back, so a custom layer could draw the solar
+ * system in the space it left. There is no such layer any more: the solar
+ * system is a page with its own camera (D163), so the globe is simply the
+ * globe at every zoom this map reaches, and `applyBody` is the only thing with
+ * an opinion about which layers are visible.
+ *
+ * Removed with it: `applySolarView`, `syncGlobeVisibility`, the zoom listener
+ * that toggled between them, the idle settle that stopped the camera resting in
+ * the band between the two views, and the pointer handlers that turned the
+ * viewpoint because the map's camera could not slide. Six sessions of work, and
+ * none of it was solar-system work.
  */
-function syncGlobeVisibility(map: import('maplibre-gl').Map): void {
-  applySolarView(map, map.getZoom() <= SOLAR_HANDOVER_ZOOM);
-}
 
 /**
  * The body the solar system is drawn around, which is never a moon.
@@ -405,7 +375,7 @@ function applyBody(map: import('maplibre-gl').Map, bodyId: string): void {
   // here or the rule cannot see them - which is how two thousand Earth
   // satellites ended up in orbit around Mars (D133).
   for (const [id, visibility] of Object.entries(
-    visibilityFor(body, style as never, [SHELL_LAYER, MODEL_LAYER, SOLAR_LAYER]),
+    visibilityFor(body, style as never, [SHELL_LAYER, MODEL_LAYER]),
   )) {
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
   }
@@ -451,7 +421,6 @@ export function PlanetView() {
     let diagnostics: ReturnType<typeof createDiagnosticsPanel> | null = null;
     let model: ReturnType<typeof createModelLayer> | null = null;
     let shell: ShellLayer | null = null;
-    let solar: SolarLayer | null = null;
     let terminator: ReturnType<typeof createTerminatorLayer> | null = null;
     let moonPoll: { stop: () => void } | null = null;
     let moonShell: MoonShellLayer | null = null;
@@ -702,135 +671,28 @@ export function PlanetView() {
           map.addLayer(moonShell);
           map.on('move', refreshLeader);
 
-          // The globe hands over to the solar system as the camera pulls back.
-          let inSolarView = map.getZoom() <= SOLAR_HANDOVER_ZOOM;
-          map.on('zoom', () => {
-            if (!map) return;
-            const next = map.getZoom() <= SOLAR_HANDOVER_ZOOM;
-            if (next === inSolarView) return;
-            inSolarView = next;
-            applySolarView(map, next);
-          });
-          // Once at startup: the map may already be zoomed out, and `applyBody`
-          // has just run without any knowledge of the handover.
-          syncGlobeVisibility(map);
-
           /*
-           * **The planet view and the solar system are two states, and the band
-           * between them is not a place to be left** (D158).
+           * **Zooming out leaves for the solar system** (D164).
            *
-           * Measured on a 1990-pixel viewport: at the handover the globe is 80
-           * pixels wide, and 85 just above it - four per cent of the screen -
-           * while just below it the solar system is still mostly transparent.
-           * Either way the reader gets an almost empty screen, which is how it
-           * was reported: "all gone black".
+           * One threshold and one page, rather than a handover, a fade, a dead
+           * band and a settle. The map does not draw the solar system any more,
+           * so there is nothing to hand over *to* - past this zoom the reader is
+           * simply somewhere else, and the journey screen says so.
            *
-           * So a move that comes to rest in that band is finished for them, in
-           * the direction they were already going. `viewSettle.ts` holds the
-           * rule; this only carries it out.
-           *
-           * **On `moveend`, never during the move.** Snapping while a wheel is
-           * still turning or two fingers are still moving fights the gesture,
-           * and an interface that pulls against an input in progress feels
-           * broken in a way that is hard to name. Passing through the band
-           * still looks exactly as it did.
+           * Not while a trip between worlds is running: that pulls the camera
+           * out past this on purpose and has its own plan (D126).
            */
-          /*
-           * **Dragging the solar system around** (D159).
-           *
-           * MapLibre's own drag-pan works by grabbing the point of the globe
-           * under the cursor and moving it. In the solar view there is no globe
-           * under the cursor - it is 57 pixels wide at this zoom and the rest of
-           * the screen is sky - so a drag anywhere but on that speck does
-           * nothing at all. Measured: a 220-pixel drag left the centre and every
-           * label exactly where they were.
-           *
-           * So the drag is handled here while the system is drawing, as a camera
-           * move rather than a grab. `panBy` is the right tool and `setCenter`
-           * is not: at this zoom setting a centre makes MapLibre re-constrain
-           * the camera and it takes the *zoom* with it - measured jumping from
-           * -1.5 to -0.03, which drops out of the solar view entirely.
-           */
-          let dragFrom: { x: number; y: number } | null = null;
-          const canvas = map.getCanvas();
-          const draggingSystem = () => (map ? map.getZoom() <= SOLAR_HANDOVER_ZOOM : false);
-          canvas.addEventListener('pointerdown', (event: PointerEvent) => {
-            if (!draggingSystem() || event.button !== 0) return;
-            dragFrom = { x: event.clientX, y: event.clientY };
-            canvas.setPointerCapture(event.pointerId);
-          });
-          canvas.addEventListener('pointermove', (event: PointerEvent) => {
-            if (!dragFrom || !map) return;
-            const dx = event.clientX - dragFrom.x;
-            const dy = event.clientY - dragFrom.y;
-            dragFrom = { x: event.clientX, y: event.clientY };
-            // Opposite to the pointer, so the sky follows the hand rather than
-            // running away from it, and damped hard.
-            //
-            // **This is a turn, not a slide, and no single factor can make it
-            // one.** MapLibre's camera always looks at the centre of the world
-            // it is standing on, so panning rotates the viewpoint rather than
-            // translating it - and measured at z-1.5, 100 pixels of pan moved
-            // Mercury 375 pixels, Jupiter 432, Neptune **-435** the other way,
-            // and the Earth underfoot not at all. Bodies in different directions
-            // sweep differently because that is what turning your head does.
-            //
-            // So the damping is chosen to put the *fastest* body near the
-            // pointer's own speed rather than to make them agree, which they
-            // cannot. Undamped, the outer planets crossed the screen four times
-            // faster than the hand.
-            map.panBy([-dx * PAN_DAMPING, -dy * PAN_DAMPING], { duration: 0 });
-          });
-          const endDrag = (event: PointerEvent) => {
-            if (!dragFrom) return;
-            dragFrom = null;
-            if (canvas.hasPointerCapture(event.pointerId)) {
-              canvas.releasePointerCapture(event.pointerId);
-            }
-          };
-          canvas.addEventListener('pointerup', endDrag);
-          canvas.addEventListener('pointercancel', endDrag);
-
-          let restingZoom = map.getZoom();
-          let idleTimer = 0;
-          const settleIfIdle = () => {
+          map.on('zoomend', () => {
             if (!map) return;
-            // Not while a trip between worlds is running: it crosses this band
-            // deliberately, twice, and has its own plan for where to stop
-            // (D126). A settle here would fight it mid-flight.
-            if (useOrbitalStore.getState().flyingTo) return;
-            const zoom = map.getZoom();
-            const target = settleTarget(zoom, restingZoom);
-            // **Where the camera actually is, never where it was sent.**
-            // Recording the target here instead is a lie whenever the settle is
-            // interrupted - a wheel notch arriving mid-animation leaves the
-            // camera short of it, and the next evaluation then measures the
-            // direction against a zoom the camera never reached and reads it
-            // backwards. Measured: scrolling inward from the solar system was
-            // pulled straight back out to it, which is the stuck view reported.
-            //
-            // It is the D154 lesson again, in a third place: a record of what
-            // was asked for is not a record of what is true.
-            restingZoom = zoom;
-            if (target === null) return;
-            // **The two views are two pages, and this is the page turn** (D161).
-            // The screen goes up first so the camera move happens behind it,
-            // which is what makes it a transition rather than a glide.
             const store = useOrbitalStore.getState();
-            store.setJourney(target === SYSTEM_HOME ? 'system' : 'planet');
+            if (store.flyingTo || store.openPage) return;
+            if (map.getZoom() > LEAVE_FOR_SYSTEM_ZOOM) return;
+            store.setJourney('system');
             window.setTimeout(
               () => useOrbitalStore.getState().setJourney(null),
               journeyMs(prefersReducedMotion()),
             );
-            map.easeTo({
-              zoom: target,
-              duration: settleMs(prefersReducedMotion()),
-              easing: (t: number) => 1 - (1 - t) * (1 - t),
-            });
-          };
-          map.on('move', () => {
-            window.clearTimeout(idleTimer);
-            idleTimer = window.setTimeout(settleIfIdle, SETTLE_IDLE_MS);
+            store.setOpenPage('system');
           });
 
           // The selected aircraft, as a mesh in MapLibre's own context (D67).
@@ -848,26 +710,6 @@ export function PlanetView() {
               : { objects: [], selectedId: null };
           });
           map.addLayer(shell);
-
-          // The rest of the solar system, outside the satellite shell. Same
-          // mechanism, larger radius, no second renderer (D123, D125).
-          solar = createSolarSystemLayer(
-            () => {
-              const instant = useOrbitalStore.getState().viewInstant;
-              return instant ? new Date(instant) : new Date();
-            },
-            () => useOrbitalStore.getState().flyingTo,
-            solarOrigin,
-            // The *actual* world underfoot, which the origin above flattens to
-            // Earth for the Moon. Sizes are anchored on this one, because it is
-            // the globe MapLibre draws at radius 1 (D137).
-            () => useOrbitalStore.getState().activeBody,
-          );
-          map.addLayer(solar);
-          // The chrome reads the drawn positions from here (D159).
-          publishMarkerSource(() => solar?.markers() ?? []);
-          publishZoomSource(() => map?.getZoom() ?? 99);
-
 
           model = createModelLayer(() => {
             const state = useOrbitalStore.getState();
@@ -979,16 +821,7 @@ export function PlanetView() {
             // sub-satellite points do.
             const shellShowing = satelliteMode && (map?.getZoom() ?? 99) <= SHELL_MAX_ZOOM;
             // **Only while the globe is the thing being shown.** Below the
-            // handover the solar system owns the view and `applySolarView` has
-            // hidden every one of these; a loop that goes on writing `visible`
-            // to them there is the D154 fault pointing the other way - two
-            // writers disagreeing every frame, and the reason a satellite
-            // ground layer was measured switched on inside the solar view.
-            //
-            // Reading the zoom rather than tracking a flag, so the two cannot
-            // disagree about which of them is in charge (D141).
-            const globeOwnsTheView = (map?.getZoom() ?? 99) > SOLAR_HANDOVER_ZOOM;
-            // **And only on Earth.** Every layer below is a statement about
+            // **Only on Earth.** Every layer below is a statement about
             // Earth - aircraft furniture, receiver coverage, the satellite
             // ground symbols - and off it they are not stale but meaningless
             // (D120). `applyBody` hides them when the camera leaves, and this
@@ -1002,7 +835,7 @@ export function PlanetView() {
             // the world underfoot - so the two cannot disagree about which of
             // them is in charge (D141, D154).
             const onEarthNow = state.activeBody === 'earth';
-            if (map && globeOwnsTheView && onEarthNow) {
+            if (map && onEarthNow) {
               setVisibility(
                 map,
                 [SATELLITE_LAYER, SATELLITE_LABEL_LAYER],
@@ -1138,11 +971,31 @@ export function PlanetView() {
             drawMoonLeader(runner, chosen);
           }
 
+          /*
+           * **Coming back from the solar system** (D164).
+           *
+           * The map was left below the departure zoom when the page opened, so
+           * returning to it without moving would sit one notch away from leaving
+           * again. It is brought back to a zoom where the globe is the picture,
+           * under the same journey screen the outward trip uses - so the round
+           * trip is symmetrical rather than a departure with no arrival.
+           */
+          if (previous.openPage === 'system' && state.openPage !== 'system' && map) {
+            const returning = map;
+            // Not when a trip between worlds is what closed the page: that has
+            // its own plan and its own arrival (D126).
+            if (!state.flyingTo) {
+              useOrbitalStore.getState().setJourney('planet');
+              window.setTimeout(
+                () => useOrbitalStore.getState().setJourney(null),
+                journeyMs(prefersReducedMotion()),
+              );
+              returning.easeTo({ zoom: RETURN_FROM_SYSTEM_ZOOM, duration: 500 });
+            }
+          }
+
           if (state.activeBody !== previous.activeBody && map) {
             applyBody(map, state.activeBody);
-            // `applyBody` decides from the body alone; this puts the handover
-            // back if the camera is already out in the solar view (D141).
-            syncGlobeVisibility(map);
             // Lunar spacecraft are polled only while the Moon is underneath.
             // Three objects and a six-hour window behind them, so a slow
             // cadence is not a compromise - the backend is reading from memory

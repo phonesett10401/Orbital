@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { JOURNEY_MS, journeyLabel, journeyMs } from './journey';
-import { settleMs } from './viewSettle';
 
 describe('what the screen says', () => {
   it('names the solar system on the way out', () => {
@@ -24,10 +23,11 @@ describe('what the screen says', () => {
 });
 
 describe('how long it is held', () => {
-  it('outlasts the camera move it covers', () => {
-    // A transition screen that lifts while the view behind it is still moving
-    // shows the reader the seam it exists to cover.
-    expect(JOURNEY_MS).toBeGreaterThan(settleMs(false));
+  it('is long enough to read four words', () => {
+    // It used to be asserted against the camera settle it covered. There is no
+    // settle any more - the two views are separate pages (D164) - so what is
+    // left is the only thing that was ever really being claimed.
+    expect(JOURNEY_MS).toBeGreaterThanOrEqual(800);
   });
 
   it('is short enough never to be a wait', () => {

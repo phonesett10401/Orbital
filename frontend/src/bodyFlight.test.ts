@@ -10,7 +10,6 @@ import {
   swapsWorld,
 } from './bodyFlight';
 import { MAPLIBRE_MIN_ZOOM } from './solarScale';
-import { SOLAR_MAX_ZOOM } from './planet/solarSystemLayer';
 
 describe('the shape of a trip', () => {
   it('goes out, swaps, comes back', () => {
@@ -43,13 +42,7 @@ describe('the shape of a trip', () => {
   });
 });
 
-describe('the apex is where the solar system is', () => {
-  it('pulls out far enough for the planets to be drawn', () => {
-    // The pull-out is not a loading screen: the destination has to be visible
-    // as a real body in a real place, which needs the solar layer live.
-    expect(APEX_ZOOM).toBeLessThanOrEqual(SOLAR_MAX_ZOOM);
-  });
-
+describe('the apex', () => {
   it('does not ask for a zoom MapLibre refuses', () => {
     // setMinZoom throws below -2; asking easeTo for less would silently clamp
     // and leave the swap happening at a zoom nobody chose.

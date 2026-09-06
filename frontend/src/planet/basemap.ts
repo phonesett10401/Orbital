@@ -55,6 +55,7 @@ export const IMAGERY_NEAR_MAX_ZOOM = config.imageryCloseMaxZoom;
  * and a test holds the two files to the same numbers.
  */
 /** The handover itself: below this there is no globe. Matches `SOLAR_MAX_ZOOM`. */
+/** @deprecated The handover is gone (D164); kept only until the style tests move on. */
 export const SOLAR_HANDOVER_FULL = -1.0;
 
 /**
@@ -549,15 +550,12 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
       // expression - the only shape the style spec allows, and the same one the
       // near tier uses. A `zoom` expression nested deeper is rejected, and a
       // rejected paint property fails the entire style (defect #25).
-      'raster-opacity': [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        SOLAR_HANDOVER_FULL,
-        0,
-        SOLAR_HANDOVER_START,
-        whenFlat(0, 1),
-      ],
+      // **No zoom fade any more** (D164). This dissolved the globe as the old
+      // handover approached, so a custom layer could draw the solar system in
+      // the space it left. The solar system is a page with its own camera now
+      // (D163), so there is nothing to hand over to and the imagery is simply
+      // the imagery at every zoom this map reaches.
+      'raster-opacity': whenFlat(0, 1),
     },
   };
 

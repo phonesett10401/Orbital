@@ -9109,3 +9109,63 @@ done is the removal: `solarSystemLayer.ts` and the whole handover apparatus in
 are still there and still work. Taking them out is the next step, and doing it in
 the same change would have meant a half-migrated map with no way to tell which
 half was at fault.
+
+---
+
+## D164 - The old layer, and everything that existed to serve it
+
+D163 built the solar system a page with its own camera and left the MapLibre
+custom layer in place, deliberately, so that a half-migrated map could not hide
+which half was at fault. This removes it, and what came out with it is the point.
+
+### Deleted
+
+| gone | what it was for |
+|---|---|
+| `solarSystemLayer.ts` | the custom layer, 720 lines |
+| `applySolarView`, `syncGlobeVisibility` | hiding the globe so the layer had room |
+| the zoom listener | toggling between the two |
+| `viewSettle.ts` | stopping the camera resting in the band between them |
+| the pointer handlers in `PlanetView` | turning the viewpoint, because the map's camera could not slide |
+| `solarMarkerFeed.ts` | getting drawn positions out of a layer inside a WebGL callback |
+| `SolarLabels`, `SolarApproach`, `solarApproach.ts` | chrome that read that feed |
+| `cameraFrame.ts` | reading a camera out of a **borrowed** projection matrix |
+| `skyRadius`, `SKY_GAP_FRACTION` | finding a sky radius that survived a borrowed far plane |
+| the imagery's zoom fade in `basemap.ts` | dissolving the globe as the handover approached |
+
+Three hundred and seventy six lines removed against a hundred and thirty added,
+and **none of the deletions cost a feature**. Every one of them existed to
+manage a camera the solar system no longer borrows.
+
+### What replaced the handover
+
+One threshold and one page. Zoom out past `LEAVE_FOR_SYSTEM_ZOOM` and the
+journey screen goes up and the page opens; the map is not drawing a solar system
+underneath, so there is nothing to hand over *to*. The return is symmetrical:
+closing the page plays the same screen and brings the camera back to a zoom
+where the globe is the picture, because returning to the zoom it left at would
+put the reader one notch from departing again.
+
+### Two things that had to be rescued on the way out
+
+**`homeBodies`.** The Earth and the Moon are 0.0026 AU apart, which this
+compression cannot resolve, so the companion is drawn beside its partner at a
+fixed and admitted offset (D140). It lived in the deleted layer, and without it
+the new page drew nine bodies and no Moon. It is in `solarBodies.ts` now, which
+is where a claim like that belongs anyway - said out loud rather than buried in
+a renderer.
+
+**The Mercury clearance test, again.** Not rescued but noted: three tests in
+`planet.test.ts` asserted the handover - that its two thresholds were one number,
+that the globe dissolved just before it, and that the planets faded in below it.
+All three were *correct* and all three are now meaningless. They were replaced
+by a comment saying what they used to guard, because a reader finding no test
+where the handover was should be told it was removed rather than left wondering
+whether it was forgotten.
+
+### The lesson worth keeping
+
+Six sessions of defects - D129, D130, D139 through D145, D154, D158, D160, D161,
+D162 - and the common thread was never the solar system. It was that **one camera
+was serving two pictures at wildly different scales**, and every fix was a
+negotiation between them. The negotiation is what got deleted here.
