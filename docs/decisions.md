@@ -8719,3 +8719,81 @@ once made it render perfectly.
 The rule this keeps re-teaching: **after editing a hook, a stale page is not
 evidence about the code.** The check that settles it is a server restart, not
 another reload.
+
+---
+
+## D158 - Two states, and the band between them is not a place to stop
+
+Phone's design, and it is the right one: the planet view and the solar system
+are **states**, and the zooms between them are somewhere you pass through rather
+than somewhere you are left.
+
+### The measurement it answers
+
+The handover is a single threshold and stays one - D139 to D145 are six attempts
+at one symptom and having *two* thresholds caused the last of them. What the
+single threshold does not fix is that the zooms either side are both poor views.
+Measured on a 1990-pixel viewport:
+
+| zoom | globe width | showing |
+|---|---|---|
+| -1.5 | 57 px | solar system, full opacity |
+| -1.0 | 80 px | the handover |
+| -0.9 | 85 px | globe, solar system off |
+| 0 | 155 px | globe |
+| 1 | 297 px | globe |
+
+So crossing the handover swapped a full scene for a globe **four per cent of the
+screen wide**, and it was reported as "all gone black". Below the handover is no
+better: the planets are still fading in and mostly transparent until -1.5.
+
+**It is viewport-dependent, which is why it was never seen here.** The same
+85-pixel globe is a tenth of an 800-pixel pane and reads as a small globe; on a
+1990-pixel screen it reads as nothing at all. A defect that only appears on a
+wide display is one that a narrow development window structurally cannot find.
+
+### The rule
+
+`settleTarget` in `viewSettle.ts`. Rest anywhere strictly between
+`SOLAR_FULL_ZOOM` and zoom 0 and the camera finishes the move on `moveend`.
+
+**It follows the direction of travel, not the nearer edge.** The nearer edge was
+the first version and it is wrong in a way that only shows in use: from the solar
+system, one notch inward reaches about -1.4, which is nearer the system, so the
+camera pushes straight back out and the view feels like it refuses to be zoomed.
+Following the gesture means a nudge inward switches to the planet and a nudge
+outward switches to the system - which is what having two states should feel
+like. A move that changed no zoom at all, a pan ending in the band, has no
+direction to follow and takes the nearer edge.
+
+**It cannot oscillate**, and not by a constant: both targets are *outside* the
+band, so the move that settles you can never land somewhere that needs settling
+again. The geometry provides the hysteresis, and there is no second number to
+keep in step - the sort of number D144 removed.
+
+**On `moveend`, never during the move.** Snapping while a wheel is still turning
+or two fingers are still moving fights the gesture, and an interface that pulls
+against an input in progress feels broken in a way that is hard to name. Passing
+through the band still looks exactly as it always did.
+
+**Not during a trip between worlds.** That crosses the band deliberately, twice,
+and has its own plan for where to stop (D126). Verified: a trip to Mars runs
+1.84 → -1.63 → 1.5 with the settle registered and silent throughout.
+
+### Where the two homes are
+
+`SYSTEM_HOME` is `SOLAR_FULL_ZOOM`, imported rather than restated - a copy that
+drifted would settle the camera where the system is still translucent, which is
+half the fault being fixed.
+
+`PLANET_HOME` is zoom 0, where the globe is about 155 pixels on a wide screen.
+Deliberately not more generous: further out means a longer jump out of the band,
+and this is the point at which the globe is unambiguous rather than the point at
+which it is impressive. It is one constant if that turns out to be too modest.
+
+### A test that was wrong first
+
+`settleTarget(-0.9)` was asserted to land on the planet and it lands on the
+system, because -0.9 was reached by zooming *out*. The test was wrong, and being
+wrong is what produced the direction rule: writing down why the assertion failed
+was the moment the nearer-edge version was seen to be a bounce-back.

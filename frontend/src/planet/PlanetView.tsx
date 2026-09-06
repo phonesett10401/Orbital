@@ -50,6 +50,8 @@ import {
 } from './airportLayer';
 import { createSatelliteIconCanvases } from './satelliteSprite';
 import { setVisibility } from './layerSync';
+import { prefersReducedMotion } from '../motion';
+import { settleMs, settleTarget } from '../viewSettle';
 import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
 import {
   SOLAR_LAYER,
@@ -704,6 +706,47 @@ export function PlanetView() {
           // Once at startup: the map may already be zoomed out, and `applyBody`
           // has just run without any knowledge of the handover.
           syncGlobeVisibility(map);
+
+          /*
+           * **The planet view and the solar system are two states, and the band
+           * between them is not a place to be left** (D158).
+           *
+           * Measured on a 1990-pixel viewport: at the handover the globe is 80
+           * pixels wide, and 85 just above it - four per cent of the screen -
+           * while just below it the solar system is still mostly transparent.
+           * Either way the reader gets an almost empty screen, which is how it
+           * was reported: "all gone black".
+           *
+           * So a move that comes to rest in that band is finished for them, in
+           * the direction they were already going. `viewSettle.ts` holds the
+           * rule; this only carries it out.
+           *
+           * **On `moveend`, never during the move.** Snapping while a wheel is
+           * still turning or two fingers are still moving fights the gesture,
+           * and an interface that pulls against an input in progress feels
+           * broken in a way that is hard to name. Passing through the band
+           * still looks exactly as it did.
+           */
+          let zoomAtMoveStart = map.getZoom();
+          map.on('movestart', () => {
+            if (map) zoomAtMoveStart = map.getZoom();
+          });
+          map.on('moveend', () => {
+            if (!map) return;
+            // Not while a trip between worlds is running: it crosses this band
+            // deliberately, twice, and has its own plan for where to stop
+            // (D126). A settle here would fight it mid-flight.
+            if (useOrbitalStore.getState().flyingTo) return;
+            const zoom = map.getZoom();
+            const target = settleTarget(zoom, zoomAtMoveStart);
+            if (target === null) return;
+            zoomAtMoveStart = target;
+            map.easeTo({
+              zoom: target,
+              duration: settleMs(prefersReducedMotion()),
+              easing: (t: number) => 1 - (1 - t) * (1 - t),
+            });
+          });
 
           // The selected aircraft, as a mesh in MapLibre's own context (D67).
           // It reads the store itself, once per frame, rather than being told:
