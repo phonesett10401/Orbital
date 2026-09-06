@@ -988,7 +988,21 @@ export function PlanetView() {
             // Reading the zoom rather than tracking a flag, so the two cannot
             // disagree about which of them is in charge (D141).
             const globeOwnsTheView = (map?.getZoom() ?? 99) > SOLAR_HANDOVER_ZOOM;
-            if (map && globeOwnsTheView) {
+            // **And only on Earth.** Every layer below is a statement about
+            // Earth - aircraft furniture, receiver coverage, the satellite
+            // ground symbols - and off it they are not stale but meaningless
+            // (D120). `applyBody` hides them when the camera leaves, and this
+            // loop was turning them straight back on: measured on Mars, all
+            // four coverage layers and all three airport layers reported
+            // `visible`, which is receiver coverage drawn over a planet that
+            // has no receivers.
+            //
+            // Third time this loop has fought another writer, and the third
+            // time the same answer works: read what is true - the zoom, and now
+            // the world underfoot - so the two cannot disagree about which of
+            // them is in charge (D141, D154).
+            const onEarthNow = state.activeBody === 'earth';
+            if (map && globeOwnsTheView && onEarthNow) {
               setVisibility(
                 map,
                 [SATELLITE_LAYER, SATELLITE_LABEL_LAYER],

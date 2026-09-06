@@ -9011,3 +9011,36 @@ Measured, zooming out: the settle fires at -1.14, the screen goes up, the camera
 moves -1.25, -1.44, -1.5 behind it, and it lifts on arrival with the solar system
 and its ten labels in place. Zooming back in: "Heading to Earth" from -1.22
 through to 0, gone on arrival, labels cleared.
+
+---
+
+## D162 - Receiver coverage on Mars, for the third time in the same loop
+
+Reported: receiver coverage drawn over Mars. Measured before touching anything -
+on Mars, all four coverage layers, all three airport layers and both satellite
+ground layers reported `visible`.
+
+It is mine, from D154. That change replaced a stale visibility memo with a write
+on every frame, and the write was gated on the zoom but **not on which world the
+camera is standing on**. `applyBody` hides every Earth layer when the camera
+leaves; the frame loop turned them straight back on, sixty times a second.
+
+Receiver coverage is the sharpest possible example of why this matters. It is
+not a stale annotation over Mars, it is a **false one**: it draws where volunteer
+aerials can hear aircraft, and there are no aerials and no aircraft. D120 called
+this out as a stronger claim than drawing something late, and D133 fixed the same
+class once already by deriving the Earth-only set instead of listing it.
+
+### The third instance, and the same answer each time
+
+- **D141**: the handover tracked a flag while `applyBody` wrote the same layers.
+  Fixed by reading the zoom.
+- **D154**: the frame loop memoised what it had last set while `applyBody` wrote
+  the same layers. Fixed by reading the style.
+- **D162**: the frame loop wrote unconditionally while `applyBody` wrote the same
+  layers on another world. Fixed by reading the active body.
+
+Every one is two writers and no agreement about which is in charge, and every fix
+is the same shape: **read what is true rather than assume what was intended.**
+The loop now writes nothing unless the globe owns the view *and* that globe is
+Earth.
