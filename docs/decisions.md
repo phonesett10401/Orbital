@@ -7868,3 +7868,54 @@ Recorded so nobody hunts it a second time.
   half-lit centred on Africa, which reads as a terminator and is not one: the
   Pacific is ocean, and ocean is dark in this imagery. Rotating rather than
   staring is what separated those two explanations.
+
+## D146 - Accounts, and the first thing Orbital has to keep
+
+The freemium discussion needs somewhere to record who has paid, so this is the
+first state in the project that must survive a restart and cannot be refetched
+from anywhere. Everything else is either in memory or a cache that can be thrown
+away.
+
+### Two dependencies not added
+
+**SQLite through the standard library**, not SQLAlchemy: one table, five
+columns, and a file beside the element cache. The project earns dependencies one
+at a time - every entry in `pyproject.toml` carries its reason - and an ORM for
+one table would not survive that test.
+
+**`hashlib.scrypt`**, not bcrypt or argon2. It is in the standard library, it is
+memory-hard (the property that makes an offline GPU attack expensive rather than
+merely slow), and it means the sensitive part of this feature adds no supply
+chain at all.
+
+### The parameters travel with the hash
+
+A stored hash is `scrypt$N$r$p$salt$key`, so the cost can be raised later
+without invalidating a single account: an old hash still verifies under its own
+parameters, and is re-hashed on the next successful sign-in - the one moment the
+password is in hand and a stronger hash can be made without asking anybody
+anything. A scheme that hard-codes its cost must choose between staying weak
+forever and locking everybody out.
+
+### Three refusals worth naming
+
+**The `Account` type has no password hash on it.** Not hidden, absent. A struct
+carrying it is eventually logged, serialised or returned; the way to prevent
+that is for the field not to exist. A test asserts it.
+
+**An unknown address and a wrong password give the same answer**, and take the
+same time - the miss path still spends a full hash. Distinguishing them tells an
+attacker which addresses are registered, and a stopwatch discloses it just as
+well as a message does.
+
+**No movement profile.** An account is an email, a hash, a tier and a date.
+There is no name, no location, no history of what anybody looked at. A flight
+tracker is exactly the sort of application that could quietly accumulate one,
+and the freemium design sells *computed* things - predictions, alerts, exports -
+none of which require knowing who a person is beyond "this row paid".
+
+### Verified by breaking it
+
+A fixed salt fails the test that two hashes of one password differ. A
+`return True` verifier fails two rejection tests. Removing the email folding
+fails four. The tests are not decorative.
