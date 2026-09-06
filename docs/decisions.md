@@ -8223,6 +8223,48 @@ The fix is to cap it against the viewport - `min(420px, calc(100vw - 800px))` -
 so the row cannot overflow on the ad's account at all. Measured after: the
 search input holds its full 380px at both 1043 and 1900.
 
+### Proper sizes, and what that costs
+
+Phone asked for the two horizontal slots at real ad sizes, so they are now the
+units an advertiser actually buys rather than whatever happened to fit:
+**728x90 leaderboard**, **468x60 banner**, **320x50 mobile leaderboard**, with
+the rail already a **300x250 medium rectangle** by width. The top slot steps
+down through all three; the anchored one uses the top two and is otherwise not
+rendered.
+
+**Stepping between fixed units rather than letting one box shrink.** A slot that
+shrinks continuously is not the size it claims: a 728x90 creative in a 540px box
+is a squashed 728x90, and the whole point of naming a size is that the thing
+delivered fits it. So the widths are fixed, the headline truncates instead of
+wrapping the box taller, and the body line appears only in the units with the
+height for it.
+
+**The bottom slot moved out of the status strip to do it.** A 728x90 cannot sit
+inline in a row of 12px text, so it is now anchored bottom centre - the position
+an anchored ad conventionally takes, and the only genuinely empty region left
+down there, with the legend holding the bottom left and the attribution the
+bottom right.
+
+Two more yielding rules came with it, and both were measured rather than
+assumed:
+
+- **It is not rendered while the time scrubber is on screen.** That control is
+  centred in exactly this place, and it only exists on the satellite layer
+  (D119), so on aircraft the bottom of the screen is genuinely free.
+- **It is not rendered below 1400px**, where a 468 centred would reach the
+  legend on one side or the attribution on the other.
+
+Checked at 1920, 1600, 1300, 1150 and 1043 with a rect-intersection probe over
+every piece of chrome: no overlap at any width, the search box holds its full
+380px at every step, and the canvas still measures the whole viewport.
+
+**And the honest cost.** These float, so nothing reflows and the map keeps every
+pixel of canvas - but a 90px leaderboard covers more of the *view* than a 32px
+pill did. That is a real trade, made deliberately at Phone's request, and the
+thing that keeps it from being the mistake the first attempt made is that the
+globe is still all there underneath: the ad can be ignored, and it never takes
+space the map cannot have back.
+
 Rotation is a slow crossfade, switched off entirely under
 `prefers-reduced-motion`, in the component *and* in the stylesheet. Movement in
 the corner of the eye is precisely what that preference is set to stop, and an

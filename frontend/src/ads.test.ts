@@ -29,7 +29,7 @@ describe('who sees them', () => {
   });
 });
 
-const SLOTS = ['banner', 'rail', 'status'] as const;
+const SLOTS = ['banner', 'rail', 'anchor'] as const;
 
 describe('the inventory', () => {
   it('offers something for every slot', () => {

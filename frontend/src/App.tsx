@@ -65,6 +65,12 @@ export function App() {
   const selectedMoonId = useOrbitalStore((s) => s.selectedMoonId);
   const panelOpen = selectedId !== null || selectedMoonId !== null;
 
+  // **The anchored banner yields to the time control**, which is centred just
+  // above the status bar and would sit underneath it. That control only exists
+  // on the satellite layer (D119), so on aircraft - the layer this opens on -
+  // the bottom of the screen is genuinely free.
+  const scrubberShown = onEarth && activeLayer.id === 'satellite';
+
   return (
     <div className="app">
       <PlanetView />
@@ -110,6 +116,8 @@ export function App() {
       {onMoon && <MoonSatelliteList />}
       {onEarth && <Legend />}
       <StatusBar />
+
+      {ads && !scrubberShown && <AdSlot slot="anchor" />}
     </div>
   );
 }

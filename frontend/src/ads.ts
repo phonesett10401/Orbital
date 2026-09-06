@@ -39,10 +39,10 @@ import { type Account, isPremium } from './auth';
  * toggle, the corner the detail panel uses when one is open, and the run of
  * status bar after the data age. None of them takes a pixel from the map.
  */
-export type AdSlot = 'banner' | 'rail' | 'status';
+export type AdSlot = 'banner' | 'rail' | 'anchor';
 
 /** Fixed order, so each slot can be given a different starting card. */
-const SLOTS: AdSlot[] = ['banner', 'rail', 'status'];
+const SLOTS: AdSlot[] = ['banner', 'rail', 'anchor'];
 
 export interface Ad {
   id: string;
@@ -95,26 +95,32 @@ const HOUSE: Record<AdSlot, Ad[]> = {
       action: null,
     },
   ],
-  status: [
+  anchor: [
     {
-      id: 'status-premium',
+      id: 'anchor-premium',
       sponsor: 'Orbital',
       headline: 'Premium removes these',
-      body: 'And moves the satellite view seven days either way.',
-      action: null,
+      body:
+        'And moves the satellite view a full week either way instead of ' +
+        'twenty-four hours.',
+      action: 'See what premium does',
     },
     {
-      id: 'status-adsb',
+      id: 'anchor-adsb',
       sponsor: 'Orbital',
       headline: 'Aircraft from volunteer receivers',
-      body: 'The coverage gaps are where nobody is listening.',
+      body:
+        'Every aircraft here was heard by somebody who put an aerial on a ' +
+        'roof. The gaps in coverage are where nobody is listening.',
       action: null,
     },
     {
-      id: 'status-elements',
+      id: 'anchor-elements',
       sponsor: 'Orbital',
       headline: 'Orbits from CelesTrak and SatNOGS',
-      body: 'Refreshed on their own schedule, never on the request path.',
+      body:
+        'Elements refresh on their own schedule, never on the request path, ' +
+        'so no page here waits on an upstream.',
       action: null,
     },
   ],

@@ -81,42 +81,93 @@ body {
  * that when the header does run out of room this is the thing that gives way.
  */
 /*
+ * ---- proper sizes ----
+ *
+ * The two horizontal slots are the standard units an advertiser would actually
+ * buy, rather than whatever happened to fit: **728x90 leaderboard**, **468x60
+ * banner**, **320x50 mobile leaderboard**. Stepping down through them, instead
+ * of letting one box shrink continuously, is what keeps a real creative able to
+ * fill the slot - a 728x90 image in a 540px box is a squashed 728x90 image.
+ *
+ * The rail is a **300x250 medium rectangle** by width already.
+ *
+ * Which one appears is decided by how much room is left over, not by taste. The
+ * header needs about 770px for the brand, a full search box, the layer toggle
+ * and the gaps, and the ad may have what is left past 800 - the rule from
+ * before, now with three sizes to choose between rather than a cap.
+ */
+
+/*
  * Straight after the layer toggle rather than pinned to the far corner: on a
  * wide screen the corner isolates it, and this row is where the header already
  * runs out of things to hold.
  */
 .ad--banner {
   align-items: center;
-  /*
-   * **Capped against the viewport, not just at a fixed size.** A shrink factor
-   * is not enough: shrinkage is weighted by base size, so a wide pill still
-   * takes a share from the search box - measured at 1043px, the search input
-   * lost 77px to a pill allowed 420. The row needs about 770px for the brand,
-   * a full-width search box, the layer toggle and the gaps, so anything left
-   * over past 800 is what the ad may have and no more. Below the breakpoint
-   * further down it is not rendered at all.
-   */
-  max-width: min(420px, calc(100vw - 800px));
-  padding: 7px 12px;
-  /*
-   * **It gives way first, and it gives way hard.** The search box is `flex: 1`,
-   * so adding anything to this row makes the row overflow and every flexible
-   * child shrinks together - measured: the search input lost 18px the moment
-   * this appeared. A high shrink factor puts all of that loss here instead,
-   * which is the rule for the whole feature: the advertisement is what yields.
-   */
-  flex: 0 1 auto;
-  flex-shrink: 8;
-  min-width: 0;
+  /* 320x50, the smallest of the three, and the default. */
+  width: 320px;
+  height: 50px;
+  padding: 0 12px;
+}
+
+/* 468x60 banner: needs 468 + the header's own 770 + breathing room. */
+@media (min-width: 1270px) {
+  .ad--banner {
+    width: 468px;
+    height: 60px;
+  }
+}
+
+/* 728x90 leaderboard. */
+@media (min-width: 1530px) {
+  .ad--banner {
+    width: 728px;
+    height: 90px;
+  }
 }
 
 /*
- * The header needs about 740px for the brand, the search box and the layer
- * toggle. Below roughly a thousand there is no spare room left, and an ad that
+ * Below this the header has no room for even the smallest unit, and an ad that
  * shrinks the search box has taken the map's space by another route.
  */
-@media (max-width: 1010px) {
+@media (max-width: 1099px) {
   .ad--banner {
+    display: none;
+  }
+}
+
+/*
+ * ---- the anchored banner ----
+ *
+ * Bottom centre, the position an anchored ad conventionally takes, and the one
+ * genuinely empty region left down there: the legend holds the bottom left and
+ * the map's attribution the bottom right, and neither reaches the middle.
+ *
+ * It is not rendered at all while the time scrubber is on screen - that control
+ * is centred in exactly this place - and not below 1400px, where at these sizes
+ * it would reach the legend on one side or the attribution on the other.
+ */
+.ad--anchor {
+  position: absolute;
+  bottom: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  align-items: center;
+  width: 468px;
+  height: 60px;
+  padding: 0 16px;
+}
+
+@media (min-width: 1600px) {
+  .ad--anchor {
+    width: 728px;
+    height: 90px;
+  }
+}
+
+@media (max-width: 1399px) {
+  .ad--anchor {
     display: none;
   }
 }
@@ -136,50 +187,6 @@ body {
 
 @media (max-width: 900px), (max-height: 620px) {
   .ad--rail {
-    display: none;
-  }
-}
-
-/*
- * The status strip, in the run after the data age.
- *
- * No surface and no border: this row is a gradient over the map with plain text
- * on it, and a boxed card here would look like a control that had fallen out of
- * the header. It is the label that marks it, as everywhere else.
- *
- * **It stops well short of the attribution.** That control sits at the right of
- * this same row and is a licence obligation - OpenFreeMap, OpenMapTiles,
- * OpenStreetMap and NASA all require it - so it is the one thing on screen an
- * advertisement must never crowd. Hence the cap and the breakpoint.
- */
-.ad--status {
-  align-items: baseline;
-  gap: 8px;
-  padding: 0;
-  max-width: 300px;
-  background: none;
-  backdrop-filter: none;
-  border: 0;
-  box-shadow: none;
-  border-radius: 0;
-}
-
-.ad--status .ad__headline {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text-dim);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.ad--status .ad__body,
-.ad--status .ad__action {
-  display: none;
-}
-
-@media (max-width: 1100px) {
-  .ad--status {
     display: none;
   }
 }
@@ -228,20 +235,45 @@ body {
 }
 
 /*
- * The header pill is one line of chrome, not a paragraph. The body and the call
- * to action both live in the rail card instead: measured at 260px, keeping them
- * here wrapped the pill onto a second line and made the header taller than the
- * search box beside it.
+ * A 320x50 has room for one line and nothing else; the taller units have room
+ * for the sentence underneath. So the body appears with the height rather than
+ * being hidden everywhere, and the headline truncates rather than wrapping the
+ * box out of its own size - a slot that grows to fit its content is not the
+ * size it says it is.
  */
 .ad--banner .ad__body,
-.ad--banner .ad__action {
+.ad--anchor .ad__body {
   display: none;
 }
 
-.ad--banner .ad__headline {
+@media (min-width: 1270px) {
+  .ad--banner .ad__body {
+    display: block;
+  }
+}
+
+@media (min-width: 1400px) {
+  .ad--anchor .ad__body {
+    display: block;
+  }
+}
+
+.ad--banner .ad__headline,
+.ad--anchor .ad__headline {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.ad--banner .ad__body,
+.ad--anchor .ad__body {
+  overflow: hidden;
+}
+
+.ad--banner .ad__card,
+.ad--anchor .ad__card {
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .ad--rail .ad__body {
