@@ -9169,3 +9169,163 @@ Six sessions of defects - D129, D130, D139 through D145, D154, D158, D160, D161,
 D162 - and the common thread was never the solar system. It was that **one camera
 was serving two pictures at wildly different scales**, and every fix was a
 negotiation between them. The negotiation is what got deleted here.
+
+---
+
+## D165 - Ships, and the survey that chose the source
+
+The third layer. The first two arrived four months apart and each cost one line
+in `ObjectType`; this one was meant to test whether that was design or luck.
+
+### The survey, and why the obvious answer does not exist
+
+There is no adsb.lol for ships. That is the finding, and knowing *why* saved
+building against the wrong thing: an AIS receiver is a real installation rather
+than a dongle on a windowsill, so the volunteer networks that exist run on
+**reciprocity** - AISHub and AIS-catcher give you the global feed if you feed a
+receiver into it. We have no receiver. The commercial half of the market has
+also consolidated: Kpler now owns MarineTraffic, FleetMon and Spire Maritime,
+S&P Global took ORBCOMM's, and what is left is resellers with credit meters.
+
+What is genuinely open falls into three kinds, and the difference between them
+is not coverage - it is **what they ask of you before you can call them**.
+
+| source | coverage | licence | what it wants | verdict |
+|---|---|---|---|---|
+| **Digitraffic** (Fintraffic) | northern Baltic | **CC BY 4.0**, commercial ok | nothing | **built on** |
+| **aisstream.io** | **global** | unanswered | a GitHub sign-in, and a WebSocket | queued |
+| **Kystverket** (Norway) | Norwegian EEZ | NLOD, commercial ok | an NMEA decoder | unreachable |
+| AISHub / AIS-catcher | global | reciprocal | **a receiver of your own** | closed to us |
+
+Kystverket is the honest disappointment: open licence, no registration, and a
+published TCP endpoint at `153.44.253.27:5631` that **timed out after fifteen
+seconds** from this machine. That is either a blocked outbound port here or an
+endpoint that has moved, and there was no way to tell which from outside.
+
+aisstream is the only free global source, and it is queued rather than
+dismissed for two reasons that are worth separating. The soft one: its licence
+question was [asked publicly in April](https://github.com/aisstream/issues/issues/181)
+and the maintainers have not answered, which after the OpenSky non-profit-only
+clause is a thing to know before depending on it. The hard one: **it is a
+stream, not a snapshot.** Every provider here answers "where is everything
+right now?" on demand; that one pushes messages and expects the caller to
+accumulate the world. `Provider.fetch()` does not fit it, and pretending it
+does is how a seam gets bent.
+
+### What was measured before anything was written
+
+Digitraffic was called, not read about:
+
+| | |
+|---|---|
+| vessels | **916** in one request |
+| payload | **37 KB** gzipped |
+| metadata | **806 rows**, covering **797** of the positions - 87% draw with a name |
+| `Cache-Control` | `max-age=60` - the upstream states its own cadence |
+| conditional GET | `If-Modified-Since` -> **304, zero bytes** |
+| coverage | lon 17.0-32.5, lat 57.7-65.8 |
+
+That last row is the price. The Pacific is empty because this source cannot see
+the Pacific, and the map should say so rather than imply the sea is quiet.
+
+### Three things AIS does that will draw a confident lie
+
+**Sentinels are not nulls.** "Not available" is encoded as a number inside the
+valid range and passed straight through: `sog` 102.3, `cog` 360, `heading` 511
+- 11, 88 and 142 vessels respectively in one sample. Rendered unconverted that
+is a ship crossing the Baltic at 190 km/h, pointed due north. Same class of
+error as a marker at (0, 0) (D18), and harder, because it is wrong on a quarter
+of the fleet while the rest looks right.
+
+**Checking for the sentinel is not enough, and the first version proved it.**
+`>= 102.3` is precise, correct, and missed three vessels sending **102.2** -
+the saturation value one below it. Caught by sorting the live feed by speed and
+reading the top. Reading *further* down was worse:
+
+| knots | what it was |
+|---|---|
+| 102.2 | NOUNOU, a 250 m tanker, under way |
+| 102.2 | RATNIK, a tug, **moored** |
+| 85.0 | MYRA, a 228 m tanker, **at anchor** |
+| 81.0 | VYATICH, a tug, **moored** |
+
+None of those is a sentinel. They are broken transmitters, and no encoding
+separates them from real readings - only knowing what a ship can do. The
+fastest vessel ever in service does about 58 knots, so `MAX_PLAUSIBLE_KNOTS` is
+60. **And it is stated what that does not fix**: under the ceiling a tug still
+claims 49.5 knots and a cargo ship 44.3. They stay, because a per-type limit
+would be a table of guesses dressed as a rule and the type is missing for 13%
+of the feed. Consecutive positions would settle it properly and the store
+already holds the track to do it with - a different piece of work from decoding
+a message.
+
+**Most ships are not moving.** Of 636 vessels seen in the last fifteen minutes,
+**127 had a speed over half a knot.** Four fifths of a ship map is stationary
+where an aircraft map is entirely motion. Not a defect to fix - it is what the
+layer looks like - but it makes `navStat` load-bearing rather than decorative:
+*moored*, *at anchor* and *aground* are three very different reasons to be
+still, and a speed of zero says none of them.
+
+### The TTL, which is D86 again
+
+The endpoint retains a vessel for about **24 hours**. The ages have a cliff and
+then a tail:
+
+| age | cumulative |
+|---|---|
+| < 3 min | 56% |
+| < 6 min | 67% |
+| < 15 min | **69%** |
+| 1-24 h | the remaining **28%** |
+
+Nearly a third of what it returns has not been heard from in over an hour.
+Serving that is exactly D86 - the map of ghosts, where 39% of everything drawn
+was already past the fade. So 900 s: it sits on the cliff, it is five missed
+reports for a moored Class A vessel transmitting every three minutes, and it
+drops the tail. **Confirmed live**: 917 vessels in the feed, **642 held** - 70%
+against the 69% the histogram predicted.
+
+### What the layer cost, and what that says about D4
+
+One provider module, one router, one factory line, one job tuple, one settings
+block, and one argument added to `Poller`. Nothing in the aircraft path, the
+satellite path, the store, the thinning or the schemas changed shape.
+
+Two decisions inside that are worth keeping:
+
+**It is shaped like the aircraft router, not the satellite one**, and the
+question that decides which is *can the position be computed?* A satellite's
+can, so that router propagates on request and holds no store (D95). A ship's
+cannot - somebody has to have heard it - so this polls and serves a snapshot,
+with the staleness flag and the eviction TTL that follow.
+
+**It keeps a property the aircraft router has to work for.** Selecting an
+aircraft buys a flight track and a scheduled route from two further services,
+because a position feed carries neither. AIS carries both: a vessel transmits
+its own destination, draught and ETA. So `get_ship` performs no I/O and is not
+even `async`.
+
+**One job rather than two.** The two-tier poll buys viewport latency at the
+price of a second call, which is worth it against a metered source. Digitraffic
+takes no bounding box and the whole feed is 37 KB, so a viewport job would
+fetch the same bytes twice and discard half.
+
+### The tripwire fired, for the second time
+
+`test_exactly_the_two_declared_kinds` failed in an otherwise green suite, saying
+a third `ObjectType` is a scope decision that has to be written down first. It
+did the same thing when satellites arrived (D93). Twice now it has stopped a
+layer being added quietly, and both times it pointed at the docs rather than at
+the code - which is the whole of what it is for.
+
+### One test was vacuous and mutation testing said so
+
+`test_the_tag_differs_from_the_aircraft_layers` compared the two layers' ETags
+and asserted they differed. They differ anyway - the stores hold different
+versions and sources - so changing the router to hash `"aircraft"` did not fail
+it. Replaced with one that pins the router's own argument against a tag
+computed from the ship store's real state. The hashing itself was already
+covered; what was uncovered was **which name gets handed to it**, which is
+exactly what the mutation changed.
+
+756 backend tests, up from 701.

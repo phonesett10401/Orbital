@@ -17,7 +17,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api import aircraft, auth, health, moon, search
 from app.api import satellites as satellites_api
-from app.config import Settings, get_settings
+from app.api import ships as ships_api
+from app.config import SHIP_JOBS, Settings, get_settings
 from app.ingestion.poller import Poller
 from app.ingestion.flights import FlightHistory
 from app.ingestion.flightroutes import FlightRoutes
@@ -27,8 +28,10 @@ from app.providers import registry
 from app.accounts.sessions import SessionStore
 from app.accounts.store import AccountStore
 from app.providers.lunar import LunarTracker
+from app.providers.digitraffic import DigitrafficProvider
 from app.providers.satellites import SatelliteProvider
 from app.providers.base import Provider
+from app.models import ObjectType
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +136,35 @@ def create_app(
                 cache_path=settings.satellite_element_cache_path,
             )
 
+        # Ships, from Fintraffic's open AIS feed. A third layer beside the
+        # other two, and the first one to need its *own* poller and store
+        # rather than sharing or computing: a ship's position cannot be
+        # calculated, so it has to be polled, and a store holding two layers
+        # would need a type filter threaded through every method (D165).
+        #
+        # Its own jobs, too. The quota presets are a credit ladder built for a
+        # metered source; Digitraffic meters nothing, so SHIP_JOBS is one job
+        # at the cadence the upstream's own Cache-Control asks for.
+        ships: DigitrafficProvider | None = None
+        ship_store: ObjectStore | None = None
+        ship_poller: Poller | None = None
+        if settings.ship_layer_enabled:
+            ships = DigitrafficProvider(
+                base_url=settings.digitraffic_base_url,
+                timeout_seconds=settings.digitraffic_timeout_seconds,
+                user_agent=settings.adsblol_user_agent,
+            )
+            ship_store = ObjectStore(
+                object_ttl_seconds=settings.ship_object_ttl_seconds,
+                track_history_points=settings.track_history_points,
+                # Twice the poll interval, which is the only value that cannot
+                # be stale by construction - the same rule the aircraft store
+                # derives, applied to a different interval.
+                snapshot_ttl_seconds=SHIP_JOBS[0].interval_seconds * 2.0,
+                object_type=ObjectType.SHIP,
+            )
+            ship_poller = Poller(ships, ship_store, settings, jobs=SHIP_JOBS)
+
         # Three spacecraft around the Moon, from JPL Horizons. A background
         # refresh for the same reason the elements have one: no route may wait
         # on an upstream (D134).
@@ -149,11 +181,15 @@ def create_app(
         app.state.satellites = satellites
         app.state.settings = settings
         app.state.store = store
+        app.state.ship_store = ship_store
+        app.state.ship_poller = ship_poller
         app.state.flights = flights
         app.state.routes = route_lookup
         app.state.poller = poller
 
         await poller.start()
+        if ship_poller is not None:
+            await ship_poller.start()
         if satellites is not None:
             satellite_task = asyncio.create_task(
                 _refresh_elements(satellites, settings.satellite_element_refresh_seconds)
@@ -161,15 +197,18 @@ def create_app(
         if lunar is not None:
             lunar_task = asyncio.create_task(_refresh_lunar(lunar))
         logger.info(
-            "Orbital ready: provider=%s preset=%s satellites=%s",
+            "Orbital ready: provider=%s preset=%s satellites=%s ships=%s",
             active_provider.name,
             settings.quota_preset,
             "on" if satellites else "off",
+            ships.name if ships else "off",
         )
         try:
             yield
         finally:
             await poller.stop()
+            if ship_poller is not None:
+                await ship_poller.stop()
             if satellite_task is not None:
                 satellite_task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -182,6 +221,8 @@ def create_app(
                 await lunar.aclose()
             if satellites is not None:
                 await satellites.aclose()
+            if ships is not None:
+                await ships.aclose()
             await route_lookup.aclose()
 
     app = FastAPI(
@@ -218,6 +259,7 @@ def create_app(
     app.include_router(moon.router)
     app.include_router(aircraft.router)
     app.include_router(satellites_api.router)
+    app.include_router(ships_api.router)
     app.include_router(health.router)
     app.include_router(search.router)
     return app

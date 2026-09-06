@@ -115,6 +115,29 @@ PRESETS: dict[str, tuple[PollJob, ...]] = {
     ),
 }
 
+#: What the ships layer polls, and why it is one job rather than two.
+#:
+#: Not a member of ``PRESETS`` because the presets are a **credit ladder** -
+#: each one exists because OpenSky meters us and a different account tier buys
+#: a different interval (D21). Digitraffic meters nothing, so there is no
+#: ladder to climb and no preset to choose between.
+#:
+#: **One job, not two.** The two-tier arrangement buys latency in the viewport
+#: at the cost of a second call, and it is worth it when the global sweep is
+#: expensive or slow. Here the entire feed is 916 vessels in **37 KB**, the
+#: endpoint takes no bounding box at all, and a viewport job would therefore
+#: fetch exactly the same bytes twice and throw half of them away.
+#:
+#: **60 seconds because the upstream said so.** The response carries
+#: ``Cache-Control: max-age=60``, so polling faster returns the same body: the
+#: source has stated its own cadence and the polite thing is to match it. That
+#: is two requests a minute at most against a documented anonymous limit of
+#: sixty, comfortably inside it even before the ``Digitraffic-User`` header
+#: lifts the cap.
+SHIP_JOBS: tuple[PollJob, ...] = (
+    PollJob(name="ships", bbox=None, interval_seconds=60.0, tier=1),
+)
+
 DAILY_ALLOWANCES: dict[str, int] = {
     "anonymous": ANONYMOUS_DAILY_CREDITS,
     "authenticated": AUTHENTICATED_DAILY_CREDITS,
@@ -242,6 +265,44 @@ class Settings(BaseSettings):
             "never grant `admin` whatever it is set to."
         ),
     )
+    # ---- ships -------------------------------------------------------------
+    ship_layer_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether the ships layer runs beside the aircraft and satellite "
+            "ones. On by default because Digitraffic needs no credentials and "
+            "meters nothing: the whole cost is one request a minute for 37 KB "
+            "(D165). Turn it off for a deployment that should make no outbound "
+            "calls at all."
+        ),
+    )
+    digitraffic_base_url: str = "https://meri.digitraffic.fi/api/ais/v1"
+    digitraffic_timeout_seconds: float = Field(default=30.0, gt=0)
+    ship_object_ttl_seconds: float = Field(
+        default=900.0,
+        gt=0,
+        description=(
+            "Drop a vessel not re-observed within this window. Longer than the "
+            "aircraft layer's 300 s and for the opposite reason: a moored ship "
+            "transmits every three minutes rather than every few seconds, so a "
+            "short TTL would evict most of a harbour. Shorter than it looks, "
+            "though, against a source that retains 24 hours - 28% of what "
+            "Digitraffic returns has not been heard from in over an hour, and "
+            "serving that is D86's map of ghosts (D165)."
+        ),
+    )
+    aisstream_api_key: str = Field(
+        default="",
+        description=(
+            "Key for aisstream.io, which is the only free source with **global** "
+            "coverage (D165). Empty means the ships layer runs on Digitraffic "
+            "alone, which is the northern Baltic and nothing else - a smaller "
+            "map, not a broken one. Created by signing in to aisstream.io with "
+            "GitHub; it is a WebSocket stream rather than a polled endpoint, so "
+            "it is wired in separately from the provider registry."
+        ),
+    )
+
     lunar_layer_enabled: bool = Field(
         default=True,
         description=(

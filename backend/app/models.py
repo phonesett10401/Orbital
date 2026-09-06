@@ -44,18 +44,23 @@ class OrbitalModel(BaseModel):
 class ObjectType(str, Enum):
     """Which layer an object belongs to.
 
-    Two values. It was carried from the start with one, because the shape is
+    It was carried from the start with one value, because the shape is
     deliberately source-agnostic (D4) and retrofitting a discriminator into a
     contract three layers deep is far more painful than carrying one - and it
     was carried for that reason rather than as satellite groundwork (D37).
     Satellites arrived four months later (D93) and it cost one line.
 
-    Adding a third value is a scope decision, not a code change. See D93 for
-    where the boundary now sits and the tests that hold it there.
+    Ships arrived after that (D165) and cost the same one line, which is the
+    second time the bet has paid and the point at which it stops being luck.
+    Note what the three do *not* have in common: an aircraft is observed by a
+    metered feed, a satellite is computed from elements and never observed at
+    all, and a ship is observed by a free regional one. The enum does not care,
+    because it names the layer rather than how the layer is filled.
     """
 
     AIRCRAFT = "aircraft"
     SATELLITE = "satellite"
+    SHIP = "ship"
 
 
 Latitude = Annotated[float, Field(ge=-90.0, le=90.0)]

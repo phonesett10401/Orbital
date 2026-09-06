@@ -8,10 +8,13 @@ environment variable, not a code change:
     ORBITAL_PROVIDER=adsblol   # live data, free
     ORBITAL_PROVIDER=union     # both, merged (D83)
     ORBITAL_PROVIDER=satellites  # a different layer entirely (D93)
+    ORBITAL_PROVIDER=digitraffic # a third layer, ships (D165)
 
-That last one is why the interface was worth having. Adding a second live
+Those last two are why the interface was worth having. Adding a second live
 source meant writing one module and one three-line factory; nothing in
 ``app.api``, the store, the poller or the frontend knows there are now two.
+Ships cost the same, four months later again, which is the second time the bet
+has paid and the point at which it stops being luck (D165).
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from typing import TYPE_CHECKING, Callable, Mapping
 
 from app.providers.adsblol import AdsbLolProvider
 from app.providers.base import Provider
+from app.providers.digitraffic import DigitrafficProvider
 from app.providers.fixture import FixtureProvider
 from app.providers.opensky import OpenSkyProvider
 from app.providers.satellites import SatelliteProvider
@@ -65,6 +69,19 @@ def _build_satellites(settings: "Settings") -> Provider:
     )
 
 
+def _build_digitraffic(settings: "Settings") -> Provider:
+    """Ships from Fintraffic's open AIS feed (D165).
+
+    Like the satellite factory it takes no credentials, and for a better
+    reason: there are none to take. No key, no account, no quota, CC BY 4.0.
+    """
+    return DigitrafficProvider(
+        base_url=settings.digitraffic_base_url,
+        timeout_seconds=settings.digitraffic_timeout_seconds,
+        user_agent=settings.adsblol_user_agent,
+    )
+
+
 def _build_union(settings: "Settings") -> Provider:
     """The free feed every poll, the metered one occasionally (D83)."""
     return UnionProvider(
@@ -83,6 +100,7 @@ _BUILDERS: Mapping[str, Callable[["Settings"], Provider]] = {
     "adsblol": _build_adsblol,
     "union": _build_union,
     "satellites": _build_satellites,
+    "digitraffic": _build_digitraffic,
 }
 
 

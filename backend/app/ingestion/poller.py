@@ -92,6 +92,13 @@ class Poller:
         provider: the data source. One attempt per call; raises on failure.
         store: where successful results are merged.
         settings: intervals, quota preset, viewport rules.
+        jobs: what to poll and how often. Defaults to the configured quota
+            preset, which is the aircraft layer's answer and is derived from a
+            credit ladder (D21). The ships layer has no credits to ladder, so
+            it passes its own single job instead (D165) - one argument rather
+            than a second poller, because retry, backoff, jitter and the
+            never-raise contract are written and tested once here and a copy of
+            them would drift.
         sleep: injectable for tests, so timing behaviour can be asserted
             without a test suite that takes five minutes to run.
     """
@@ -102,11 +109,13 @@ class Poller:
         store: ObjectStore,
         settings: Settings,
         *,
+        jobs: tuple[PollJob, ...] | None = None,
         sleep=asyncio.sleep,
     ) -> None:
         self.provider = provider
         self.store = store
         self.settings = settings
+        self.jobs = jobs if jobs is not None else settings.jobs
         self._sleep = sleep
 
         self._tasks: list[asyncio.Task[None]] = []
@@ -114,7 +123,7 @@ class Poller:
             job.name: JobStatus(
                 name=job.name, tier=job.tier, interval_seconds=job.interval_seconds
             )
-            for job in settings.jobs
+            for job in self.jobs
         }
         self._viewport: BBox | None = None
         self._rate_limited_until: float = 0.0
@@ -127,13 +136,13 @@ class Poller:
         if self._tasks:
             raise RuntimeError("poller already started")
         self._stopping.clear()
-        for job in self.settings.jobs:
+        for job in self.jobs:
             self._tasks.append(asyncio.create_task(self._run(job), name=f"poll-{job.name}"))
         logger.info(
             "poller started: provider=%s preset=%s jobs=%s projected=%.0f credits/day",
             self.provider.name,
             self.settings.quota_preset,
-            [j.name for j in self.settings.jobs],
+            [j.name for j in self.jobs],
             self.settings.projected_daily_credits(),
         )
 

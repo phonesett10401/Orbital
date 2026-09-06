@@ -114,12 +114,30 @@ class TestTrackedObject:
 
 
 class TestObjectTypeBoundary:
-    """The discriminator, and what D93 says may be in it."""
+    """The discriminator, and what D93 and D165 say may be in it."""
 
-    def test_exactly_the_two_declared_kinds(self):
-        # Mirrors the frontend's LAYERS guard. A third value is a scope
-        # decision (D93), and this fails until that decision is written down.
-        assert sorted(t.value for t in ObjectType) == ["aircraft", "satellite"]
+    def test_exactly_the_three_declared_kinds(self):
+        # Mirrors the frontend's LAYERS guard. A new value is a scope decision,
+        # and this fails until that decision is written down - which is the
+        # whole of its job, and it has now done it twice. It failed when
+        # satellites were added (D93) and again when ships were (D165), each
+        # time in a passing suite, each time pointing at the docs rather than
+        # at the code.
+        assert sorted(t.value for t in ObjectType) == ["aircraft", "satellite", "ship"]
+
+    def test_a_ship_fits_the_universal_shape(self):
+        # D165. The interesting field is altitude: a ship is at sea level, which
+        # is a fact rather than a gap, so it is zero and not None - the same
+        # call the aircraft layer makes for an aeroplane on a runway.
+        ship = make_object(
+            id="256371000",
+            label="NOUNOU",
+            altitude=0.0,
+            velocity=6.4,
+            type=ObjectType.SHIP,
+        )
+        assert ship.type is ObjectType.SHIP
+        assert ship.altitude == 0.0
 
     def test_a_satellite_fits_the_universal_shape(self):
         # D94: nine of the ten fields map without argument. Altitude is the one
