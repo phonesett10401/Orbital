@@ -9044,3 +9044,68 @@ Every one is two writers and no agreement about which is in charge, and every fi
 is the same shape: **read what is true rather than assume what was intended.**
 The loop now writes nothing unless the globe owns the view *and* that globe is
 Earth.
+
+---
+
+## D163 - The solar system gets its own camera
+
+Phone, after several rounds of fixing symptoms: **the planet view and the solar
+system should be separate pages.** They are, and the reason it matters is that
+almost every defect of the last several sessions was one problem wearing
+different clothes.
+
+The system was a MapLibre custom layer. It borrowed the map's projection matrix,
+its camera, its far plane and its zoom, and each of those cost something:
+
+| symptom | actually |
+|---|---|
+| the sky had to be centred on the camera to exist (D129) | the far plane sits one globe radius past centre at every zoom |
+| planets vanished at some angles (D130) | three.js culls on the CPU against that same borrowed frustum |
+| six attempts at the globe/solar handover (D139-D145) | one camera serving two pictures at wildly different scales |
+| a band where neither view was worth looking at (D158) | the same |
+| a transition screen to hide the seam (D161) | the same |
+| "drag" moved bodies at different rates, some backwards (D160) | the map's camera always looks at the centre of the world underfoot |
+
+None of those are solar-system problems. They are "this is not our camera"
+problems, and one change answers all of them.
+
+### What the new one is
+
+`solarScene.ts` builds the same scene from the same tested data -
+`scenePlacements`, `orbitRing`, `surfaceTexture`, `ringProfile`,
+`poleDirection`, the star catalogue - with its own `WebGLRenderer` and a
+`PerspectiveCamera`. `solarCamera.ts` is the camera model: a target, a distance
+and two angles, kept as plain data with pure operations so the arithmetic is
+testable without a GPU.
+
+What that **deletes** is as interesting as what it adds. No `clampToFarPlane` and
+no `onBeforeCompile`, because the far plane is ours. No `frustumCulled = false`,
+because the frustum matches the scene and culling is correct again. No
+`skyRadius`, because the stars sit at a radius we chose. And **panning is a
+translation**: `pan` moves the target one world-unit per pixel, which is exactly
+what could not be done at any damping while the map owned the camera.
+
+D125 rejected a second renderer and was right at the time - that was for drawing
+the system *inside* the globe view, where both would run at once. As separate
+pages only one exists: the scene is built on mount and disposed on unmount.
+
+### Two faults found while building it
+
+**Star colours are 0-1, not 0-255.** Dividing by 255 made every star three
+thousandths of its colour, which is black on black. The field was being drawn
+perfectly and was invisible - settled by the renderer reporting **5,070 points
+drawn** against a screen showing none.
+
+**`PointsMaterial` has one size for the whole field**, so a per-star size
+attribute is ignored. Magnitude is spent on brightness instead, which is the
+better axis anyway: a faint star is faint, and drawing it larger to say so is
+backwards.
+
+### Where this stops, deliberately
+
+The page renders, names every body, offers Visit, drags and zooms. What is *not*
+done is the removal: `solarSystemLayer.ts` and the whole handover apparatus in
+`PlanetView` - the zoom coupling, the settle, the solar drag, the marker feed -
+are still there and still work. Taking them out is the next step, and doing it in
+the same change would have meant a half-migrated map with no way to tell which
+half was at fault.

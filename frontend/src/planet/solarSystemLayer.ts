@@ -74,7 +74,7 @@ export const SOLAR_MAX_ZOOM = -1.0;
 export const SOLAR_FULL_ZOOM = -1.5;
 
 /** Colours by body, matching the picker's dots so the two agree. */
-const COLOURS: Record<string, number> = {
+export const COLOURS: Record<string, number> = {
   sun: 0xffd166, mercury: 0x9c8b7d, venus: 0xe6c884, mars: 0xd1603d,
   jupiter: 0xd7a06a, saturn: 0xe3cfa0, uranus: 0x9fd8e0, neptune: 0x6b8fd6,
 };

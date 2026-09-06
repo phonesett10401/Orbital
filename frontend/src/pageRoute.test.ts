@@ -4,8 +4,9 @@ import { hashFor, moveFor, pageForHash } from './pageRoute';
 
 describe('the address a page has', () => {
   it('recognises each page by its hash', () => {
-    expect(pageForHash(hashFor('signin'))).toBe('signin');
-    expect(pageForHash(hashFor('premium'))).toBe('premium');
+    for (const page of ['signin', 'premium', 'system'] as const) {
+      expect(pageForHash(hashFor(page)), page).toBe(page);
+    }
   });
 
   it('recognises one without the hash character', () => {
@@ -29,7 +30,7 @@ describe('the address a page has', () => {
   });
 
   it('gives every page a distinct address', () => {
-    const hashes = (['signin', 'premium'] as const).map(hashFor);
+    const hashes = (['signin', 'premium', 'system'] as const).map(hashFor);
     expect(new Set(hashes).size).toBe(hashes.length);
   });
 });

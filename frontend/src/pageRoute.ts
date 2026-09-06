@@ -18,11 +18,12 @@
  */
 
 /** The pages that can be open. `null` is the map. */
-export type PageName = 'signin' | 'premium';
+export type PageName = 'signin' | 'premium' | 'system';
 
 const HASHES: Record<PageName, string> = {
   signin: '#signin',
   premium: '#premium',
+  system: '#system',
 };
 
 /** The address a page has while it is open. */

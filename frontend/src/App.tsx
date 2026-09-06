@@ -24,6 +24,7 @@ import { SignInPage } from './components/SignInPage';
 import { JourneyScreen } from './components/JourneyScreen';
 import { SolarApproach } from './components/SolarApproach';
 import { SolarLabels } from './components/SolarLabels';
+import { SolarSystemPage } from './components/SolarSystemPage';
 import { WarpField } from './components/WarpField';
 import { MoonSatelliteList } from './components/MoonSatelliteList';
 import { LayerToggle } from './components/LayerToggle';
@@ -143,6 +144,9 @@ export function App() {
           the rest of the chrome put together. */}
       <SignInPage />
       <PremiumPage />
+      {/* Its own canvas and its own camera, over everything, only while open
+          (D163). */}
+      <SolarSystemPage />
     </div>
   );
 }
