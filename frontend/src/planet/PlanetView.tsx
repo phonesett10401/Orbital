@@ -51,7 +51,7 @@ import {
 import { createSatelliteIconCanvases } from './satelliteSprite';
 import { setVisibility } from './layerSync';
 import { prefersReducedMotion } from '../motion';
-import { settleMs, settleTarget } from '../viewSettle';
+import { SETTLE_IDLE_MS, settleMs, settleTarget } from '../viewSettle';
 import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
 import {
   SOLAR_LAYER,
@@ -727,25 +727,37 @@ export function PlanetView() {
            * broken in a way that is hard to name. Passing through the band
            * still looks exactly as it did.
            */
-          let zoomAtMoveStart = map.getZoom();
-          map.on('movestart', () => {
-            if (map) zoomAtMoveStart = map.getZoom();
-          });
-          map.on('moveend', () => {
+          let restingZoom = map.getZoom();
+          let idleTimer = 0;
+          const settleIfIdle = () => {
             if (!map) return;
             // Not while a trip between worlds is running: it crosses this band
             // deliberately, twice, and has its own plan for where to stop
             // (D126). A settle here would fight it mid-flight.
             if (useOrbitalStore.getState().flyingTo) return;
             const zoom = map.getZoom();
-            const target = settleTarget(zoom, zoomAtMoveStart);
+            const target = settleTarget(zoom, restingZoom);
+            // **Where the camera actually is, never where it was sent.**
+            // Recording the target here instead is a lie whenever the settle is
+            // interrupted - a wheel notch arriving mid-animation leaves the
+            // camera short of it, and the next evaluation then measures the
+            // direction against a zoom the camera never reached and reads it
+            // backwards. Measured: scrolling inward from the solar system was
+            // pulled straight back out to it, which is the stuck view reported.
+            //
+            // It is the D154 lesson again, in a third place: a record of what
+            // was asked for is not a record of what is true.
+            restingZoom = zoom;
             if (target === null) return;
-            zoomAtMoveStart = target;
             map.easeTo({
               zoom: target,
               duration: settleMs(prefersReducedMotion()),
               easing: (t: number) => 1 - (1 - t) * (1 - t),
             });
+          };
+          map.on('move', () => {
+            window.clearTimeout(idleTimer);
+            idleTimer = window.setTimeout(settleIfIdle, SETTLE_IDLE_MS);
           });
 
           // The selected aircraft, as a mesh in MapLibre's own context (D67).

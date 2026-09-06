@@ -96,6 +96,25 @@ export function isSettled(zoom: number): boolean {
 }
 
 /**
+ * How long the camera must be still before a settle is even considered.
+ *
+ * **The bug this exists because of.** The first version acted on `moveend`,
+ * believing that meant "after the gesture". It does not: a wheel emits `move`
+ * and `moveend` continuously *while* you scroll, so the settle ran mid-gesture,
+ * and its own `easeTo` cancelled MapLibre's scroll-zoom animation and restarted
+ * from the target. The faster you scrolled the more of the gesture was eaten,
+ * and from the solar system it read as being unable to zoom in at all - ten
+ * notches inward measured as ending exactly on `PLANET_HOME`, rubber-banding
+ * rather than moving.
+ *
+ * So the rule is idleness, not an event: nothing happens until the camera has
+ * been still for this long, which no gesture in progress ever is. Long enough
+ * to outlast MapLibre's own scroll inertia, short enough that letting go feels
+ * like the view completing the movement rather than thinking about it.
+ */
+export const SETTLE_IDLE_MS = 350;
+
+/**
  * How long the settle takes.
  *
  * Long enough to read as the view completing a movement, short enough not to
