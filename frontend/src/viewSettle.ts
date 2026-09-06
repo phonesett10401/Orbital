@@ -124,3 +124,16 @@ export const SETTLE_IDLE_MS = 350;
 export function settleMs(reducedMotion: boolean): number {
   return reducedMotion ? 0 : 420;
 }
+
+/**
+ * How much of a drag reaches the camera in the solar view (D160).
+ *
+ * Measured at zoom -1.5: an undamped 100 pixels of pan swept Jupiter 432 pixels
+ * and Neptune 435 the other way, four times faster than the hand that asked for
+ * it. A quarter puts the fastest body near the pointer's own speed.
+ *
+ * It cannot make them all agree - see the note at the call site - because
+ * panning turns the viewpoint rather than sliding it, and the body underfoot
+ * does not move at all.
+ */
+export const PAN_DAMPING = 0.25;

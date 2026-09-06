@@ -24,6 +24,7 @@ import {
   SCALE_NOTE,
   bodyRadiusFor,
   exaggerationOf,
+  MIN_GAP,
   radiusFor,
   drawnBodyRadius,
   bodyExaggeration,
@@ -76,7 +77,16 @@ describe('orbit distance', () => {
   it('keeps Mercury clear of the Sun rather than crushed onto it', () => {
     // The failure a linear scale gives: 96% of the frame spent on the four
     // giants and the inner four in a smudge at the centre.
-    expect(radiusFor(ELEMENTS.mercury.a)).toBeGreaterThan(0.15);
+    //
+    // Stated against **the Sun's drawn edge** rather than a bare number. The
+    // number used to be 0.15, chosen against the curve of the day, and when
+    // D160 took room from Mercury's distance to give it to the inner pairs it
+    // failed at 0.136 - while the thing it was guarding, the clearance between
+    // Mercury and the disc it might be crushed onto, was still comfortable. A
+    // threshold that has to be edited whenever the scale is tuned was not
+    // measuring the claim it was named for.
+    const sunEdge = bodyRadiusFor(696_000);
+    expect(radiusFor(ELEMENTS.mercury.a) - sunEdge).toBeGreaterThanOrEqual(MIN_GAP);
   });
 
   it('leaves every adjacent pair separately clickable', () => {

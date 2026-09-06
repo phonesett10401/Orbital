@@ -8879,3 +8879,88 @@ The inner planets crowd: at this compression Mercury, Venus, Earth and the Moon
 sit close enough that their labels overlap near the Sun. The distances are
 compressed by three orders of magnitude, so this is the compression showing
 through rather than a layout bug, but it is the next thing to improve.
+
+---
+
+## D160 - Room for the inner planets, and a drag that is really a turn
+
+### The compression could not do it, and neither could widening
+
+The inner planets sat on top of each other. The first instinct is to tune the
+distance compression, and it was measured across the whole family: with the
+softening at 0.3 the inner four occupy 0.21 of the frame radius, at 0.05 they
+occupy 0.20, at 1.0 they occupy 0.18, and raising the normalised log to a power
+moves it by less than a hundredth. **Venus and Earth are 0.28 AU apart while
+Neptune is 30 AU out**, and no monotone map of one axis gives the inner pairs
+more than a sliver while still fitting Neptune in the frame.
+
+The second instinct was to push each crowded body outward until it cleared its
+neighbour and then renormalise so Neptune stayed on the rim. That is very nearly
+a no-op and measurably so: **Venus to Earth went from 0.0518 to 0.0520**. Pushing
+everything out and scaling everything back returns what it started with.
+
+### Room has to be taken from somewhere
+
+There is one frame, so a gap that grows is a gap that shrinks elsewhere, and
+saying which is the whole decision. `allocateRadii` gives every adjacent pair
+`MIN_GAP` of the frame first and shares the remainder in proportion to the
+logarithm - so the curve still decides the shape and this decides the floor.
+
+Venus to Earth is now **0.089** of the frame against 0.052, and the measured
+on-screen separation went from overlapping to 46 pixels. The cost is named:
+Mercury moved inward from 0.179 to 0.136, still clearing the Sun's drawn edge by
+more than the floor.
+
+It is the same bargain already struck for the Moon, drawn beside the Earth at a
+fixed offset because 0.0026 AU cannot be resolved at all (D140). The distance
+axis is already false and `SCALE_NOTE` says so; the angle is untouched.
+
+### A test that had to be rewritten rather than relaxed
+
+`keeps Mercury clear of the Sun rather than crushed onto it` asserted
+`radiusFor(mercury) > 0.15` and failed at 0.136. The temptation is to lower the
+number. But 0.15 was chosen against the curve of the day, and **the thing it was
+named for - clearance between Mercury and the disc it might be crushed onto -
+was still comfortable**. It now asserts that, against the Sun's drawn edge. A
+threshold that has to be edited whenever the scale is tuned was not measuring
+the claim it was named for.
+
+### The labels needed the other half
+
+Moving the bodies cannot fix everything: a name is sixty pixels wide whatever
+the orbit does, and the Moon is drawn fifteen pixels from the Earth *on purpose*.
+So `stackLabels` pushes a colliding label **down**, never sideways - down keeps
+it under its own body where the eye can follow a column back up, while sideways
+puts it under a neighbour and says the wrong thing. Nothing is dropped: every
+planet was asked to be named, and de-cluttering by hiding answers a different
+question.
+
+Two rounds of that were spent estimating the wrong box. The body underfoot
+carries a second line, "you are here", which is **taller than one line and wider
+than its own name**; estimating either from the name alone left the Moon tucked
+underneath it. The stack was right both times and was being handed the wrong
+rectangle.
+
+Measured at five zooms: clean at -1.05, -1.3, -1.5 and -2, with one residual
+few-pixel touch between "you are here" and the Moon at -1.8.
+
+### The drag was never a speed problem
+
+Reported as too fast, and it is not a scalar. **MapLibre's camera always looks at
+the centre of the world it is standing on, so panning turns the viewpoint rather
+than sliding it.** Measured at z-1.5, per 100 pixels of pan:
+
+| body | moves |
+|---|---|
+| Earth, underfoot | 0 |
+| Mercury | +375 |
+| Jupiter | +432 |
+| Neptune | **-435** |
+
+Bodies in different directions sweep differently, and some sweep the *other way*,
+because that is what turning your head does. No constant makes them agree.
+
+So `PAN_DAMPING` is chosen to put the **fastest** body near the pointer's own
+speed rather than to make them all match. A 200-pixel drag now moves Jupiter 250
+pixels where it moved 870 before. The rest still move at their own rates, which
+is the honest behaviour of a rotation and not a defect to tune away.

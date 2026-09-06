@@ -52,7 +52,7 @@ import { createSatelliteIconCanvases } from './satelliteSprite';
 import { setVisibility } from './layerSync';
 import { publishMarkerSource, publishZoomSource } from './solarMarkerFeed';
 import { prefersReducedMotion } from '../motion';
-import { SETTLE_IDLE_MS, settleMs, settleTarget } from '../viewSettle';
+import { PAN_DAMPING, SETTLE_IDLE_MS, settleMs, settleTarget } from '../viewSettle';
 import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
 import {
   SOLAR_LAYER,
@@ -758,8 +758,21 @@ export function PlanetView() {
             const dy = event.clientY - dragFrom.y;
             dragFrom = { x: event.clientX, y: event.clientY };
             // Opposite to the pointer, so the sky follows the hand rather than
-            // running away from it.
-            map.panBy([-dx, -dy], { duration: 0 });
+            // running away from it, and damped hard.
+            //
+            // **This is a turn, not a slide, and no single factor can make it
+            // one.** MapLibre's camera always looks at the centre of the world
+            // it is standing on, so panning rotates the viewpoint rather than
+            // translating it - and measured at z-1.5, 100 pixels of pan moved
+            // Mercury 375 pixels, Jupiter 432, Neptune **-435** the other way,
+            // and the Earth underfoot not at all. Bodies in different directions
+            // sweep differently because that is what turning your head does.
+            //
+            // So the damping is chosen to put the *fastest* body near the
+            // pointer's own speed rather than to make them agree, which they
+            // cannot. Undamped, the outer planets crossed the screen four times
+            // faster than the hand.
+            map.panBy([-dx * PAN_DAMPING, -dy * PAN_DAMPING], { duration: 0 });
           });
           const endDrag = (event: PointerEvent) => {
             if (!dragFrom) return;

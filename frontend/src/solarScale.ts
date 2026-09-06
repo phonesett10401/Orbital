@@ -36,6 +36,8 @@
  * true and the distances are not.**
  */
 
+import { ELEMENTS, PLANET_IDS } from './planets';
+
 /** Astronomical unit in kilometres, for turning body radii into orbit units. */
 export const AU_KM = 149_597_870.7;
 
@@ -77,9 +79,118 @@ export const ORBIT_K = ORBIT_MAX / Math.log(1 + NEPTUNE_APHELION_AU / ORBIT_SOFT
  * whatever the compression does to the numbers, a planet further out is drawn
  * further out, always.
  */
-export function radiusFor(distanceAu: number): number {
+/**
+ * The least share of the frame any two neighbouring orbits get.
+ *
+ * ## Why the compression alone cannot do this
+ *
+ * Measured across the whole family of curves. With the softening at 0.3 the
+ * inner four occupy 0.21 of the frame radius; at 0.05 they occupy 0.20, at 1.0
+ * they occupy 0.18, and raising the normalised log to a power moves it by less
+ * than a hundredth. The reason is not the tuning: **Venus and Earth are 0.28 AU
+ * apart while Neptune is 30 AU out**, and no monotone map of one axis gives the
+ * inner pairs more than a sliver while still fitting Neptune in the frame.
+ *
+ * ## And why widening alone does not either
+ *
+ * The first attempt pushed each crowded body outward until it cleared its
+ * neighbour, then renormalised so Neptune stayed on the rim. That is very
+ * nearly a no-op, and measurably so: Venus to Earth went from 0.0518 to 0.0520.
+ * Pushing everything out and then scaling everything back down returns almost
+ * exactly what it started with.
+ *
+ * **Room for the inner planets has to be taken from the outer ones.** There is
+ * one frame, so a gap that grows is a gap that shrinks somewhere else, and
+ * saying which is the whole decision. Every adjacent pair is given `MIN_GAP` of
+ * the frame first, and what is left over is shared out in proportion to the
+ * logarithm - so the curve still decides the *shape*, and this decides the
+ * floor.
+ *
+ * It is the same bargain already struck for the Moon, drawn beside the Earth at
+ * a fixed offset because 0.0026 AU cannot be resolved at all (D140). The
+ * distance axis is already false; `SCALE_NOTE` says so on screen.
+ */
+export const MIN_GAP = 0.07;
+
+/**
+ * Turn a set of ascending curve values into radii that fill `max` exactly, with
+ * every neighbouring pair at least `minGap` apart.
+ *
+ * The first anchor stays at zero - it is the Sun's own centre, and moving it
+ * would shift the system off the point it is drawn around.
+ *
+ * Strictly increasing by construction, which is the property that matters:
+ * every gap is at least `minGap`, which is positive, so a planet further out is
+ * drawn further out however the proportions fall.
+ */
+export function allocateRadii(
+  curve: readonly number[],
+  minGap = MIN_GAP,
+  max = 1,
+): number[] {
+  if (curve.length === 0) return [];
+  if (curve.length === 1) return [0];
+  const gaps = curve.slice(1).map((r, i) => Math.max(0, r - curve[i]));
+  const total = gaps.reduce((a, b) => a + b, 0);
+  // What is left after every pair has taken its floor. Negative would mean the
+  // floors alone overflow the frame, and then the floors are all there is.
+  const spare = Math.max(0, max - minGap * gaps.length);
+  const out = [0];
+  for (const gap of gaps) {
+    const share = total === 0 ? spare / gaps.length : (gap / total) * spare;
+    out.push(out[out.length - 1] + minGap + share);
+  }
+  return out;
+}
+
+function logCurve(distanceAu: number): number {
   const clamped = Math.max(0, distanceAu);
   return ORBIT_K * Math.log(1 + clamped / ORBIT_SOFTENING_AU);
+}
+
+/**
+ * The distances the curve is pinned to: each planet's own orbit, plus the
+ * centre and Neptune's aphelion so the ends stay where they were.
+ *
+ * Mean orbits rather than today's positions, so the shape of the scale does not
+ * change from one day to the next. A planet's eccentricity still moves it along
+ * the curve; it does not move the curve.
+ */
+const ANCHOR_AU = [0, ...PLANET_IDS.map((p) => ELEMENTS[p].a), NEPTUNE_APHELION_AU];
+
+/** The same anchors after the crowded ones have been pushed apart. */
+const ANCHOR_R = allocateRadii(ANCHOR_AU.map(logCurve), MIN_GAP, ORBIT_MAX);
+
+/**
+ * A heliocentric distance in AU, compressed to a drawable radius.
+ *
+ * **Piecewise linear through the planets' own orbits**, rather than the bare
+ * logarithm it used to be. The logarithm is still what decides where the
+ * anchors go - it is finite and smooth at zero, where a bare log sends the
+ * Sun's surface to minus infinity, and it spends the frame far better than a
+ * linear scale, which gives 96% of it to the four giants. What the anchors add
+ * is `MIN_BODY_GAP` between neighbours, which no choice of logarithm could
+ * (see that constant for the measurements).
+ *
+ * Monotonic by construction, which is the property that actually matters -
+ * whatever the compression does to the numbers, a planet further out is drawn
+ * further out, always. Linear interpolation between strictly increasing anchors
+ * is strictly increasing, and beyond the last anchor it continues on the final
+ * segment's slope rather than flattening, so nothing outside the planets folds
+ * back on itself.
+ */
+export function radiusFor(distanceAu: number): number {
+  const d = Math.max(0, distanceAu);
+  for (let i = 1; i < ANCHOR_AU.length; i += 1) {
+    if (d <= ANCHOR_AU[i]) {
+      const span = ANCHOR_AU[i] - ANCHOR_AU[i - 1];
+      const across = span === 0 ? 0 : (d - ANCHOR_AU[i - 1]) / span;
+      return ANCHOR_R[i - 1] + across * (ANCHOR_R[i] - ANCHOR_R[i - 1]);
+    }
+  }
+  const n = ANCHOR_AU.length - 1;
+  const slope = (ANCHOR_R[n] - ANCHOR_R[n - 1]) / (ANCHOR_AU[n] - ANCHOR_AU[n - 1]);
+  return ANCHOR_R[n] + (d - ANCHOR_AU[n]) * slope;
 }
 
 // ---- size ----------------------------------------------------------------

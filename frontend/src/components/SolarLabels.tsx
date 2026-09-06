@@ -32,12 +32,16 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { bodyFor, isLandable } from '../bodies';
+import { stackLabels } from '../labelStack';
 import { currentMarkers } from '../planet/solarMarkerFeed';
 import type { BodyMarker } from '../planet/solarSystemLayer';
 import { useOrbitalStore } from '../state/store';
 
 /** Moved less than this and the frame is not worth committing. */
 const MOVED_ENOUGH_PX = 1;
+
+/** Characters in "you are here", the second line the current body carries. */
+const HERE_CHARS = 12;
 
 function changed(a: BodyMarker[], b: BodyMarker[]): boolean {
   if (a.length !== b.length) return true;
@@ -72,6 +76,48 @@ export function SolarLabels() {
 
   if (markers.length === 0) return null;
 
+  // Names go where they will not land on each other. The orbits were given room
+  // first and that was the real fix; this handles what the scale cannot - a name
+  // is the same width whatever the orbit does, and the Moon is drawn fifteen
+  // pixels from the Earth on purpose (D160).
+  //
+  // Priority order: the body underfoot, then the largest. Whoever comes first
+  // keeps the place directly beneath their own planet.
+  const ordered = [...markers].sort((a, b) => {
+    if (a.id === activeBody) return -1;
+    if (b.id === activeBody) return 1;
+    return b.sizePx - a.sizePx;
+  });
+  const clearanceOf = (m: (typeof markers)[number]) => Math.max(14, m.sizePx / 2 + 12);
+  const stacked = new Map(
+    stackLabels(
+      ordered.map((m) => ({
+        id: m.id,
+        x: m.x,
+        // Estimated from the name rather than measured: measuring would mean a
+        // layout pass per frame, and being a few pixels out only ever costs a
+        // little extra clearance.
+        y: m.y + clearanceOf(m),
+        // A box is as wide as its widest line, and the body underfoot carries a
+        // second one - "you are here" is wider than every planet's name except
+        // Neptune's. Estimating from the name alone left the Moon tucked under
+        // it: the stack was right and it was being handed the wrong box.
+        width:
+          Math.max(
+            bodyFor(m.id as Parameters<typeof bodyFor>[0])?.name.length ?? 6,
+            m.id === activeBody ? HERE_CHARS : 0,
+          ) *
+            7 +
+          8,
+        // Two lines at this line-height measure about 34px, not the 26 the font
+        // sizes suggest. Measuring the real box would mean a layout pass per
+        // committed frame; being generous by a few pixels costs a little extra
+        // clearance and nothing else.
+        height: m.id === activeBody ? 34 : 13,
+      })),
+    ).map((l) => [l.id, l.y] as const),
+  );
+
   return (
     <div className="solarlabels" aria-label="The solar system">
       {markers.map((marker) => {
@@ -81,6 +127,7 @@ export function SolarLabels() {
         // names. Saturn's rings are wider than its sphere, which is why this
         // is a measured size rather than a constant.
         const clearance = Math.max(14, marker.sizePx / 2 + 12);
+        const nameTop = (stacked.get(marker.id) ?? marker.y + clearance) - marker.y;
         const here = body.id === activeBody;
         const visitable = isLandable(body) && !here;
         return (
@@ -100,9 +147,13 @@ export function SolarLabels() {
                 Visit {body.name}
               </button>
             )}
-            <span className="solarlabel__name" style={{ top: `${clearance}px` }}>
+            <span className="solarlabel__name" style={{ top: `${nameTop}px` }}>
               {body.name}
-              {here && <span className="solarlabel__here"> · you are here</span>}
+              {/* On its own line, not appended. Inline it made the Earth's
+                  label three times the width of every other one, which is what
+                  was still colliding with Venus after the orbits themselves had
+                  been given room (D160). */}
+              {here && <span className="solarlabel__here">you are here</span>}
             </span>
           </div>
         );
