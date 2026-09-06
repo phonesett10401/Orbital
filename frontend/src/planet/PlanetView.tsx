@@ -847,7 +847,17 @@ export function PlanetView() {
             // the view while the whole planet is in frame; past that the
             // sub-satellite points do.
             const shellShowing = satelliteMode && (map?.getZoom() ?? 99) <= SHELL_MAX_ZOOM;
-            if (map) {
+            // **Only while the globe is the thing being shown.** Below the
+            // handover the solar system owns the view and `applySolarView` has
+            // hidden every one of these; a loop that goes on writing `visible`
+            // to them there is the D154 fault pointing the other way - two
+            // writers disagreeing every frame, and the reason a satellite
+            // ground layer was measured switched on inside the solar view.
+            //
+            // Reading the zoom rather than tracking a flag, so the two cannot
+            // disagree about which of them is in charge (D141).
+            const globeOwnsTheView = (map?.getZoom() ?? 99) > SOLAR_HANDOVER_ZOOM;
+            if (map && globeOwnsTheView) {
               setVisibility(
                 map,
                 [SATELLITE_LAYER, SATELLITE_LABEL_LAYER],
