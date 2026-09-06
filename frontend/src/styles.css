@@ -1338,3 +1338,126 @@ body {
   border-color: rgba(255, 209, 102, 0.5);
   color: #ffd166;
 }
+
+/* Account control, beside the body picker (D148). */
+.account {
+  position: relative;
+  margin-left: 10px;
+}
+
+.account__button {
+  padding: 3px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+
+.account__button:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.account__button.is-signed-in {
+  border-color: rgba(120, 190, 255, 0.45);
+  color: #8fc4ff;
+}
+
+.account__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  width: 260px;
+  padding: 14px;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+
+.account__label {
+  display: block;
+  margin: 8px 0 4px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.account__input {
+  width: 100%;
+  padding: 7px 9px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.account__input:focus {
+  outline: none;
+  border-color: rgba(120, 190, 255, 0.6);
+}
+
+.account__problem {
+  margin: 6px 0 0;
+  color: #ffb4a2;
+  font-size: 11px;
+}
+
+.account__problem--server {
+  margin-top: 10px;
+}
+
+.account__submit {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px;
+  background: rgba(120, 190, 255, 0.16);
+  border: 1px solid rgba(120, 190, 255, 0.45);
+  border-radius: 6px;
+  color: #cfe6ff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.account__submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.account__switch {
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px;
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.account__email {
+  margin: 0;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.account__tier {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+}

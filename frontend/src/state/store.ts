@@ -18,6 +18,7 @@
 import { create } from 'zustand';
 import { withBestFix } from '../trackFix';
 import type { MoonSatellite } from '../moonSatellites';
+import type { Account } from '../auth';
 
 import type {
   Airport,
@@ -181,6 +182,19 @@ export interface OrbitalState {
    */
   trueScale: boolean;
   setTrueScale(on: boolean): void;
+
+  /**
+   * Who is signed in, or null for nobody.
+   *
+   * `null` is the ordinary state, not an error: the free tier is the product
+   * and every feature works signed out except the ones deliberately reserved.
+   * `accountChecked` says whether the question has been *asked* yet, which is
+   * different from being signed out and is what stops the chrome flashing
+   * "Sign in" for a moment on every page load (D148).
+   */
+  account: Account | null;
+  accountChecked: boolean;
+  setAccount(account: Account | null): void;
 
   /**
    * Where the camera is heading, while a trip is in progress.
@@ -355,6 +369,11 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   },
 
   activeBody: 'earth',
+  account: null,
+  accountChecked: false,
+  setAccount(account) {
+    set({ account, accountChecked: true });
+  },
   trueScale: false,
   setTrueScale(on) {
     if (useOrbitalStore.getState().trueScale !== on) set({ trueScale: on });

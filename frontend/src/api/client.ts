@@ -63,6 +63,72 @@ async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
+/**
+ * A POST that carries the session cookie (D148).
+ *
+ * `credentials: 'same-origin'` is fetch's default and is stated anyway, because
+ * the whole sign-in depends on it and a default is a thing somebody changes.
+ * The dev server proxies `/api`, so the backend is same-origin and the cookie
+ * travels; **a deployment that puts the API on another origin needs
+ * `include` here and `allow_credentials` plus an explicit origin list on the
+ * backend** - a cookie is never sent cross-origin by accident, which is the
+ * point of the rule and the thing that will look like a broken login.
+ */
+async function post<T>(path: string, body?: unknown): Promise<T | null> {
+  let response: Response;
+  try {
+    response = await fetch(`${config.apiBase}${path}`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (error) {
+    throw new ApiError(`cannot reach the Orbital backend: ${(error as Error).message}`, null);
+  }
+
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const parsed = await response.json();
+      if (typeof parsed?.detail === 'string') detail = parsed.detail;
+    } catch {
+      // Non-JSON error body; the status text will do.
+    }
+    throw new ApiError(detail, response.status);
+  }
+
+  // 204 on sign-out, which has no body to parse.
+  if (response.status === 204) return null;
+  return (await response.json()) as T;
+}
+
+export interface AccountView {
+  email: string;
+  tier: string;
+}
+
+export interface MeResponse {
+  account: AccountView | null;
+}
+
+/** Who is signed in, if anyone. Answers 200 with a null account when nobody is. */
+export function fetchMe(signal?: AbortSignal): Promise<MeResponse> {
+  return request<MeResponse>('/api/auth/me', signal);
+}
+
+export function register(email: string, password: string): Promise<MeResponse | null> {
+  return post<MeResponse>('/api/auth/register', { email, password });
+}
+
+export function signIn(email: string, password: string): Promise<MeResponse | null> {
+  return post<MeResponse>('/api/auth/login', { email, password });
+}
+
+export function signOut(): Promise<null> {
+  return post<null>('/api/auth/logout') as Promise<null>;
+}
+
 export interface FetchObjectsOptions {
   bbox?: BoundingBox | null;
   limit?: number;

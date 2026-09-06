@@ -7984,3 +7984,50 @@ the stolen-cookie test. Both were run.
 
 The database lives under `.cache/`, which is already gitignored - so a file of
 password hashes cannot be committed by accident.
+
+## D148 - Signing in from the browser, and the bug only using it would find
+
+The frontend half: one control in the header, the judgements in `auth.ts` where
+they can be tested, and the component thin enough to read - the shape
+`moonFacts` and `routeSummary` already have, because this project has no
+render harness.
+
+### The client's checks are a courtesy, not a control
+
+Every rule in `auth.ts` is also enforced in `app/api/auth.py`, and that is the
+only reason it is safe to have them. A check in the browser exists to say "that
+password is too short" without a round trip; anybody who deletes it still
+cannot register a short password. Worth stating because the opposite mistake is
+invisible: validation that lives only in the client looks exactly like
+validation until somebody posts to the endpoint directly.
+
+The messages are the **server's own words** wherever it gave them, because they
+are deliberately vague in the places that matter - a taken address and a wrong
+password are both phrased so as not to confirm whether an account exists (D147).
+Rewriting them in the client would undo that on the last step.
+
+### It says nothing until it knows
+
+`accountChecked` is separate from `account`, and gates the whole control.
+Without it the header shows "Sign in" on every page load and corrects itself a
+moment later, which reads as being signed out and then back in - alarming for
+precisely the people who care.
+
+### Proved in a real browser, not from a header
+
+The header assertion (`httponly` in `set-cookie`) is a backend test. In the
+running app, with a live session authenticating every request, **`document.cookie`
+is empty**. That is the property the whole cookie decision was for, and it can
+only be checked where scripts actually run.
+
+### The bug the tests could not have caught
+
+Register, sign out, then sign in again - and the panel reopened still in
+*register* mode, so the correct password went to `/register` and came back
+"that address cannot be registered". Baffling, and being deliberately vague, no
+help at all. The pure logic was right and every test passed; the fault was a
+piece of state the component held across a close.
+
+Reset with the rest of the form. This is the second time this session that
+using the thing found what testing it could not - the first was the aeroplane
+behind its own track.
