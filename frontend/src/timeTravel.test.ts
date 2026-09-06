@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  OFFSET_MAX,
-  OFFSET_MIN,
   WINDOW_MS,
   clampInstant,
   describeOffset,
@@ -18,8 +16,10 @@ const DAY = 24 * HOUR;
 describe('the window the elements can answer for', () => {
   it('reaches the same distance either way', () => {
     // SGP4 is the same arithmetic in both directions and the backend checks
-    // `abs(age_days)`, so the slider is symmetric because the maths is (D119).
-    expect(OFFSET_MIN).toBe(-OFFSET_MAX);
+    // `abs(age_days)`, so the window is symmetric because the maths is (D119).
+    expect(clampInstant(NOW - 30 * DAY, NOW) - NOW).toBe(
+      -(clampInstant(NOW + 30 * DAY, NOW) - NOW),
+    );
     expect(WINDOW_MS).toBe(7 * DAY);
   });
 

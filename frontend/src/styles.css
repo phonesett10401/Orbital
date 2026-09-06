@@ -509,6 +509,14 @@ body {
   letter-spacing: 0.04em;
 }
 
+.timectl__hint {
+  margin: 6px 0 0;
+  font-size: 9.5px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  letter-spacing: 0.03em;
+}
+
 .timectl__stamp {
   display: flex;
   justify-content: space-between;

@@ -29,9 +29,10 @@
 export const WINDOW_DAYS = 7;
 export const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
-/** Slider positions, in minutes, so the useful range is not all in one pixel. */
-export const OFFSET_MIN = -WINDOW_MS / 60000;
-export const OFFSET_MAX = WINDOW_MS / 60000;
+// The slider's own end stops are **not** here any more. They are what the
+// signed-in account is entitled to ask for, which is a commercial bound and
+// lives in `entitlements.ts`; this module holds the physical one, which no
+// account can buy past (D149).
 
 /**
  * Keep a requested instant inside the window the elements can answer for.

@@ -118,11 +118,11 @@ class MeResponse(BaseModel):
 
 
 def get_accounts(request: Request) -> AccountStore:
-    return request.app.state.accounts
+    return getattr(request.app.state, "accounts", None)  # type: ignore[return-value]
 
 
 def get_sessions(request: Request) -> SessionStore:
-    return request.app.state.sessions
+    return getattr(request.app.state, "sessions", None)  # type: ignore[return-value]
 
 
 def current_account(
@@ -132,7 +132,12 @@ def current_account(
 ) -> Account | None:
     """The signed-in account, or None. The one way to ask."""
     token = request.cookies.get(SESSION_COOKIE)
-    if not token:
+    # `accounts` and `sessions` are hung off `app.state` in the lifespan, so a
+    # test client built without one has neither. Asking "is anyone signed in"
+    # must answer "no" there rather than raising: routes that merely *consult*
+    # the account, like the satellite window (D149), would otherwise fail for a
+    # reason that has nothing to do with what they were asked.
+    if not token or accounts is None or sessions is None:
         return None
     session = sessions.lookup(token)
     if session is None:

@@ -8031,3 +8031,99 @@ piece of state the component held across a close.
 Reset with the rest of the form. This is the second time this session that
 using the thing found what testing it could not - the first was the aeroplane
 behind its own track.
+
+---
+
+## D149 - The first thing a tier changes: the time-travel window
+
+Phases 1-3 built accounts that worked and did nothing. You could register, sign
+in, and be told you were on the free tier, and every feature behaved identically
+either way. This is the phase where `tier` changes an answer.
+
+**Free reaches 24 hours either way; premium reaches 7 days.**
+
+### Why this feature and not another
+
+Because it is the one capability Orbital has that is genuinely expensive to want
+and cheap to serve. A satellite position is *computed*, so an instant a week out
+costs the same arithmetic as the present one - which is precisely what makes it
+an honest paid feature rather than an artificial restriction on something that
+was free to give. Nothing is being throttled that we could afford to hand out.
+What is sold is the **reach** of a capability, and the free tier keeps a full day
+of it in both directions, which is more than enough to answer "when does this
+pass over me tonight".
+
+It also lands where the licensing already pointed. The aircraft layer is
+somebody else's data under ODbL; the satellite layer is *our* arithmetic over
+public elements. The thing users come for is the thing we least own, and the
+thing we can sell is the thing we compute - the same line D119 found, arrived at
+from the commercial side.
+
+### Two bounds of different kinds, kept in different modules
+
+- **Seven days is physics.** SGP4 drifts roughly a kilometre a day from an
+  element set's epoch, so past a week the answer stops being one. It lives in
+  `timeTravel.ts` and `propagate`.
+- **The tier windows are policy.** A commercial decision that can change with a
+  pricing page. They live in `entitlements.ts` / `entitlements.py`.
+
+They are deliberately not spelled the same way, because the moment they are,
+somebody raises the premium window to thirty days - the constant was right
+there - and Orbital starts serving confident nonsense. Every tier window is
+passed through `min` against the accuracy bound.
+
+And **the premium window already *is* the accuracy bound**: premium buys all the
+reach that exists, not a larger slice of a bigger one. There is no hidden tier
+above it because there is nothing left to sell, which is a thing a pricing page
+should be able to say.
+
+### Where it is enforced, and where it merely shows
+
+The server enforces it, in `app/api/satellites.py`. The client's copy is a
+courtesy: deleting it would change only how pleasant the refusal is - the slider
+would run further and the request would come back 403.
+
+**A 403, not a silent clamp.** The client already clamps its own slider, so a
+request past the window is either a bug or a request made around the interface.
+Answering with a quietly different instant than the one asked for would hide
+both, and this layer's one standing rule is that it never shows a position while
+implying it is something else.
+
+This is also the one bound that *can* be checked at the door, and the contrast
+is worth keeping. D119 refused to check the accuracy bound in the route, because
+it is measured per element set against epochs that differ by hours across the
+catalogue, so there is no single instant to compare against. The entitlement
+bound is measured against *now*, which every request shares.
+
+### The grace, which exists for a failure no test can produce
+
+The client clamps to exactly `now ± window`, and then the request spends a moment
+in flight, so by the time the server reads its own clock a perfectly legitimate
+edge request is a few seconds outside. Without five minutes of slack the
+slider's own end stop would intermittently 403 - a failure appearing only at the
+extreme, only sometimes, and only for real users, because a test computes both
+instants from one frozen clock.
+
+### The bug, which was found by signing out
+
+Signing out has to take the reach back with it: rewind six days as premium, sign
+out, and the map would otherwise be left showing an instant the server now
+refuses, with nothing on screen saying why.
+
+The obvious fix hangs the browser. Written as an effect depending on
+`viewInstant` and reading `Date.now()`, it pulls the instant to exactly
+`now - window`; that is a new value, so the effect runs again; and by then `now`
+has moved on, so the edge it just wrote is already outside. React reaches
+"Maximum update depth exceeded" in under a second and **renders an empty page**.
+
+Every unit test passed throughout. A pure function given a frozen clock cannot
+exhibit it. It was found by signing out of a rewound map and watching the page
+go blank - the third time in three sessions that using the thing found what
+testing it could not, after the aeroplane behind its own track (D138) and the
+sign-in panel reopening in register mode (D148).
+
+The fix re-clamps when the **entitlement** changes rather than when the instant
+does, reading the instant through the store instead of a dependency. Drift
+afterwards is not a problem to solve: `usePolling` stops polling entirely while
+the map is rewound, so the one request that matters is made immediately, well
+inside the grace.

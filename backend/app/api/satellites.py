@@ -26,10 +26,13 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from app.accounts.entitlements import travel_refusal, within_travel_window
+from app.accounts.store import Account
+from app.api.auth import current_account
 from app.api.deps import get_settings_dep
 from app.api.schemas import ObjectListResponse
 from app.config import Settings
-from app.models import BBox, ObjectType, TrackedObject, TrackedObjectDetail, TrackSource
+from app.models import BBox, ObjectType, TrackedObject, TrackedObjectDetail, TrackSource, utcnow
 from app.providers.satellites import SatelliteProvider
 from app.thinning import thin
 
@@ -86,6 +89,28 @@ def _parse_instant(raw: str | None) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+def _check_window(when: datetime | None, account: Account | None) -> None:
+    """Refuse an instant this account is not entitled to (D149).
+
+    **This is a different bound from the one `_parse_instant` declines to
+    enforce, and the difference is the whole reason it can be checked here.**
+    The accuracy bound is per element set, measured against epochs that differ
+    by hours across the catalogue, so there is no single instant to compare
+    against at the door. The entitlement bound is measured against *now*, which
+    every request shares - so one check, at the door, is exactly right.
+
+    403 rather than a silent clamp. The client already clamps its own slider to
+    the window it is entitled to, so a request past it is either a bug or a
+    request made around the interface; answering with a quietly different
+    instant than the one asked for would hide both, and this layer's one rule
+    is that it never shows a position while implying it is something else.
+    """
+    if when is None:
+        return
+    if not within_travel_window(when, utcnow(), account.tier if account else None):
+        raise HTTPException(status_code=403, detail=travel_refusal(account.tier if account else None))
+
+
 def _parse_bbox(raw: str | None) -> BBox | None:
     if raw is None:
         return None
@@ -108,15 +133,18 @@ async def list_satellites(
         default=None,
         description=(
             "ISO 8601 instant to compute positions for. Past or future, within "
-            "seven days of each element set's epoch. Omit for now."
+            "seven days of each element set's epoch, and within the window the "
+            "signed-in account is entitled to. Omit for now."
         ),
     ),
     settings: Settings = Depends(get_settings_dep),
     provider: SatelliteProvider | None = Depends(get_satellites),
+    account: Account | None = Depends(current_account),
 ) -> ObjectListResponse:
     catalogue = _catalogue(provider)
     box = _parse_bbox(bbox)
     when = _parse_instant(at)
+    _check_window(when, account)
 
     records = catalogue.positions(box, at=when)
     total = len(records)

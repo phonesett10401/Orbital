@@ -35,6 +35,12 @@ def fixture_now():
 def client(monkeypatch):
     """An app whose satellite layer reads committed elements and never dials out."""
     monkeypatch.setattr("app.providers.satellites.utcnow", lambda: fixture_now())
+    # The route now reads the clock too, to measure the entitlement window
+    # (D149). Left unpatched it would compare a fixture instant from whenever
+    # the committed elements were captured against the real present, and every
+    # test here would fail for a reason that has nothing to do with what it
+    # asserts.
+    monkeypatch.setattr("app.api.satellites.utcnow", lambda: fixture_now())
 
     settings = Settings(
         provider="fixture", quota_preset="authenticated", satellite_layer_enabled=True
@@ -216,13 +222,106 @@ class TestLookingBack:
         assert response.status_code == 422
         assert "ISO 8601" in response.json()["detail"]
 
-    def test_beyond_the_accuracy_bound_the_objects_drop_out(self, client):
-        # Not a 4xx: the seven days are measured per element set against its
-        # own epoch, and those epochs differ across the catalogue, so this is
-        # the same behaviour as an element set that has gone stale rather than
-        # a bad request. SGP4 drifts about a kilometre a day, so past the bound
-        # the answer stops being one.
+    def test_beyond_every_window_the_entitlement_answers_first(self, client):
+        # This used to assert a 200 with nothing in it: the seven-day accuracy
+        # bound is measured per element set against its own epoch, so a far
+        # instant made every object drop out rather than making the request
+        # bad. That property still holds and is still tested, one layer down,
+        # in `test_satellites.py` - where it can be seen without an account in
+        # the way.
+        #
+        # What changed is that a *second* bound now sits in front of it (D149),
+        # measured against now rather than against epochs, so it can be checked
+        # at the door and is. Thirty days is outside every tier's window, so
+        # the entitlement refuses before propagation is ever asked.
         far = quote((fixture_now() + timedelta(days=30)).isoformat())
         response = client.get(f"/api/satellites?at={far}")
-        assert response.status_code == 200
-        assert response.json()["total"] == 0
+        assert response.status_code == 403
+
+
+class TestTheWindowATierBuys:
+    """The first place an account changes an answer (D149).
+
+    Through the real route with a real cookie jar, because the thing being
+    tested is not the arithmetic - `test_entitlements.py` covers that with no
+    HTTP anywhere near it - but the wiring: that the route reads the session,
+    that a signed-out reader is treated as free rather than as an error, and
+    that a tier written into the database moves the limit.
+    """
+
+    @staticmethod
+    def _accounts(client, tmp_path):
+        """Point the app at a database of its own, and hand it back."""
+        from app.accounts.sessions import SessionStore
+        from app.accounts.store import AccountStore
+
+        path = tmp_path / "accounts.sqlite"
+        client.app.state.accounts = AccountStore(path)
+        client.app.state.sessions = SessionStore(path)
+        return client.app.state.accounts
+
+    @staticmethod
+    def _at(hours=0, days=0):
+        return quote((fixture_now() + timedelta(hours=hours, days=days)).isoformat())
+
+    def test_a_signed_out_reader_gets_the_free_window(self, client, tmp_path):
+        self._accounts(client, tmp_path)
+        assert client.get(f"/api/satellites?at={self._at(hours=-20)}").status_code == 200
+
+    def test_a_signed_out_reader_is_refused_beyond_it(self, client, tmp_path):
+        self._accounts(client, tmp_path)
+        response = client.get(f"/api/satellites?at={self._at(days=-3)}")
+        assert response.status_code == 403
+        # The refusal has to be readable, or it is indistinguishable from a bug.
+        assert "premium" in response.json()["detail"].lower()
+
+    def test_a_free_account_gets_no_more_than_being_signed_out(self, client, tmp_path):
+        # Registering is not itself the product. If it were, "free account"
+        # would mean something different from "free", and the pricing page
+        # would have three tiers in it without saying so.
+        self._accounts(client, tmp_path)
+        client.post(
+            "/api/auth/register",
+            json={"email": "free@example.com", "password": "a good long password"},
+        )
+        assert client.get(f"/api/satellites?at={self._at(days=-3)}").status_code == 403
+
+    def test_a_premium_account_may_go_the_whole_week(self, client, tmp_path):
+        from app.accounts.store import TIER_PREMIUM
+
+        accounts = self._accounts(client, tmp_path)
+        client.post(
+            "/api/auth/register",
+            json={"email": "paid@example.com", "password": "a good long password"},
+        )
+        signed_in = accounts.authenticate("paid@example.com", "a good long password")
+        assert signed_in is not None
+        accounts.set_tier(signed_in.id, TIER_PREMIUM)
+
+        assert client.get(f"/api/satellites?at={self._at(days=-6)}").status_code == 200
+
+    def test_signing_out_takes_the_window_back(self, client, tmp_path):
+        # The cookie is what carries the tier, so a shared machine must not
+        # leave the previous reader's entitlement behind.
+        from app.accounts.store import TIER_PREMIUM
+
+        accounts = self._accounts(client, tmp_path)
+        client.post(
+            "/api/auth/register",
+            json={"email": "paid@example.com", "password": "a good long password"},
+        )
+        signed_in = accounts.authenticate("paid@example.com", "a good long password")
+        assert signed_in is not None
+        accounts.set_tier(signed_in.id, TIER_PREMIUM)
+        far = f"/api/satellites?at={self._at(days=-6)}"
+        assert client.get(far).status_code == 200
+
+        client.post("/api/auth/logout")
+        assert client.get(far).status_code == 403
+
+    def test_asking_for_now_never_needs_an_account(self, client, tmp_path):
+        # The gate is on the *reach* of a capability, not on the capability.
+        # Live satellites are the free product and must not acquire a session
+        # requirement by accident.
+        self._accounts(client, tmp_path)
+        assert client.get("/api/satellites").status_code == 200

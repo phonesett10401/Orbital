@@ -13,19 +13,51 @@
  * changes the chrome before it changes anything else.
  */
 
-import { useOrbitalStore } from '../state/store';
+import { useEffect } from 'react';
+
 import {
-  OFFSET_MAX,
-  OFFSET_MIN,
-  clampInstant,
-  describeOffset,
-  formatInstant,
-} from '../timeTravel';
+  clampToEntitlement,
+  scaleLabels,
+  travelWindowMs,
+  upgradeHint,
+} from '../entitlements';
+import { useOrbitalStore } from '../state/store';
+import { clampInstant, describeOffset, formatInstant } from '../timeTravel';
 
 export function TimeControl() {
   const layer = useOrbitalStore((s) => s.activeLayer);
   const viewInstant = useOrbitalStore((s) => s.viewInstant);
   const setViewInstant = useOrbitalStore((s) => s.setViewInstant);
+  const account = useOrbitalStore((s) => s.account);
+
+  // **Signing out has to take the reach back with it.** Rewind six days on a
+  // premium account, sign out, and without this the map is left showing an
+  // instant the server now refuses - so the sky quietly stops updating and
+  // nothing on screen says why. Pulling the instant back to the free window is
+  // visible: the label changes and the slider moves (D149).
+  //
+  // **The dependency list is the whole of the correctness here, and the
+  // obvious version of it hangs the browser.** Written with `viewInstant` as a
+  // dependency and `Date.now()` in the body, this loops forever: it pulls the
+  // instant to exactly `now - window`, that is a new value so the effect runs
+  // again, and by then `now` has moved on so the edge it just wrote is already
+  // outside. React gets to "Maximum update depth exceeded" in under a second
+  // and the page renders nothing at all. Found by signing out, not by testing:
+  // every unit test of `clampToEntitlement` passed, because a pure function
+  // given a frozen clock cannot exhibit it.
+  //
+  // So it runs when the *entitlement* changes and reads the instant through
+  // the store rather than through a dependency. Drift afterwards is not a
+  // problem to solve: polling stops entirely while the map is rewound
+  // (`usePolling`), so the one request that matters is made immediately, well
+  // inside the grace the backend allows for flight time.
+  useEffect(() => {
+    const { viewInstant: current, setViewInstant: set } = useOrbitalStore.getState();
+    if (current === null) return;
+    const now = Date.now();
+    if (Math.abs(current - now) <= travelWindowMs(account)) return;
+    set(clampToEntitlement(current, now, account));
+  }, [account]);
 
   // Aircraft cannot answer for another time, so the control does not exist
   // there rather than existing and refusing.
@@ -34,12 +66,22 @@ export function TimeControl() {
   const now = Date.now();
   const offsetMinutes = viewInstant === null ? 0 : Math.round((viewInstant - now) / 60000);
 
+  // The end stops are what this account may ask for, not what the elements
+  // could answer. A slider that ran the full week and then handed back a 403
+  // at one end would look like a fault rather than a price.
+  const reachMinutes = Math.round(travelWindowMs(account) / 60000);
+  const [backLabel, aheadLabel] = scaleLabels(account);
+  const hint = upgradeHint(account);
+
   const onScrub = (minutes: number) => {
     if (minutes === 0) {
       setViewInstant(null);
       return;
     }
-    setViewInstant(clampInstant(now + minutes * 60000, now));
+    // Both clamps, in this order: the entitlement is the tighter of the two
+    // and the accuracy bound is the one that must hold regardless.
+    const asked = clampToEntitlement(now + minutes * 60000, now, account);
+    setViewInstant(clampInstant(asked, now));
   };
 
   const live = viewInstant === null;
@@ -64,8 +106,8 @@ export function TimeControl() {
       <input
         className="timectl__slider"
         type="range"
-        min={OFFSET_MIN}
-        max={OFFSET_MAX}
+        min={-reachMinutes}
+        max={reachMinutes}
         step={5}
         value={offsetMinutes}
         onChange={(e) => onScrub(Number(e.target.value))}
@@ -74,10 +116,18 @@ export function TimeControl() {
       />
 
       <div className="timectl__scale">
-        <span>7 days ago</span>
+        <span>{backLabel}</span>
         <span>now</span>
-        <span>7 days ahead</span>
+        <span>{aheadLabel}</span>
       </div>
+
+      {hint && (
+        // Said once, quietly, under the control it applies to - not a banner
+        // and not a modal. It names what more would reach rather than what is
+        // being withheld, because the free window is a real day either way and
+        // not a teaser.
+        <p className="timectl__hint">{hint}</p>
+      )}
 
       {!live && (
         <div className="timectl__stamp">
