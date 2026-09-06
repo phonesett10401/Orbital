@@ -325,6 +325,106 @@ body {
 }
 
 /*
+ * ---- the page turn between the two views (D161) ----
+ *
+ * Over everything, because for its second and a bit it is the view. Deaf to the
+ * pointer so a click that lands during it reaches whatever is underneath when
+ * it lifts, rather than being swallowed.
+ */
+
+.journey {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  /* Dark enough to cover the camera move, clear enough that the streaks behind
+     it still read as travel rather than as a blank screen. */
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(5, 7, 13, 0.55) 0%,
+    rgba(5, 7, 13, 0.92) 70%
+  );
+  animation: journey-cover 220ms ease both;
+}
+
+@keyframes journey-cover {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.journey__inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: journey-drift 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes journey-drift {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    letter-spacing: 0.5em;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    letter-spacing: 0.24em;
+  }
+}
+
+.journey__text {
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--text);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+}
+
+/*
+ * A dot that keeps its own time, so the screen is visibly *doing* something for
+ * the second it is up rather than being a still frame with words on it.
+ */
+.journey__mark {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px rgba(88, 182, 255, 0.9);
+  animation: journey-pulse 900ms ease-in-out infinite;
+}
+
+@keyframes journey-pulse {
+  0%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+}
+
+/*
+ * The words stay; only the movement goes. The sentence is the answer to "what
+ * just happened", and somebody who asked for less movement has not asked to be
+ * told less.
+ */
+.journey--still,
+.journey--still .journey__inner,
+.journey--still .journey__mark {
+  animation: none;
+}
+
+/*
  * ---- names and a way in, on the solar system (D159) ----
  *
  * Positioned in pixels from the layer that drew the bodies, so the container is

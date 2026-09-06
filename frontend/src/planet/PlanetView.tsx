@@ -52,7 +52,14 @@ import { createSatelliteIconCanvases } from './satelliteSprite';
 import { setVisibility } from './layerSync';
 import { publishMarkerSource, publishZoomSource } from './solarMarkerFeed';
 import { prefersReducedMotion } from '../motion';
-import { PAN_DAMPING, SETTLE_IDLE_MS, settleMs, settleTarget } from '../viewSettle';
+import {
+  PAN_DAMPING,
+  SETTLE_IDLE_MS,
+  SYSTEM_HOME,
+  settleMs,
+  settleTarget,
+} from '../viewSettle';
+import { journeyMs } from '../journey';
 import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
 import {
   SOLAR_LAYER,
@@ -806,6 +813,15 @@ export function PlanetView() {
             // was asked for is not a record of what is true.
             restingZoom = zoom;
             if (target === null) return;
+            // **The two views are two pages, and this is the page turn** (D161).
+            // The screen goes up first so the camera move happens behind it,
+            // which is what makes it a transition rather than a glide.
+            const store = useOrbitalStore.getState();
+            store.setJourney(target === SYSTEM_HOME ? 'system' : 'planet');
+            window.setTimeout(
+              () => useOrbitalStore.getState().setJourney(null),
+              journeyMs(prefersReducedMotion()),
+            );
             map.easeTo({
               zoom: target,
               duration: settleMs(prefersReducedMotion()),

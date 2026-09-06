@@ -8964,3 +8964,50 @@ So `PAN_DAMPING` is chosen to put the **fastest** body near the pointer's own
 speed rather than to make them all match. A 200-pixel drag now moves Jupiter 250
 pixels where it moved 870 before. The rest still move at their own rates, which
 is the honest behaviour of a rotation and not a defect to tune away.
+
+---
+
+## D161 - Two views, and a page turn between them
+
+Phone, three times, and the third time exactly: **the planet view and the solar
+system should be separate views, with a transition that says so** - not two ends
+of a zoom.
+
+Everything before this was a glide. The globe shrank, the planets faded up, the
+camera settled, and at no point did the interface admit you had gone somewhere.
+D158 stopped the reader being *left* in the band between them; this says what
+crossing it is.
+
+### What it says, and what it may not
+
+**"Heading to the solar system"**, and "Heading to Mars" the other way. Not
+"Loading", and a test enforces it: nothing is fetched at either end - the
+positions are computed and the layer is already there - so a loading screen
+would be a lie about why the view is changing, told in the one place the reader
+has nothing else to look at.
+
+### The hold outlasts the move on purpose
+
+The camera settle is 420ms and the screen is held 1,100. A transition screen that
+lifts while the view behind it is still moving shows the reader exactly the join
+it exists to cover, which is worse than no screen at all - it draws the eye to
+the seam first. A test asserts the one is longer than the other, so tuning either
+cannot quietly invert them.
+
+### Reduced motion loses the movement, not the sentence
+
+Shortened rather than removed. The words are the answer to "what just happened",
+and somebody who has asked for less movement has not asked to be told less. The
+streaks and the drift go; the line and its dot stay.
+
+### The streaks run on the right clock
+
+`WarpField` was built for the trip between worlds, which is 3.7 seconds. Running
+a 1.1-second view change on that clock would leave the field barely started when
+the screen lifted, so the total and the loudest moment are read from whichever
+journey is actually running.
+
+Measured, zooming out: the settle fires at -1.14, the screen goes up, the camera
+moves -1.25, -1.44, -1.5 behind it, and it lifts on arrival with the solar system
+and its ten labels in place. Zooming back in: "Heading to Earth" from -1.22
+through to 0, gone on arrival, labels cleared.

@@ -29,6 +29,7 @@
 import { useEffect, useRef } from 'react';
 
 import { IN_MS, OUT_MS } from '../bodyFlight';
+import { journeyMs } from '../journey';
 import { prefersReducedMotion } from '../motion';
 import { useOrbitalStore } from '../state/store';
 import { drawStreaks, makeField } from '../warp';
@@ -38,21 +39,28 @@ const STAR_COUNT = 260;
 
 export function WarpField() {
   const flyingTo = useOrbitalStore((s) => s.flyingTo);
+  // A change of view is a journey too, and gets the same streaks (D161).
+  const journey = useOrbitalStore((s) => s.journey);
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const still = prefersReducedMotion();
 
   useEffect(() => {
-    if (!flyingTo || still) return undefined;
+    if ((!flyingTo && !journey) || still) return undefined;
     const element = canvas.current;
     const context = element?.getContext('2d');
     if (!element || !context) return undefined;
 
     const field = makeField(STAR_COUNT);
-    const total = OUT_MS + IN_MS;
-    // Where the world is swapped, as a fraction of the trip. Read from the same
-    // constants the flight is built from rather than restated, so the loudest
-    // frame cannot drift away from the one with something to hide.
-    const apex = OUT_MS / total;
+    // A trip between worlds and a change of view are different lengths, and
+    // running the shorter one on the longer one's clock would leave the streaks
+    // barely started when it ends (D161).
+    const total = flyingTo ? OUT_MS + IN_MS : journeyMs(false);
+    // Where the thing being covered actually happens, as a fraction of the run.
+    // Read from the constants each is built from rather than restated, so the
+    // loudest frame cannot drift away from the one with something to hide: the
+    // apex for a trip, and the middle for a view change, whose camera move runs
+    // from the start.
+    const apex = flyingTo ? OUT_MS / total : 0.45;
     const started = performance.now();
     let frame = 0;
 
@@ -80,12 +88,12 @@ export function WarpField() {
 
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);
-  }, [flyingTo, still]);
+  }, [flyingTo, journey, still]);
 
   // Absent rather than transparent when nothing is happening: an empty canvas
   // the size of the window is a compositing layer the browser keeps for no
   // reason.
-  if (!flyingTo || still) return null;
+  if ((!flyingTo && !journey) || still) return null;
 
   return <canvas ref={canvas} className="warp" aria-hidden="true" />;
 }

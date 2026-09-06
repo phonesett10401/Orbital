@@ -21,6 +21,7 @@ import { AccountMenu } from './components/AccountMenu';
 import { AdSlot } from './components/AdSlot';
 import { PremiumPage } from './components/PremiumPage';
 import { SignInPage } from './components/SignInPage';
+import { JourneyScreen } from './components/JourneyScreen';
 import { SolarApproach } from './components/SolarApproach';
 import { SolarLabels } from './components/SolarLabels';
 import { WarpField } from './components/WarpField';
@@ -90,6 +91,10 @@ export function App() {
       {/* Directly over the map and under every control: the trip is something
           happening to the view, not to the interface (D155). */}
       <WarpField />
+
+      {/* Over everything, because for its second and a bit it *is* the view
+          (D161). */}
+      <JourneyScreen />
 
       <header className="app__header">
         <div className="app__brand">

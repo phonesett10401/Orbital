@@ -18,6 +18,7 @@
 import { create } from 'zustand';
 import { withBestFix } from '../trackFix';
 import type { MoonSatellite } from '../moonSatellites';
+import type { Destination } from '../journey';
 import type { PageName } from '../pageRoute';
 import type { Account } from '../auth';
 
@@ -203,6 +204,17 @@ export interface OrbitalState {
   setOpenPage(page: PageName | null): void;
 
   /**
+   * The journey between the planet view and the solar system, while one is
+   * running (D161).
+   *
+   * They are two views rather than two ends of a zoom, and this is what says
+   * so: a screen that names where you are going, held over the camera move
+   * underneath it. `null` almost always.
+   */
+  journey: Destination | null;
+  setJourney(to: Destination | null): void;
+
+  /**
    * Where the camera is heading, while a trip is in progress.
    *
    * Held so the solar system layer can brighten the destination on the way
@@ -379,6 +391,10 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   accountChecked: false,
   setAccount(account) {
     set({ account, accountChecked: true });
+  },
+  journey: null,
+  setJourney(to) {
+    if (useOrbitalStore.getState().journey !== to) set({ journey: to });
   },
   openPage: null,
   setOpenPage(page) {
