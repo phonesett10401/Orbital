@@ -211,6 +211,25 @@ class Settings(BaseSettings):
         ),
     )
     satellite_timeout_seconds: float = Field(default=60.0, gt=0)
+    accounts_db_path: Path = Field(
+        default=Path(".cache") / "orbital-accounts.sqlite",
+        description=(
+            "Where accounts and sessions live. The first state in Orbital that "
+            "must survive a restart and cannot be refetched from anywhere "
+            "(D146). Beside the element cache, so one directory holds "
+            "everything the process keeps."
+        ),
+    )
+    cookies_secure: bool = Field(
+        default=False,
+        description=(
+            "Whether the session cookie is marked Secure. Off by default "
+            "because local development is plain http and a Secure cookie is "
+            "simply never sent - which looks like a broken sign-in. **Turn it "
+            "on for any deployment that is not localhost**: without it the "
+            "cookie travels in the clear (D147)."
+        ),
+    )
     lunar_layer_enabled: bool = Field(
         default=True,
         description=(

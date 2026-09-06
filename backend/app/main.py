@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api import aircraft, health, moon, search
+from app.api import aircraft, auth, health, moon, search
 from app.api import satellites as satellites_api
 from app.config import Settings, get_settings
 from app.ingestion.poller import Poller
@@ -24,6 +24,8 @@ from app.ingestion.flightroutes import FlightRoutes
 from app.ingestion.store import ObjectStore
 from app.logging_config import configure_logging
 from app.providers import registry
+from app.accounts.sessions import SessionStore
+from app.accounts.store import AccountStore
 from app.providers.lunar import LunarTracker
 from app.providers.satellites import SatelliteProvider
 from app.providers.base import Provider
@@ -137,6 +139,12 @@ def create_app(
         lunar = LunarTracker() if settings.lunar_layer_enabled else None
         lunar_task: asyncio.Task | None = None
 
+        # Accounts and sessions share one SQLite file. Opened here so a
+        # missing directory or an unwritable path fails at startup rather than
+        # at the first sign-in attempt (D147).
+        app.state.accounts = AccountStore(settings.accounts_db_path)
+        app.state.sessions = SessionStore(settings.accounts_db_path)
+
         app.state.lunar = lunar
         app.state.satellites = satellites
         app.state.settings = settings
@@ -206,6 +214,7 @@ def create_app(
     # and 0.4 MB per minute (D38).
     app.add_middleware(GZipMiddleware, minimum_size=settings.gzip_min_bytes)
 
+    app.include_router(auth.router)
     app.include_router(moon.router)
     app.include_router(aircraft.router)
     app.include_router(satellites_api.router)

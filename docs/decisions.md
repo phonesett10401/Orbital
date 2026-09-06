@@ -7919,3 +7919,68 @@ none of which require knowing who a person is beyond "this row paid".
 A fixed salt fails the test that two hashes of one password differ. A
 `return True` verifier fails two rejection tests. Removing the email folding
 fails four. The tests are not decorative.
+
+## D147 - Sessions, and four things not done the usual way
+
+### Not a JWT
+
+A signed token verifies without a lookup, which buys nothing here: the database
+is already open for any request that touches an account. What it costs is a
+signing secret to manage and leak, and **no way to revoke a session before it
+expires** - a valid signature is valid until the clock says otherwise. A row can
+be deleted, so signing out signs you out. A test copies the cookie, signs out,
+puts the cookie back and asserts it is dead.
+
+### The token is hashed fast, the password slowly
+
+Only a SHA-256 of the session token is stored, for the same reason passwords are
+not stored in the clear. But it is hashed **fast**, deliberately: a password is
+low-entropy and guessable, so the slow hash is the defence; a session token is
+32 bytes from `secrets` and cannot be guessed at any speed worth attempting.
+scrypt here would add tens of milliseconds to every authenticated request in
+exchange for nothing. Knowing which of the two needs the expensive treatment is
+the whole of it.
+
+### An HttpOnly cookie, not a token in the page
+
+The common alternative is to return the token in the body and keep it in
+`localStorage`, where anything that can run a script can read it - and a session
+token's entire value is that it cannot be read. `HttpOnly` puts it where no
+JavaScript can reach, ours included. The cost is that the browser sends it
+automatically, which is the CSRF shape, so `SameSite=Lax` (not sent on
+cross-site POSTs; Lax rather than Strict so following a link in does not look
+like being signed out) and `Secure` off only for local http, where a Secure
+cookie is simply never sent and the sign-in looks broken instead.
+
+### `email-validator` not added
+
+`EmailStr` would have brought a dependency to enforce a grammar. **The only real
+validation of an address is sending a message to it**, which this does not do -
+so a strict grammar proves nothing and reliably rejects valid unusual addresses.
+One `@`, something either side, no spaces.
+
+### What is deliberately not disclosed
+
+Registering an address that already exists returns 409 with *"that address
+cannot be registered"* - not "already registered", and not the address. The
+endpoint is unauthenticated, so anybody could otherwise use it to ask whether a
+given person has an account here. Sign-in gives one message for a wrong password
+and an unknown address, matching the store, which gives one answer and spends
+the same time on both (D146).
+
+### Rate limiting, and its honest limit
+
+Eight attempts per address in five minutes. Without it a slow hash is only a
+speed bump for someone asking a thousand times a second. Per **address** rather
+than globally, or one attacker locks out every user and the defence becomes the
+denial of service - a test asserts that. It is in-process memory, which is
+correct for one process and is the first thing to replace if this is ever run on
+two.
+
+### Verified by breaking it
+
+`httponly=False` fails the cookie test. Removing the revoke on sign-out fails
+the stolen-cookie test. Both were run.
+
+The database lives under `.cache/`, which is already gitignored - so a file of
+password hashes cannot be committed by accident.
