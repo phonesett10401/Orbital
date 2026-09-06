@@ -134,7 +134,6 @@ export function createSolarSystemLayer(
   now: () => Date,
   destination: () => string | null = () => null,
   origin: () => PlanetId = () => 'earth',
-  trueScale: () => boolean = () => false,
   /** The world actually under the camera, which may be a moon. */
   standingOn: () => string = () => 'earth',
 ): SolarLayer {
@@ -377,7 +376,7 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
       // The scale every body shares, unchanged since D122. The world under the
       // camera is drawn on this same scale too - see `originSphere` - which is
       // what stops it looming over the system it belongs to (D137).
-      const r = drawnBodyRadius(radiusKmOf(id), trueScale());
+      const r = drawnBodyRadius(radiusKmOf(id));
       // The Sun emits, so it stays unlit. Everything else is lit *by* it, which
       // is what turns a flat coloured disc into a body with a terminator - and
       // the phase is correct, because the light is where the Sun is.
@@ -433,7 +432,7 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
   const ringNormal = new THREE.Vector3();
 
   const buildRing = () => {
-    const r = drawnBodyRadius(radiusKmOf('saturn'), trueScale());
+    const r = drawnBodyRadius(radiusKmOf('saturn'));
     const profile = new THREE.DataTexture(ringProfile(512), 512, 1, THREE.RGBAFormat);
     profile.minFilter = THREE.LinearFilter;
     profile.magFilter = THREE.LinearFilter;
@@ -535,10 +534,18 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
       const date = now();
       const centre = origin();
 
-      // Body radii are baked into geometry, so a change of anchor - a new
-      // world underfoot, or the true-scale toggle - means rebuilding them.
-      // Cheap: eight spheres and a ring, and only when one of the two changes.
-      const anchor = `${trueScale()}`;
+      // Body radii are baked into geometry, so anything they depend on has to
+      // rebuild them when it changes. **Nothing does, any more.** The one thing
+      // that did was the true-scale toggle, which is gone (D156), and a radius
+      // depends on neither the date nor the world underfoot - so this anchor is
+      // now a constant and the spheres are built exactly once.
+      //
+      // Kept rather than deleted because the alternative was anchoring on the
+      // origin, which would dispose and rebuild eight spheres and a ring in the
+      // middle of a flight, for a set of radii that had not changed. The
+      // machinery costs one comparison a frame and is where the next thing
+      // baked into geometry has to declare itself.
+      const anchor = 'radii';
       if (anchor !== builtForAnchor) {
         for (const mesh of spheres.values()) {
           mesh.geometry.dispose();
@@ -638,14 +645,9 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
       const where = view
         ? `cam ${Math.hypot(...view.at).toFixed(0)}r near ${view.near.toFixed(2)} far ${view.far.toFixed(0)}`
         : 'no camera';
-      // The scale is in the readout because confirming the true-size toggle
-      // took a temporary probe twice - once against a layer whose `render` had
-      // never run, once against a style that had failed to load. Neither was a
-      // fault in the toggle, and both were invisible from outside. One glance
-      // answers it now (D142).
-      status = `${placements.length} bodies, ${
-        trueScale() ? 'TRUE size' : 'compressed'
-      }, fade ${fade.toFixed(2)}, sky ${sky ? `${sky.toFixed(0)}r` : 'none'}, ${where}`;
+      status = `${placements.length} bodies, fade ${fade.toFixed(
+        2,
+      )}, sky ${sky ? `${sky.toFixed(0)}r` : 'none'}, ${where}`;
     },
 
     report() {

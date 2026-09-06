@@ -8572,3 +8572,59 @@ measuring sampling noise, which honestly reported 627 against an expected 600.
 Total ink and a four-star compass field are exact. **The failures were the
 tests, not the code** - which is only knowable because they were run against a
 mutation.
+
+---
+
+## D156 - A label on the radius, and the true-size toggle removed
+
+### The label
+
+The body picker showed `6,371 km` beside Earth. Phone asked what the kilometres
+were about, which is the answer: **a bare number in that position reads as a
+distance**, because "how far away is it" is the obvious question to ask about a
+list of worlds. It was a mean radius. It now says `radius 6,371 km`.
+
+The column answers one question - *can I stand on this, and if so how big is
+it* - so it is a radius for the four bodies with usable surface imagery and a
+reason instead for the six that have none. That is also why the Sun's 696,000 km
+never appeared: it is not landable, so the slot is spent explaining why.
+
+One word, and the sort of defect no test can hold an opinion about. It was found
+by somebody reading the screen and not understanding it, which is the only
+instrument there is for this class of fault.
+
+### The toggle, removed
+
+D137 built a true-size mode: the Sun held fixed and every other body falling to
+its real proportion of it. D142 then spent a long time establishing that it
+*worked*, through two invalid checks and a permanent line in the debug readout.
+
+It is gone, at Phone's request, and the reasoning is worth keeping because the
+feature was not broken.
+
+**It was correct and it was not worth its mode.** What true scale shows is one
+disc and nine specks, most of them below a pixel - which is the honest picture
+and also an unusable one; the inner planets cannot be seen, let alone clicked.
+The thing the toggle existed to say is said better by `SCALE_NOTE`, which is on
+screen permanently and costs nobody a mode: *distances and sizes are compressed
+separately, angles are true, nothing is to scale.*
+
+`bodyExaggeration` stays, without its parameter. It is what makes that note
+executable rather than decorative: the compression is a number, and a test can
+assert that Earth is drawn bigger than life and the Moon more so again.
+
+### What removing it quietly changed, and nearly broke
+
+The geometry rebuild anchor was `` `${trueScale()}` `` - body radii are baked
+into geometry, so the toggle had to rebuild eight spheres and a ring when it
+flipped. With the toggle gone the anchor had to become something, and the
+obvious something was the origin.
+
+That would have been wrong. Radii depend on neither the date nor the world
+underfoot, so anchoring on the origin would dispose and rebuild the whole set
+**in the middle of a flight**, for a set of sizes that had not changed. The
+anchor is a constant now, the spheres are built exactly once, and the machinery
+is kept as the place the next thing baked into geometry has to declare itself.
+
+A removal is not only a deletion: it is every place the deleted thing was the
+reason something else had a shape.

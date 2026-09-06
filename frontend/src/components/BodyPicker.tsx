@@ -108,7 +108,12 @@ export function BodyPicker() {
                   />
                   <span className="bodies__name">{body.name}</span>
                   {landable ? (
+                    // **Labelled, because the bare number reads as a distance.**
+                    // `6,371 km` beside "Earth" is exactly the shape of "how far
+                    // away is it", and that was the first question it got asked.
+                    // The word is the whole fix.
                     <span className="bodies__radius">
+                      radius{' '}
                       {body.radiusKm.toLocaleString(undefined, {
                         maximumFractionDigits: 0,
                       })}{' '}

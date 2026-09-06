@@ -1587,33 +1587,6 @@ body {
   }
 }
 
-/* True-size toggle, beside the body picker (D137). */
-.truescale {
-  margin-left: 10px;
-  padding: 3px 9px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text-dim);
-  font: inherit;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
-}
-
-.truescale:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
-}
-
-.truescale.is-active {
-  background: rgba(255, 209, 102, 0.16);
-  border-color: rgba(255, 209, 102, 0.5);
-  color: #ffd166;
-}
-
 /* Account control, beside the body picker (D148). */
 .account {
   position: relative;

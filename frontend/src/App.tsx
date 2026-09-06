@@ -17,7 +17,6 @@ import { BodyPicker } from './components/BodyPicker';
 import { TimeControl } from './components/TimeControl';
 import { DetailPanel } from './components/DetailPanel';
 import { MoonPanel } from './components/MoonPanel';
-import { TrueScaleToggle } from './components/TrueScaleToggle';
 import { AccountMenu } from './components/AccountMenu';
 import { AdSlot } from './components/AdSlot';
 import { SignInPage } from './components/SignInPage';
@@ -98,7 +97,6 @@ export function App() {
               {onEarth ? chromeFor(activeLayer.id, []).subtitle : 'surface imagery'}
             </span>
             <BodyPicker />
-            <TrueScaleToggle />
             {/* Signing in is available on every world, unlike the layers
                 around it: an account is about the reader, not the body under
                 the camera (D148). */}

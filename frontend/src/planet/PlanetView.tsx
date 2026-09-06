@@ -733,7 +733,6 @@ export function PlanetView() {
             // The *actual* world underfoot, which the origin above flattens to
             // Earth for the Moon. Sizes are anchored on this one, because it is
             // the globe MapLibre draws at radius 1 (D137).
-            () => useOrbitalStore.getState().trueScale,
             () => useOrbitalStore.getState().activeBody,
           );
           map.addLayer(solar);

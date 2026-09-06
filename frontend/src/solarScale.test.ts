@@ -220,63 +220,40 @@ describe('saying what was done to the truth', () => {
   });
 });
 
-describe('true size against the compression', () => {
+describe('the sizes bodies are drawn at', () => {
   const SUN = 695_700;
   const JUPITER = 69_911;
   const EARTH = 6_371;
   const MOON = 1_737.4;
   const MERCURY = 2_439.7;
 
-  it('leaves the compressed scale exactly as it was', () => {
-    // The mode is an addition, not a change. If these move, every body in the
-    // default view has quietly resized.
+  it('draws the bodies at the sizes the whole view is built around', () => {
+    // If these move, every body in the solar view has quietly resized.
     expect(drawnBodyRadius(SUN)).toBeCloseTo(1.08, 2);
     expect(drawnBodyRadius(EARTH)).toBeCloseTo(0.241, 3);
     expect(drawnBodyRadius(MOON)).toBeCloseTo(0.108, 3);
   });
 
-  it('holds the Sun still and shrinks the planets to their real share of it', () => {
-    // Anchoring the other way - Earth fixed, Sun true - would put the Sun 26
-    // globe radii across and swallow the scene, demonstrating nothing except
-    // that the switch had been thrown.
-    expect(drawnBodyRadius(SUN, true)).toBeCloseTo(drawnBodyRadius(SUN), 6);
-    expect(drawnBodyRadius(EARTH, true)).toBeCloseTo(drawnBodyRadius(SUN) / 109.2, 3);
-    expect(drawnBodyRadius(JUPITER, true)).toBeLessThan(drawnBodyRadius(JUPITER));
-  });
-
-  it('makes the difference large enough to be the point', () => {
-    // If true mode looked much like compressed mode there would be no reason
-    // for it. Earth should become roughly a tenth of its compressed size.
-    expect(drawnBodyRadius(EARTH) / drawnBodyRadius(EARTH, true)).toBeGreaterThan(20);
-  });
-
-  it('keeps the ordering identical in both modes', () => {
-    // Compression may squeeze, but it must never reorder: a mode where Mercury
-    // outgrew Jupiter would be worse than the thing it replaced.
-    for (const mode of [false, true]) {
-      const sizes = [MOON, MERCURY, EARTH, JUPITER, SUN].map((r) =>
-        drawnBodyRadius(r, mode),
-      );
-      for (let i = 1; i < sizes.length; i += 1) {
-        expect(sizes[i], `mode ${mode} step ${i}`).toBeGreaterThan(sizes[i - 1]);
-      }
+  it('squeezes without ever reordering', () => {
+    // Compression may squeeze, but a scale where Mercury outgrew Jupiter would
+    // be worse than no scale at all.
+    const sizes = [MOON, MERCURY, EARTH, JUPITER, SUN].map(drawnBodyRadius);
+    for (let i = 1; i < sizes.length; i += 1) {
+      expect(sizes[i], `step ${i}`).toBeGreaterThan(sizes[i - 1]);
     }
   });
 
   it('reports its own exaggeration honestly', () => {
-    // True mode claims to be true; this makes the claim executable.
-    for (const r of [SUN, JUPITER, EARTH, MOON, MERCURY]) {
-      expect(bodyExaggeration(r, true), `${r}`).toBeCloseTo(1, 9);
-    }
-    // Compressed mode inflates everything smaller than the Sun.
-    expect(bodyExaggeration(EARTH, false)).toBeGreaterThan(1);
-    expect(bodyExaggeration(MOON, false)).toBeGreaterThan(bodyExaggeration(EARTH, false));
+    // What makes `SCALE_NOTE`'s claim executable rather than a caption:
+    // everything smaller than the Sun is drawn bigger than life, and the
+    // smaller it really is the more it is inflated.
+    expect(bodyExaggeration(SUN)).toBeCloseTo(1, 9);
+    expect(bodyExaggeration(EARTH)).toBeGreaterThan(1);
+    expect(bodyExaggeration(MOON)).toBeGreaterThan(bodyExaggeration(EARTH));
   });
 
-  it('keeps the whole system inside the scene in both modes', () => {
-    for (const mode of [false, true]) {
-      expect(drawnBodyRadius(SUN, mode)).toBeLessThan(GLOBE_RADII_AT_NEPTUNE);
-    }
+  it('keeps the whole system inside the scene', () => {
+    expect(drawnBodyRadius(SUN)).toBeLessThan(GLOBE_RADII_AT_NEPTUNE);
   });
 });
 

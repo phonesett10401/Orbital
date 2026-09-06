@@ -203,41 +203,41 @@ export const SCALE_NOTE =
 export const EARTH_RADIUS_KM = 6371;
 
 /**
- * A body's drawn radius in globe radii, compressed or true.
+ * A body's drawn radius in globe radii.
  *
- * Compressed is the scale everything has always used: the Sun at 1.08 globe
- * radii and Earth at 0.241, a true ratio of 109:1 drawn as 4.5:1, so the small
- * bodies exist on screen at all.
+ * The Sun at 1.08 globe radii and Earth at 0.241 - a true ratio of 109:1 drawn
+ * as 4.5:1, so the small bodies exist on screen at all.
  *
- * **True keeps the Sun the size it already is and lets everything else fall to
- * its real proportion of it.** Anchoring the other way - Earth fixed, Sun
- * true - would put the Sun 26 globe radii across and swallow the scene, so the
- * mode would demonstrate nothing except that it had been switched on. This way
- * the frame stays still and the planets visibly shrink to the specks they are,
- * which is the comparison the toggle exists to make (D137).
+ * **There was a toggle here that drew the true ratio instead, and it is gone
+ * (D156).** It worked, and it was not worth what it cost: it held the Sun fixed
+ * and let everything else fall to its real proportion, which is the honest
+ * comparison, but the result is a screen with one disc on it and nine specks
+ * too small to click. Confirming it worked at all took two temporary probes and
+ * a line in the debug readout, and the honest thing it had to say is said
+ * better by `SCALE_NOTE`, which is on screen permanently and costs nobody a
+ * mode: **nothing here is to scale, and the compression is the only reason
+ * there is anything to look at.**
  *
- * Distances are untouched by either mode. There is no setting at which they
- * can be true: Neptune's orbit is 706,076 globe radii against a far plane one
- * radius past the centre (D129).
+ * Distances were never touched by it in any case. There is no setting at which
+ * they can be true: Neptune's orbit is 706,076 globe radii against a far plane
+ * one radius past the centre (D129).
  */
-export function drawnBodyRadius(radiusKm: number, trueScale = false): number {
-  const compressed = globeRadiiFor(bodyRadiusFor(radiusKm));
-  if (!trueScale) return compressed;
-  const sun = globeRadiiFor(bodyRadiusFor(SUN_RADIUS_KM));
-  return sun * (radiusKm / SUN_RADIUS_KM);
+export function drawnBodyRadius(radiusKm: number): number {
+  return globeRadiiFor(bodyRadiusFor(radiusKm));
 }
 
-/** The Sun's radius, which true mode holds fixed. */
+/** The Sun's radius, the yardstick exaggeration is measured against. */
 export const SUN_RADIUS_KM = 695_700;
 
 /**
  * How much bigger than life a body is drawn, relative to the Sun.
  *
- * One means honest. In true mode this is one for every body, which is the
- * claim the mode makes and this is what makes it executable.
+ * One would mean honest, and nothing here is one - which is the point. This is
+ * what makes `SCALE_NOTE`'s claim executable rather than a caption: the
+ * compression is a number, and it can be asserted.
  */
-export function bodyExaggeration(radiusKm: number, trueScale = false): number {
-  const drawnRatio = drawnBodyRadius(radiusKm, trueScale) / drawnBodyRadius(SUN_RADIUS_KM, trueScale);
+export function bodyExaggeration(radiusKm: number): number {
+  const drawnRatio = drawnBodyRadius(radiusKm) / drawnBodyRadius(SUN_RADIUS_KM);
   const realRatio = radiusKm / SUN_RADIUS_KM;
   return realRatio === 0 ? 1 : drawnRatio / realRatio;
 }

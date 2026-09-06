@@ -171,17 +171,6 @@ export interface OrbitalState {
   moonPanelAt: { x: number; y: number } | null;
   setMoonPanelAt(at: { x: number; y: number } | null): void;
 
-  /**
-   * Whether bodies are drawn at their true size relative to each other.
-   *
-   * Off by default, and the default is not timidity: true sizes make the Sun
-   * 287 times Mercury, so at a readable Sun the inner planets are a fifth of a
-   * pixel. The toggle exists so the compression can be *checked* rather than
-   * taken on trust - and distances stay compressed in both modes, because
-   * there is no setting at which they can be true (D137).
-   */
-  trueScale: boolean;
-  setTrueScale(on: boolean): void;
 
   /**
    * Who is signed in, or null for nobody.
@@ -388,10 +377,6 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   signInOpen: false,
   setSignInOpen(open) {
     if (useOrbitalStore.getState().signInOpen !== open) set({ signInOpen: open });
-  },
-  trueScale: false,
-  setTrueScale(on) {
-    if (useOrbitalStore.getState().trueScale !== on) set({ trueScale: on });
   },
   moonPanelAt: null,
   setMoonPanelAt(at) {
