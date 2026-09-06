@@ -8797,3 +8797,85 @@ which it is impressive. It is one constant if that turns out to be too modest.
 system, because -0.9 was reached by zooming *out*. The test was wrong, and being
 wrong is what produced the direction rule: writing down why the assertion failed
 was the moment the nearer-edge version was seen to be a bounce-back.
+
+---
+
+## D159 - The solar system becomes a place
+
+Phone's design: zooming out far enough should announce the solar system, then
+show it as somewhere you can move around, with every planet named and the ones
+you can stand on offering a way in.
+
+### Names, and where they come from
+
+The bodies are drawn by a WebGL layer, and HTML cannot be laid over something it
+cannot locate. **The thing that draws them is what says where they are**: the
+layer projects each body with the matrix it has just rendered with and publishes
+the result.
+
+The obvious shortcut is wrong. Taking the body's direction and calling
+`map.project` on it gives a point on the globe's surface, and the bodies are at
+different distances in a 3D scene - a direction says nothing about where along
+that ray a sphere was actually drawn.
+
+`solarMarkers.ts` holds the arithmetic so it can be tested without a GPU,
+including the two mistakes that would otherwise be found by eye: reading the
+matrix transposed, which is plausible everywhere except on the axes, and
+forgetting that clip space counts up while screen coordinates count down, which
+mirrors every label about the horizon.
+
+The positions change every frame the camera moves, so they do **not** go through
+the store - a write per frame would wake the whole application to report that a
+planet moved four pixels. One mutable reference, polled on the component's own
+animation frame, committed only when something moved a whole pixel.
+
+### Visit
+
+Every landable body that is not the one underfoot carries a **Visit** button,
+which starts the existing trip (D126, D155). It appears on hover rather than
+sitting there: ten buttons over a solar system is a toolbar, not a sky. Touch
+pointers cannot hover, so under `(hover: none)` they are simply always there.
+
+The labels clear themselves the moment the layer stops drawing, because the
+layer publishes an empty list then - "no solar system on screen" and "no labels"
+are one fact rather than two that can disagree.
+
+### The approach
+
+A cue that grows as the handover nears and is gone the instant the planets are
+drawn: at that moment it has been overtaken by the thing it was announcing, and
+a caption over a solar system saying one is ahead is worse than no caption.
+
+It does not say "loading", and a test asserts that. Nothing is fetched at the
+handover - the positions are already computed and the layer is already there.
+"Loading" would be a lie about why the view is changing.
+
+Measured across a zoom-out: nothing at z 0.25, the cue at 0.35 opacity by -0.34,
+0.95 by -0.95, then gone at -1.25 with ten labels in its place.
+
+### Dragging it, which needed taking over
+
+MapLibre's drag-pan grabs the point of the globe under the cursor and moves it.
+In the solar view **there is no globe under the cursor** - it is 57 pixels wide
+at this zoom and the rest of the screen is sky - so a drag anywhere else does
+nothing at all. Measured: a 220-pixel drag left the centre and every label
+exactly where they were.
+
+So the drag is handled directly while the system is drawing, as a camera move.
+`panBy` is the right tool and **`setCenter` is emphatically not**: at this zoom
+setting a centre makes MapLibre re-constrain the camera and it takes the *zoom*
+with it, measured jumping from -1.5 to -0.03 - which falls out of the solar view
+altogether. That is also the explanation for an oddity noticed earlier in the
+session, where a programmatic pan appeared to change the zoom on its own.
+
+### Two rough edges, stated rather than hidden
+
+The scene moves about 1.4 times the pointer's distance rather than 1:1. It
+follows the hand and reads as dragging, but it is livelier than it should be,
+and the ratio is a property of the scene's projection rather than a constant to
+divide out - worth measuring across zooms before fixing.
+
+The inner planets crowd: at this compression Mercury, Venus, Earth and the Moon
+sit close enough that their labels overlap near the Sun. The distances are
+compressed by three orders of magnitude, so this is the compression showing
+through rather than a layout bug, but it is the next thing to improve.

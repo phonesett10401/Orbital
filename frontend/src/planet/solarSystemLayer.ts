@@ -29,6 +29,7 @@ import {
   type ScenePlacement,
 } from '../solarFrame';
 import { drawnBodyRadius } from '../solarScale';
+import { onScreen, project } from '../solarMarkers';
 import { PLANET_IDS, type PlanetId } from '../planets';
 import { usesGlobeFrame } from './modelFrame';
 import {
@@ -81,6 +82,23 @@ const COLOURS: Record<string, number> = {
 export interface SolarLayer extends CustomLayerInterface {
   /** Whether the last frame drew anything, for the status readout. */
   report(): string;
+  /**
+   * Where each body was drawn on screen, in CSS pixels, from the last frame.
+   *
+   * **Published by the thing that drew them**, because nothing else can know:
+   * the bodies are at different distances in a 3D scene, and their direction
+   * from the camera says nothing about where along that ray a sphere ended up
+   * (D159). Empty whenever the layer is not drawing.
+   */
+  markers(): BodyMarker[];
+}
+
+export interface BodyMarker {
+  id: string;
+  x: number;
+  y: number;
+  /** How wide the body is on screen, so a label can clear it. */
+  sizePx: number;
 }
 
 function radiusKmOf(id: string): number {
@@ -426,6 +444,7 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
    * no model fixes that (D131).
    */
   let builtForAnchor = '';
+  let drawnMarkers: BodyMarker[] = [];
   let ringMesh: THREE.Mesh | null = null;
   let ringMaterial: THREE.ShaderMaterial | null = null;
   const RING_UP = new THREE.Vector3(0, 0, 1);
@@ -520,6 +539,10 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
       if (zoom === undefined) return;
 
       if (!matrix || !usesGlobeFrame(transition) || zoom > SOLAR_MAX_ZOOM) {
+        // Cleared, not left standing: labels over bodies that are no longer
+        // drawn are the same false claim as a layer drawn where its subject
+        // does not exist (D120).
+        drawnMarkers = [];
         status = `not drawn - zoom ${zoom.toFixed(1)} past ${SOLAR_MAX_ZOOM}`;
         return;
       }
@@ -640,6 +663,35 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
       camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix as unknown as number[]);
       renderer.resetState();
       renderer.render(scene, camera);
+
+      // Where they landed, with the same matrix that just drew them, so the
+      // chrome above cannot disagree with the picture (D159).
+      const canvas = host?.getCanvas();
+      const width = canvas?.clientWidth ?? 0;
+      const height = canvas?.clientHeight ?? 0;
+      const found: BodyMarker[] = [];
+      if (width > 0 && height > 0) {
+        const raw = matrix as unknown as number[];
+        for (const placement of placements) {
+          const at = project(raw, placement.at, width, height);
+          if (!onScreen(at, width, height)) continue;
+          // The drawn radius through the same projection: a point one radius
+          // to the side, so the label clears a big planet and hugs a small one.
+          const edge = project(
+            raw,
+            [placement.at[0] + drawnBodyRadius(radiusKmOf(placement.id)), placement.at[1], placement.at[2]],
+            width,
+            height,
+          );
+          found.push({
+            id: placement.id,
+            x: at.x,
+            y: at.y,
+            sizePx: edge.inFront ? Math.abs(edge.x - at.x) * 2 : 0,
+          });
+        }
+      }
+      drawnMarkers = found;
       // The camera numbers are in the readout deliberately. The last attempt at
       // a sky failed on exactly these three, and none of them were visible.
       const where = view
@@ -652,6 +704,10 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
 
     report() {
       return status;
+    },
+
+    markers() {
+      return drawnMarkers;
     },
   };
 }

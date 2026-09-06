@@ -21,6 +21,8 @@ import { AccountMenu } from './components/AccountMenu';
 import { AdSlot } from './components/AdSlot';
 import { PremiumPage } from './components/PremiumPage';
 import { SignInPage } from './components/SignInPage';
+import { SolarApproach } from './components/SolarApproach';
+import { SolarLabels } from './components/SolarLabels';
 import { WarpField } from './components/WarpField';
 import { MoonSatelliteList } from './components/MoonSatelliteList';
 import { LayerToggle } from './components/LayerToggle';
@@ -79,6 +81,11 @@ export function App() {
   return (
     <div className="app">
       <PlanetView />
+
+      {/* Names and a way in, over the bodies the solar layer just drew (D159).
+          Above the map and under the chrome, like everything else here. */}
+      <SolarLabels />
+      <SolarApproach />
 
       {/* Directly over the map and under every control: the trip is something
           happening to the view, not to the interface (D155). */}

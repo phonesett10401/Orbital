@@ -50,6 +50,7 @@ import {
 } from './airportLayer';
 import { createSatelliteIconCanvases } from './satelliteSprite';
 import { setVisibility } from './layerSync';
+import { publishMarkerSource, publishZoomSource } from './solarMarkerFeed';
 import { prefersReducedMotion } from '../motion';
 import { SETTLE_IDLE_MS, settleMs, settleTarget } from '../viewSettle';
 import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
@@ -727,6 +728,49 @@ export function PlanetView() {
            * broken in a way that is hard to name. Passing through the band
            * still looks exactly as it did.
            */
+          /*
+           * **Dragging the solar system around** (D159).
+           *
+           * MapLibre's own drag-pan works by grabbing the point of the globe
+           * under the cursor and moving it. In the solar view there is no globe
+           * under the cursor - it is 57 pixels wide at this zoom and the rest of
+           * the screen is sky - so a drag anywhere but on that speck does
+           * nothing at all. Measured: a 220-pixel drag left the centre and every
+           * label exactly where they were.
+           *
+           * So the drag is handled here while the system is drawing, as a camera
+           * move rather than a grab. `panBy` is the right tool and `setCenter`
+           * is not: at this zoom setting a centre makes MapLibre re-constrain
+           * the camera and it takes the *zoom* with it - measured jumping from
+           * -1.5 to -0.03, which drops out of the solar view entirely.
+           */
+          let dragFrom: { x: number; y: number } | null = null;
+          const canvas = map.getCanvas();
+          const draggingSystem = () => (map ? map.getZoom() <= SOLAR_HANDOVER_ZOOM : false);
+          canvas.addEventListener('pointerdown', (event: PointerEvent) => {
+            if (!draggingSystem() || event.button !== 0) return;
+            dragFrom = { x: event.clientX, y: event.clientY };
+            canvas.setPointerCapture(event.pointerId);
+          });
+          canvas.addEventListener('pointermove', (event: PointerEvent) => {
+            if (!dragFrom || !map) return;
+            const dx = event.clientX - dragFrom.x;
+            const dy = event.clientY - dragFrom.y;
+            dragFrom = { x: event.clientX, y: event.clientY };
+            // Opposite to the pointer, so the sky follows the hand rather than
+            // running away from it.
+            map.panBy([-dx, -dy], { duration: 0 });
+          });
+          const endDrag = (event: PointerEvent) => {
+            if (!dragFrom) return;
+            dragFrom = null;
+            if (canvas.hasPointerCapture(event.pointerId)) {
+              canvas.releasePointerCapture(event.pointerId);
+            }
+          };
+          canvas.addEventListener('pointerup', endDrag);
+          canvas.addEventListener('pointercancel', endDrag);
+
           let restingZoom = map.getZoom();
           let idleTimer = 0;
           const settleIfIdle = () => {
@@ -791,6 +835,9 @@ export function PlanetView() {
             () => useOrbitalStore.getState().activeBody,
           );
           map.addLayer(solar);
+          // The chrome reads the drawn positions from here (D159).
+          publishMarkerSource(() => solar?.markers() ?? []);
+          publishZoomSource(() => map?.getZoom() ?? 99);
 
 
           model = createModelLayer(() => {

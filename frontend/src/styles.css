@@ -325,6 +325,134 @@ body {
 }
 
 /*
+ * ---- names and a way in, on the solar system (D159) ----
+ *
+ * Positioned in pixels from the layer that drew the bodies, so the container is
+ * the whole stage and each label is placed at its body's exact centre. Deaf to
+ * the pointer except on the button itself, so dragging the system around still
+ * works wherever you grab it.
+ */
+
+.solarlabels {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.solarlabel {
+  position: absolute;
+  /* The label's origin is the body's centre; both children hang off it. */
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.solarlabel__name {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  /* The system is drawn on black and the labels sit over it, so they need a
+     shadow rather than a plate: a box behind every name would turn the picture
+     into a diagram. */
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+.solarlabel.is-here .solarlabel__name {
+  color: var(--text);
+}
+
+.solarlabel__here {
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+
+.solarlabel__visit {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  pointer-events: auto;
+  padding: 3px 9px;
+  background: rgba(14, 20, 33, 0.86);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(120, 190, 255, 0.45);
+  border-radius: 999px;
+  color: #cfe6ff;
+  font: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 160ms ease, background 160ms ease;
+}
+
+/*
+ * The button appears on approach rather than sitting there permanently: ten
+ * buttons over a solar system is a toolbar, not a sky. Hovering the label, or
+ * focusing the button with a keyboard, is what asks for it.
+ */
+.solarlabel:hover .solarlabel__visit,
+.solarlabel__visit:focus-visible {
+  opacity: 1;
+}
+
+.solarlabel__visit:hover {
+  background: rgba(30, 60, 96, 0.92);
+}
+
+.solarlabel__visit:disabled {
+  opacity: 0;
+  cursor: default;
+}
+
+/*
+ * A pointer that cannot hover has no way to reveal a hover-only control, so on
+ * touch every Visit button is simply there.
+ */
+@media (hover: none) {
+  .solarlabel__visit {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .solarlabel__visit {
+    transition: none;
+  }
+}
+
+/*
+ * The cue on the way out (D159). Centred, deaf to the pointer, and above the
+ * map but under every control - it is something the view is doing, not
+ * something to click.
+ */
+
+.approach {
+  position: absolute;
+  left: 50%;
+  top: 24%;
+  transform: translateX(-50%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.approach__text {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+}
+
+/*
  * ---- the light-speed transition (D155) ----
  *
  * Over the map and under the chrome, and deaf to the pointer: a trip is
