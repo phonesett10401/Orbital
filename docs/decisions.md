@@ -8127,3 +8127,113 @@ does, reading the instant through the store instead of a dependency. Drift
 afterwards is not a problem to solve: `usePolling` stops polling entirely while
 the map is rewound, so the one request that matters is made immediately, well
 inside the grace.
+
+---
+
+## D150 - Advertising slots, and where they are not
+
+The other side of the free tier. D149 gave premium something to buy; this is
+what free costs instead: two slots, shown to everybody who is not premium and to
+nobody who is. Premium buys their **absence** - not fewer, not smaller.
+
+### They are house ads, which is a decision and not a placeholder
+
+There is no third-party network here - no AdSense tag, no prebid, no pixel - and
+adding one is not a small later change:
+
+- Every one of them works by shipping something about the viewer to somebody
+  else. Orbital's account design says the opposite in as many words: an account
+  is an email, a hash, a tier and a date, and there is deliberately no record of
+  what anybody looked at (D146). A network tag would undo that from the outside,
+  on a page that never asked.
+- It needs a live domain, a policy review and an approved account.
+- It is a decision about *Phone's* users, not a detail of a component.
+
+So the inventory is Orbital talking about Orbital, which is what a freemium
+product actually shows before it has advertisers. The seam a network would fill
+is one function, `inventoryFor`, returning a list; the slot component does not
+care where the list came from. Every card names its sponsor and carries a
+`SPONSORED` label, because an advertisement that is not marked as one is a
+different thing with a different name.
+
+### Where they go: the first attempt was wrong
+
+The first build gave the slots their own grid rows - a leaderboard across the
+top and a rail down the right - and made `.app` a grid so the map genuinely got
+smaller. It worked, and it was the wrong thing: **the globe is the product, and
+an advertisement is the one element on this page that is not, so it is the one
+element that does not get to take the product's space.** Every other panel in
+Orbital floats over the map for exactly that reason, and the ads had been given
+a privilege the legend does not have.
+
+Rewound. They now go where the chrome already has room:
+
+- **The header pill**, in the gap the header leaves past the layer toggle. On a
+  1043px viewport that gap is about 300px and was empty.
+- **The rail card**, top right, the same width and corner as the detail panel -
+  because it is the same kind of object, something laid over the map that can be
+  ignored.
+
+Two rules fell out of measuring rather than guessing:
+
+- **It yields to the product.** The rail is not rendered at all while a detail
+  or moon panel is open. Those panels use that corner, and an ad must never be
+  the reason somebody cannot read the thing they just clicked on.
+- **It yields to the chrome.** The search box is `flex: 1`, so adding anything
+  to the header row makes every flexible child shrink together: the search input
+  measured 18px narrower the moment the pill appeared. A high `flex-shrink` on
+  the ad puts all of that loss on the ad instead, and below about 1010px the
+  pill is not rendered - an ad that shrinks the search box has taken the map's
+  space by another route.
+
+Rotation is a slow crossfade, switched off entirely under
+`prefers-reduced-motion`, in the component *and* in the stylesheet. Movement in
+the corner of the eye is precisely what that preference is set to stop, and an
+advertisement is precisely the thing that would ignore it.
+
+---
+
+## D151 - Giving the sign-in its moments
+
+The sign-in built in D146-D148 worked and had no shape in time. A form appeared,
+and then it was gone, and the only way to tell a success from a failure was that
+the panel was no longer there. `busy` was the only thing the component knew
+about time, and a boolean cannot distinguish those two endings - both of them
+set it back to false.
+
+A phase can. `idle → working → success | error` lives in `authAnimation.ts` with
+the durations, so the timings are testable and the component only renders them.
+
+What the phases buy:
+
+- **A welcome that is held for 900ms before the panel closes.** The account is
+  signed in well before that line; the pause is entirely so the person finds
+  out. An interface that vanishes the instant it succeeds leaves somebody
+  wondering whether it did. It replaces the form rather than sitting above it,
+  because a filled-in form behind a "you are in" message asks the reader to work
+  out which of the two is true. And it says "Welcome to Orbital" to somebody
+  registering, who has not come back.
+- **A shake on a refusal**, small and quick - a headshake, not a tantrum - and
+  the panel returns to idle when it is done, so it is not left wearing a
+  refusal it has finished expressing. The message stays; only the movement ends.
+- **A moving submit button while a request is in flight**, because a slow
+  network and a dead button look identical otherwise.
+- **A tick drawn from two borders of a rotated box**, so the confirmation costs
+  no image and no icon library.
+
+### Reduced motion takes every duration to zero, except the one that means
+
+`prefers-reduced-motion` is not a preference about taste. It is set by people for
+whom movement causes nausea, migraine or a vestibular attack, and by people using
+screen magnification, where a panel sliding across a four-times-zoomed viewport
+is genuinely disorienting. An interface that keeps a *little* of the motion has
+misunderstood what was asked, so `STILL` is zeroes.
+
+The exception is `successHold`, which is shortened rather than removed: it is the
+one duration carrying information rather than decoration, and a confirmation
+nobody has time to read is not a kindness.
+
+The durations reach the stylesheet as custom properties rather than being written
+twice, so the CSS gets zero without needing to know why. `prefersReducedMotion`
+is one function in `motion.ts` for the same reason `isPremium` is one function:
+the answer must not differ between the places that ask.

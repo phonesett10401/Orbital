@@ -52,20 +52,177 @@ body {
   width: 100%;
 }
 
-.globe-view {
+/*
+ * ---- advertising slots (D150) ----
+ *
+ * They float over the map like everything else here, and the map keeps the
+ * whole viewport. An earlier version gave them their own grid rows, and the
+ * globe genuinely got smaller - which is the one thing this interface should
+ * not spend on an advertisement. So instead they go where the chrome already
+ * has room: the gap the header leaves past the layer toggle, and the top right
+ * corner while nothing is selected.
+ */
+
+.ad {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/*
+ * The header slot. `margin-left: auto` puts it in the space that is already
+ * empty rather than taking any from the search box, and `flex: 0 1 auto` means
+ * that when the header does run out of room this is the thing that gives way.
+ */
+.ad--banner {
+  margin-left: auto;
+  align-items: center;
+  max-width: 260px;
+  padding: 7px 12px;
+  /*
+   * **It gives way first, and it gives way hard.** The search box is `flex: 1`,
+   * so adding anything to this row makes the row overflow and every flexible
+   * child shrinks together - measured: the search input lost 18px the moment
+   * this appeared. A high shrink factor puts all of that loss here instead,
+   * which is the rule for the whole feature: the advertisement is what yields.
+   */
+  flex: 0 1 auto;
+  flex-shrink: 8;
+  min-width: 0;
+}
+
+/*
+ * The header needs about 740px for the brand, the search box and the layer
+ * toggle. Below roughly a thousand there is no spare room left, and an ad that
+ * shrinks the search box has taken the map's space by another route.
+ */
+@media (max-width: 1010px) {
+  .ad--banner {
+    display: none;
+  }
+}
+
+/* Same corner and same width as the detail panel, because it is the same kind
+   of object: something laid over the map that can be ignored. */
+.ad--rail {
   position: absolute;
-  inset: 0;
-  /* The canvas is the whole background; the chrome sits above it. */
-  z-index: 0;
+  top: 148px;
+  right: 16px;
+  z-index: 2;
+  width: 300px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
 }
 
-.globe-view canvas {
-  display: block;
-  cursor: grab;
+@media (max-width: 900px), (max-height: 620px) {
+  .ad--rail {
+    display: none;
+  }
 }
 
-.globe-view canvas:active {
-  cursor: grabbing;
+/*
+ * Never quiet enough to be missed. This is the line that separates an
+ * advertisement from the product beside it, so it does not get to be subtle.
+ */
+.ad__label {
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.ad--banner .ad__label {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding-right: 10px;
+  border-right: 1px solid var(--border);
+}
+
+.ad__card {
+  min-width: 0;
+  animation: ad-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ad__headline {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ad--rail .ad__headline {
+  font-size: 13px;
+}
+
+.ad__body {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/*
+ * The header pill is one line of chrome, not a paragraph. The body and the call
+ * to action both live in the rail card instead: measured at 260px, keeping them
+ * here wrapped the pill onto a second line and made the header taller than the
+ * search box beside it.
+ */
+.ad--banner .ad__body,
+.ad--banner .ad__action {
+  display: none;
+}
+
+.ad--banner .ad__headline {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ad--rail .ad__body {
+  margin-top: 6px;
+}
+
+.ad__action {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.ad--rail .ad__action {
+  margin-top: 8px;
+}
+
+@keyframes ad-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * Not a preference about taste: movement in the corner of the eye is exactly
+ * what this is set to stop, and an advertisement is exactly the thing that
+ * would ignore it. The rotation timer is switched off in the component too, so
+ * this is the belt to that pair of braces.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .ad__card {
+    animation: none;
+  }
 }
 
 /* ---- header ---- */
@@ -1390,6 +1547,141 @@ body {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   font-size: 12px;
+}
+
+/*
+ * ---- the moments a sign-in has (D151) ----
+ *
+ * Durations come from `authAnimation.ts` through custom properties rather than
+ * being written twice: the component holds one set of numbers and the
+ * stylesheet reads them, so a reader who asked for reduced motion gets zero
+ * here without this file needing to know why.
+ */
+
+.account__panel {
+  animation: account-panel-in var(--panel-in, 260ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: top left;
+  /* The panel changes height between the form, a refusal and the welcome. */
+  transition: height var(--swap, 190ms) ease;
+}
+
+@keyframes account-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * The refusal. Small and quick: a shake is a headshake, not a tantrum, and a
+ * big one on a form somebody just mistyped reads as being told off.
+ */
+.account__panel--error {
+  animation: account-shake var(--shake, 420ms) cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  border-color: rgba(255, 107, 107, 0.5);
+}
+
+@keyframes account-shake {
+  10%, 90% { transform: translateX(-1.5px); }
+  20%, 80% { transform: translateX(3px); }
+  30%, 50%, 70% { transform: translateX(-5px); }
+  40%, 60% { transform: translateX(5px); }
+}
+
+/* Keyed by mode, so this runs when somebody switches to registering. */
+.account__fields {
+  animation: account-swap var(--swap, 190ms) ease both;
+}
+
+@keyframes account-swap {
+  from {
+    opacity: 0;
+    transform: translateX(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.account__welcome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #cfe6ff;
+  animation: account-swap var(--swap, 190ms) ease both;
+}
+
+/*
+ * A tick drawn out of two borders on a rotated box, so the confirmation costs
+ * no image and no icon library. It grows along its own length, which is what
+ * makes it read as being drawn rather than appearing.
+ */
+.account__tick {
+  width: 8px;
+  height: 15px;
+  flex: 0 0 auto;
+  border: solid #7fd48a;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  animation: account-tick var(--panel-in, 260ms) 60ms ease-out both;
+}
+
+@keyframes account-tick {
+  from {
+    height: 0;
+    width: 0;
+    opacity: 0;
+  }
+  to {
+    height: 15px;
+    width: 8px;
+    opacity: 1;
+  }
+}
+
+.account__panel--working .account__submit {
+  /* Something has to be moving while a request is in flight, or a slow network
+     is indistinguishable from a dead button. */
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(160, 210, 255, 0.28) 50%,
+    transparent 80%
+  );
+  background-size: 220% 100%;
+  animation: account-working 1100ms linear infinite;
+}
+
+@keyframes account-working {
+  from { background-position: 140% 0; }
+  to { background-position: -40% 0; }
+}
+
+/*
+ * Everything above is decoration except the welcome, which carries meaning, so
+ * the welcome keeps its place here and only stops moving.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .account__panel,
+  .account__panel--error,
+  .account__fields,
+  .account__welcome,
+  .account__tick,
+  .account__panel--working .account__submit {
+    animation: none;
+  }
+
+  .account__panel {
+    transition: none;
+  }
 }
 
 .account__label {

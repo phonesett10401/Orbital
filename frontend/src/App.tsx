@@ -11,6 +11,7 @@
  * that is the point: none of it was ever about how the planet is drawn.
  */
 
+import { showsAds } from './ads';
 import { showsEarthLayers } from './bodies';
 import { BodyPicker } from './components/BodyPicker';
 import { TimeControl } from './components/TimeControl';
@@ -18,6 +19,7 @@ import { DetailPanel } from './components/DetailPanel';
 import { MoonPanel } from './components/MoonPanel';
 import { TrueScaleToggle } from './components/TrueScaleToggle';
 import { AccountMenu } from './components/AccountMenu';
+import { AdSlot } from './components/AdSlot';
 import { MoonSatelliteList } from './components/MoonSatelliteList';
 import { LayerToggle } from './components/LayerToggle';
 import { Legend } from './components/Legend';
@@ -44,6 +46,24 @@ export function App() {
   // most likely to believe it.
   const onEarth = showsEarthLayers(useOrbitalStore((s) => s.activeBody));
   const onMoon = useOrbitalStore((s) => s.activeBody) === 'moon';
+
+  // The other side of the free tier (D150). Premium buys their absence, so this
+  // is the whole of the switch - not a smaller slot, not fewer cards.
+  //
+  // **They float, like every other panel here, and the map keeps the whole
+  // viewport.** An earlier attempt gave them their own grid rows and genuinely
+  // shrank the globe, which is the one thing this interface should not spend on
+  // an advertisement. These go where the chrome already has dead space instead:
+  // the gap the header leaves to the right of the layer toggle, and the top
+  // right corner while nothing is selected.
+  const ads = showsAds(useOrbitalStore((s) => s.account));
+
+  // **The rail yields to the product.** Both detail panels open in that corner,
+  // and an advertisement must never be the reason somebody cannot read the
+  // thing they just clicked on.
+  const selectedId = useOrbitalStore((s) => s.selectedId);
+  const selectedMoonId = useOrbitalStore((s) => s.selectedMoonId);
+  const panelOpen = selectedId !== null || selectedMoonId !== null;
 
   return (
     <div className="app">
@@ -72,7 +92,12 @@ export function App() {
         </div>
         {onEarth && <SearchBar />}
         {onEarth && <LayerToggle />}
+        {/* Into the space the header already leaves to the right of the layer
+            toggle, so it costs the map nothing at all. */}
+        {ads && <AdSlot slot="banner" />}
       </header>
+
+      {ads && !panelOpen && <AdSlot slot="rail" />}
 
       {onEarth && <TimeControl />}
       {onEarth && <DetailPanel />}
