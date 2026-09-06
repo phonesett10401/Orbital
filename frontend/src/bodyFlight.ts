@@ -20,6 +20,30 @@
  * else means watching Earth's oceans turn into Martian basalt, which is the
  * only part of this that would be a fiction.
  *
+ * ## The streaks, and where the line is
+ *
+ * A light-speed effect plays over the top of all this (D155), and it is worth
+ * being exact about why that is not the lie the paragraph above refuses.
+ *
+ * The lie would be a *fabricated observation*: a sky drawn as though it were
+ * measured, with stars flying past that no catalogue puts there. That is not
+ * what happens. The real sky is `stars.ts`, it comes from a real catalogue, and
+ * it does not move. The streaks are a full-screen rush of light on a canvas
+ * above the map, which nobody could mistake for data - the same kind of
+ * statement as a fade, and no more a claim about the universe than one.
+ *
+ * The direction, though, is real: the camera turns toward the destination's
+ * actual position while pulling out, so the point the streaks radiate from is
+ * the true bearing of the world being travelled to.
+ *
+ * ## The camera accelerates away and decelerates in
+ *
+ * Not one easing for the whole trip. Leaving eases *in* - slow, then a rush -
+ * so the pull-back arrives with the effect rather than ahead of it; arriving
+ * eases *out*, so the new world is settled into rather than stopped at. A
+ * single ease-out across both reads as one continuous zoom, which is the thing
+ * this was asked to stop being.
+ *
  * ## Why the destination is highlighted on the way out
  *
  * The pull-out is not a loading screen. The solar system layer draws real
@@ -58,6 +82,28 @@ export interface FlightStep {
    * the *real* direction, because the position it is drawn at is real (D136).
    */
   aimAtDestination: boolean;
+  /**
+   * How the camera's speed is shaped over this step.
+   *
+   * Named rather than a function so a plan stays comparable data - two plans
+   * with closures in them cannot be checked against each other, and this whole
+   * module exists to be testable without a map.
+   */
+  easing: EasingName;
+}
+
+/** Slow then fast, fast then slow, or neither. */
+export type EasingName = 'accelerate' | 'decelerate';
+
+/**
+ * The easing curves, by name.
+ *
+ * `accelerate` is the departure: nothing much happens, and then the world drops
+ * away. `decelerate` is the arrival, which has to settle rather than stop -
+ * a linear arrival reads as hitting the surface.
+ */
+export function easingFor(name: EasingName): (t: number) => number {
+  return name === 'accelerate' ? (t) => t * t : (t) => 1 - (1 - t) * (1 - t);
 }
 
 /**
@@ -71,11 +117,29 @@ export function flightPlan(from: BodyId, to: BodyId): FlightStep[] {
   if (from === to) return [];
   return [
     // Out and *across*, together, so the pull-back and the turn are one move.
-    { phase: 'leaving', zoom: APEX_ZOOM, durationMs: OUT_MS, aimAtDestination: true },
+    {
+      phase: 'leaving',
+      zoom: APEX_ZOOM,
+      durationMs: OUT_MS,
+      aimAtDestination: true,
+      easing: 'accelerate',
+    },
     // The swap happens with the destination already centred, so the world that
     // appears is under the camera rather than somewhere behind it.
-    { phase: 'swapping', zoom: null, durationMs: 0, aimAtDestination: false },
-    { phase: 'arriving', zoom: ARRIVE_ZOOM, durationMs: IN_MS, aimAtDestination: false },
+    {
+      phase: 'swapping',
+      zoom: null,
+      durationMs: 0,
+      aimAtDestination: false,
+      easing: 'decelerate',
+    },
+    {
+      phase: 'arriving',
+      zoom: ARRIVE_ZOOM,
+      durationMs: IN_MS,
+      aimAtDestination: false,
+      easing: 'decelerate',
+    },
   ];
 }
 

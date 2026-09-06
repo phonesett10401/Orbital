@@ -4,6 +4,7 @@ import {
   APEX_ZOOM,
   ARRIVE_ZOOM,
   NOT_FLYING,
+  easingFor,
   flightDurationMs,
   flightPlan,
   swapsWorld,
@@ -99,5 +100,42 @@ describe('the trip is a journey, not a zoom', () => {
     const out = plan.find((s) => s.phase === 'leaving');
     const arrive = plan.find((s) => s.phase === 'arriving');
     expect(out!.durationMs).toBeGreaterThan(arrive!.durationMs);
+  });
+});
+
+describe('how the camera is paced', () => {
+  it('accelerates away and decelerates in', () => {
+    // A single ease-out across both halves reads as one continuous zoom, which
+    // is the thing the trip was asked to stop being (D155).
+    const plan = flightPlan('earth', 'mars');
+    expect(plan.find((s) => s.phase === 'leaving')?.easing).toBe('accelerate');
+    expect(plan.find((s) => s.phase === 'arriving')?.easing).toBe('decelerate');
+  });
+
+  it('gives curves that start at nought and end at one', () => {
+    // An easing that does not reach 1 leaves the camera short of the zoom it
+    // was told to go to, and nothing reports it.
+    for (const name of ['accelerate', 'decelerate'] as const) {
+      expect(easingFor(name)(0), name).toBeCloseTo(0);
+      expect(easingFor(name)(1), name).toBeCloseTo(1);
+    }
+  });
+
+  it('makes accelerate slow at the start and decelerate fast at the start', () => {
+    expect(easingFor('accelerate')(0.25)).toBeLessThan(0.25);
+    expect(easingFor('decelerate')(0.25)).toBeGreaterThan(0.25);
+  });
+
+  it('never goes backwards', () => {
+    // A camera that retreats mid-step reads as a stutter, and MapLibre will
+    // happily animate one.
+    for (const name of ['accelerate', 'decelerate'] as const) {
+      const curve = easingFor(name);
+      for (let t = 0.05; t <= 1; t += 0.05) {
+        expect(curve(t), `${name} at ${t.toFixed(2)}`).toBeGreaterThanOrEqual(
+          curve(t - 0.05),
+        );
+      }
+    }
   });
 });

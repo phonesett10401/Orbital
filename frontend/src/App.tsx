@@ -21,6 +21,7 @@ import { TrueScaleToggle } from './components/TrueScaleToggle';
 import { AccountMenu } from './components/AccountMenu';
 import { AdSlot } from './components/AdSlot';
 import { SignInPage } from './components/SignInPage';
+import { WarpField } from './components/WarpField';
 import { MoonSatelliteList } from './components/MoonSatelliteList';
 import { LayerToggle } from './components/LayerToggle';
 import { Legend } from './components/Legend';
@@ -78,6 +79,10 @@ export function App() {
   return (
     <div className="app">
       <PlanetView />
+
+      {/* Directly over the map and under every control: the trip is something
+          happening to the view, not to the interface (D155). */}
+      <WarpField />
 
       <header className="app__header">
         <div className="app__brand">

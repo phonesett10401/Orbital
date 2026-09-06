@@ -314,6 +314,27 @@ body {
   }
 }
 
+/*
+ * ---- the light-speed transition (D155) ----
+ *
+ * Over the map and under the chrome, and deaf to the pointer: a trip is
+ * something happening to the view, and clicking through it must still reach
+ * whatever is underneath.
+ *
+ * `screen` blending so the streaks add light to the globe rather than sitting
+ * on it as paint - the difference between travelling and a sticker.
+ */
+
+.warp {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
 /* ---- header ---- */
 
 .app__header {

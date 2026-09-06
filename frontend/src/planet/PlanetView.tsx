@@ -49,6 +49,7 @@ import {
   airportLayers,
 } from './airportLayer';
 import { createSatelliteIconCanvases } from './satelliteSprite';
+import { setVisibility } from './layerSync';
 import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
 import {
   SOLAR_LAYER,
@@ -159,7 +160,7 @@ import {
 import { boundsToBBox, coversWholeWorld } from './viewport';
 import { bodyFor } from '../bodies';
 import { MAPLIBRE_MIN_ZOOM } from '../solarScale';
-import { flightPlan, swapsWorld } from '../bodyFlight';
+import { easingFor, flightPlan, swapsWorld } from '../bodyFlight';
 import type { PlanetId } from '../planets';
 import { lonLatOf, scenePlacements } from '../solarFrame';
 import { GIBS_ATTRIBUTION, IMAGERY_FAR_MAX_ZOOM } from './basemap';
@@ -801,10 +802,15 @@ export function PlanetView() {
           // Positions are interpolated between polls, so the source is rewritten
           // on a frame loop rather than only when a poll lands -- the same
           // reason the globe rebuilt its marker buffers every frame.
-          // Tracks the last mode the layers were switched to, so visibility is
-          // set on the transition rather than on every frame.
-          let lastSatelliteMode: boolean | null = null;
-          let lastShellShowing: boolean | null = null;
+          // **No memo of what was last set here, deliberately.** There used to
+          // be two, and they caused the defect D154 fixes: `applyBody` turns
+          // every Earth layer back on when the camera returns from the solar
+          // system, and a memo of what *this* loop last asked for cannot see
+          // that, so it reported no change and left the satellite ground
+          // symbols up underneath a shell that was still drawing - the same
+          // objects twice, on the surface and in orbit. `setVisibility` reads
+          // the style instead, so a write by anybody else is noticed on the
+          // next frame rather than never.
 
           const tick = () => {
             frame = requestAnimationFrame(tick);
@@ -842,22 +848,13 @@ export function PlanetView() {
             // the view while the whole planet is in frame; past that the
             // sub-satellite points do.
             const shellShowing = satelliteMode && (map?.getZoom() ?? 99) <= SHELL_MAX_ZOOM;
-            if (shellShowing !== lastShellShowing) {
-              lastShellShowing = shellShowing;
-              for (const layer of [SATELLITE_LAYER, SATELLITE_LABEL_LAYER]) {
-                if (map?.getLayer(layer)) {
-                  map.setLayoutProperty(layer, 'visibility', shellShowing ? 'none' : 'visible');
-                }
-              }
-            }
-
-            if (satelliteMode !== lastSatelliteMode) {
-              lastSatelliteMode = satelliteMode;
-              for (const layer of AIRCRAFT_FURNITURE) {
-                if (map?.getLayer(layer)) {
-                  map.setLayoutProperty(layer, 'visibility', satelliteMode ? 'none' : 'visible');
-                }
-              }
+            if (map) {
+              setVisibility(
+                map,
+                [SATELLITE_LAYER, SATELLITE_LABEL_LAYER],
+                shellShowing ? 'none' : 'visible',
+              );
+              setVisibility(map, AIRCRAFT_FURNITURE, satelliteMode ? 'none' : 'visible');
             }
 
             // The leader is redrawn on the same frame as the marker it joins,
@@ -949,9 +946,11 @@ export function PlanetView() {
                     zoom: step.zoom,
                     duration: step.durationMs,
                     ...(aim ? { center: lonLatCenter(aim.at) } : {}),
-                    // Linear-ish, because a journey that eases out in the
-                    // middle reads as arriving and then continuing.
-                    easing: (t: number) => t * (2 - t),
+                    // Accelerating away and decelerating in, from the plan
+                    // rather than from a constant here: one ease-out across
+                    // both halves reads as a single continuous zoom, which is
+                    // the thing this was asked to stop being (D155).
+                    easing: easingFor(step.easing),
                   });
                 }
                 await new Promise((resolve) => setTimeout(resolve, step.durationMs));

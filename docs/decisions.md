@@ -8437,3 +8437,138 @@ The globe stays faintly visible behind a blur rather than being blanked. A
 sign-in that hides the map entirely makes Orbital feel like it navigated
 somewhere else, when the map is exactly where the reader is about to be
 returned to.
+
+---
+
+## D154 - The satellites drawn twice, and the memo that could not see why
+
+Reported: leave Earth for the solar system, come back, and the satellites are on
+the surface **and** in orbit at the same time.
+
+The shell and the ground symbols are two drawings of the same objects, and D105
+established that exactly one is on at a time - the shell owns the view while the
+whole planet is in frame, the sub-satellite points past that. The frame loop
+enforced it, and it enforced it through a memo:
+
+```js
+let lastShellShowing = null;
+...
+if (shellShowing !== lastShellShowing) { ...set visibility... }
+```
+
+That is correct exactly as long as nothing else writes to those layers.
+Something else does. `applyBody` decides visibility from the **body** and turns
+every Earth layer back on when the camera returns to Earth - which is precisely
+what happens on the way back from the solar view. The memo saw no change,
+because the *intent* had not changed, and so nothing put the ground symbols back
+down. Two thousand satellites on the surface and the same two thousand in orbit.
+
+**This is D141 one layer along.** There the same collision was between
+`applyBody` and the globe handover, and the fix was to read the zoom rather than
+track a flag so the two could not disagree. Here the fix is to read the map:
+`setVisibility` in `layerSync.ts` asks the style what a layer's visibility
+actually is and writes only when it differs.
+
+The lesson generalises and is worth stating plainly: **a cache of what you asked
+for is not a record of what is true**, and the moment a second writer exists it
+stops being either. It is not enough for the memo to be correct; it has to be
+the only writer, and nothing in the code said so.
+
+Reading first rather than writing every frame keeps the actual `setLayoutProperty`
+on transitions only - the reason the memo existed - while making the read the
+source of truth, so a write by anybody else is corrected on the next frame
+instead of never.
+
+The same memo existed for the aircraft furniture, with the same fault: airports
+and receiver coverage would come back up over a satellite view after the same
+round trip. Both are gone.
+
+**Proved rather than argued.** With the fix in, setting `orbital-satellites` to
+`visible` from the console - exactly what `applyBody` does - is corrected back
+to `none` within two frames. Under the memo it would have stuck, which is the
+bug as reported.
+
+---
+
+## D155 - Light-speed, and where the line is
+
+Phone asked for the trip between worlds to feel like travelling at light speed
+rather than a zoom out and a zoom in.
+
+### The honesty question, answered rather than dodged
+
+`bodyFlight.ts` says - and still says - that Orbital cannot fly you to Mars, and
+that building something which *looked* like a literal flight would be the most
+elaborate lie in the project. So it is worth being exact about why this is not
+that.
+
+The lie would be a **fabricated observation**: a sky drawn as though it were
+measured, with stars streaming past that no catalogue puts there. That is not
+what this is. The real sky is `stars.ts`, it comes from a real catalogue, and it
+does not move while this plays. The streaks are a full-screen rush of light on a
+2D canvas above the map - nobody could mistake it for data, and it is the same
+kind of statement as a fade.
+
+The one thing tied to reality is the **direction**: the camera turns toward the
+destination's true position while pulling out (D136), so the vanishing point the
+streaks radiate from is the real bearing of the world being travelled to.
+
+### The shape
+
+Stars run outward from the centre on fixed bearings and **accelerate** -
+distance grows with the square of the phase. A field moving outward at a
+constant rate reads as falling snow; the same field accelerating reads as speed.
+
+Intensity peaks at the **apex**, not the midpoint, because the apex is where the
+world is actually swapped. The brightest instant should be the one with
+something to hide; anywhere else leaves the swap in a quiet frame.
+
+The camera was re-paced to match: `accelerate` on the way out, `decelerate` on
+the way in, carried in the plan as a name rather than a closure so a plan stays
+comparable data. One ease-out across both halves reads as a single continuous
+zoom, which is the thing this was asked to stop being.
+
+Reduced motion gets **nothing at all** - not slower and not fainter. A
+full-screen rush of accelerating light is close to the definition of what that
+preference exists to prevent. The trip still happens, at the same length, with
+the same camera moves.
+
+It is a plain 2D canvas rather than a MapLibre custom layer, and that is what
+makes it safe: a custom layer shares the map's WebGL context and depth buffer,
+and several sessions of this project are about what happens when something is
+drawn in a frame it does not own. This cannot disturb a pixel of the globe.
+
+### Three instrument failures in one sitting
+
+None of this could be verified by watching, and each attempt failed differently.
+
+1. **A stale page.** Vite's HMR had failed to reload `PlanetView.tsx`, leaving a
+   `ReferenceError` and a page running half-old code. Every reading taken through
+   it was void, and nothing on screen said so.
+2. **A duplicate store.** Probing state with
+   `await import('/src/state/store.ts')` gets a **second copy** of the module -
+   Vite serves the app's copy under a different URL - with its own state and its
+   own subscribers. `setFlyingTo` on it did nothing the app could see, and the
+   readings looked exactly like a trip that aborted after 230ms. This is the
+   sharpest version yet of the probe fighting its own code.
+3. **A pane that will not paint.** The preview throttles
+   `requestAnimationFrame` hard enough that a three-second animation can pass in
+   two frames, so an `easeTo` snaps to its target and a canvas drawn on rAF can
+   be empty every time it is sampled. The same finding as the ResizeObserver one
+   earlier this session, in a new place.
+
+The response was to stop trying to watch it. `drawStreaks` takes a narrow
+`StrokeContext`, so the drawing is checked with a **recorder** in a test
+environment that has no canvas at all: that a full field is emitted at the apex,
+that the most ink is laid down there, that the field is centred, that no
+coordinate is ever NaN - which canvas renders as nothing, silently, and is the
+hardest possible version of this bug to find.
+
+Two of those tests were wrong on the first attempt, and in a way worth recording:
+counting strokes saturates, because by a fifth of the way in every star is
+already above the alpha floor, so the count compared nothing and read 200 = 200;
+and asserting the *extremes* of two hundred random bearings are symmetric was
+measuring sampling noise, which honestly reported 627 against an expected 600.
+Total ink and a four-star compass field are exact. **The failures were the
+tests, not the code** - which is only knowable because they were run against a
+mutation.
