@@ -45,8 +45,8 @@ const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function SignInPage() {
-  const open = useOrbitalStore((s) => s.signInOpen);
-  const setOpen = useOrbitalStore((s) => s.setSignInOpen);
+  const open = useOrbitalStore((s) => s.openPage) === 'signin';
+  const setPage = useOrbitalStore((s) => s.setOpenPage);
   const setAccount = useOrbitalStore((s) => s.setAccount);
 
   const [mode, setMode] = useState<Mode>('signin');
@@ -88,7 +88,7 @@ export function SignInPage() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        setOpen(false);
+        setPage(null);
         return;
       }
       if (event.key !== 'Tab' || !surface.current) return;
@@ -111,7 +111,7 @@ export function SignInPage() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, setOpen]);
+  }, [open, setPage]);
 
   if (!open) return null;
 
@@ -134,7 +134,7 @@ export function SignInPage() {
       setPhase('success');
       later(() => {
         setAccount(response?.account ?? null);
-        setOpen(false);
+        setPage(null);
       }, motion.successHold);
     } catch (caught) {
       const failure = caught instanceof ApiError ? caught : null;
@@ -242,11 +242,21 @@ export function SignInPage() {
               >
                 {mode === 'signin' ? 'Create an account' : 'I already have an account'}
               </button>
+
+              {/* The one question this page invites and could not answer:
+                  what an account is actually *for* (D157). */}
+              <button
+                type="button"
+                className="signin__aside"
+                onClick={() => setPage('premium')}
+              >
+                What premium does →
+              </button>
             </form>
           </>
         )}
 
-        <button type="button" className="signin__back" onClick={() => setOpen(false)}>
+        <button type="button" className="signin__back" onClick={() => setPage(null)}>
           ← Back to the map
         </button>
       </div>

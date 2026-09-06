@@ -160,3 +160,73 @@ class TestWhoAmI:
         assert signed_in is not None
         accounts.set_tier(signed_in.id, TIER_PREMIUM)
         assert client.get("/api/auth/me").json()["account"]["tier"] == "premium"
+
+
+class TestChangingTier:
+    """Becoming premium, without a payment processor (D157).
+
+    The gap this closes was written down for two sessions: a tier could only be
+    raised by editing SQLite or running the admin command. What it deliberately
+    does *not* close is payment - see the route's own docstring.
+    """
+
+    def test_a_signed_in_account_can_take_premium(self, client: TestClient) -> None:
+        client.post("/api/auth/register", json=GOOD)
+        response = client.post("/api/auth/subscription", json={"tier": "premium"})
+        assert response.status_code == 200
+        assert response.json()["account"]["tier"] == "premium"
+        assert client.get("/api/auth/me").json()["account"]["tier"] == "premium"
+
+    def test_and_can_go_back_to_free(self, client: TestClient) -> None:
+        # A one-way door would make the free experience untestable by anyone
+        # who had ever pressed the button, including whoever is marking this.
+        client.post("/api/auth/register", json=GOOD)
+        client.post("/api/auth/subscription", json={"tier": "premium"})
+        client.post("/api/auth/subscription", json={"tier": "free"})
+        assert client.get("/api/auth/me").json()["account"]["tier"] == "free"
+
+    def test_it_takes_effect_on_the_gate_immediately(self, client: TestClient) -> None:
+        # The point of the whole thing: the tier is not decoration, it moves the
+        # time-travel window (D149). Asserted through the entitlement rather
+        # than through the tier string, because the string agreeing proves
+        # nothing about what it buys.
+        from app.accounts.entitlements import travel_window
+        from app.accounts.store import TIER_FREE, TIER_PREMIUM
+
+        client.post("/api/auth/register", json=GOOD)
+        before = travel_window(client.get("/api/auth/me").json()["account"]["tier"])
+        client.post("/api/auth/subscription", json={"tier": "premium"})
+        after = travel_window(client.get("/api/auth/me").json()["account"]["tier"])
+        assert travel_window(TIER_FREE) == before < after == travel_window(TIER_PREMIUM)
+
+    def test_nobody_can_make_themselves_an_administrator(self, client: TestClient) -> None:
+        # **The one line here that is not a placeholder.** Any signed-in reader
+        # can reach this endpoint, so a tier it will accept is a tier anybody
+        # can have - and `admin` must never be one.
+        client.post("/api/auth/register", json=GOOD)
+        response = client.post("/api/auth/subscription", json={"tier": "admin"})
+        assert response.status_code == 422
+        assert client.get("/api/auth/me").json()["account"]["tier"] == "free"
+
+    def test_an_unknown_tier_is_refused_the_same_way(self, client: TestClient) -> None:
+        # Same answer as `admin`, on purpose: which tiers exist beyond the two
+        # on sale is a fact about the deployment that a stranger does not need.
+        admin = client.post("/api/auth/subscription", json={"tier": "admin"})
+        client.post("/api/auth/register", json=GOOD)
+        nonsense = client.post("/api/auth/subscription", json={"tier": "wizard"})
+        assert nonsense.status_code == 422
+        assert admin.status_code in (401, 422)
+
+    def test_signing_in_is_required(self, client: TestClient) -> None:
+        assert client.post("/api/auth/subscription", json={"tier": "premium"}).status_code == 401
+
+    def test_the_whole_thing_can_be_switched_off(self, client: TestClient) -> None:
+        # The day anything here is charged for, this is the switch, and the
+        # route becomes where a processor's webhook lands instead.
+        from app.config import Settings
+
+        client.post("/api/auth/register", json=GOOD)
+        client.app.state.settings = Settings(self_serve_premium=False)
+        response = client.post("/api/auth/subscription", json={"tier": "premium"})
+        assert response.status_code == 403
+        assert client.get("/api/auth/me").json()["account"]["tier"] == "free"

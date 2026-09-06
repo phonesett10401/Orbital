@@ -24,10 +24,12 @@ import { useEffect, useState } from 'react';
 
 import { AD_LABEL, type AdSlot as Slot, ROTATE_MS, adAt, inventoryFor } from '../ads';
 import { prefersReducedMotion } from '../motion';
+import { useOrbitalStore } from '../state/store';
 
 export function AdSlot({ slot }: { slot: Slot }) {
   const [tick, setTick] = useState(0);
   const still = prefersReducedMotion();
+  const setOpenPage = useOrbitalStore((s) => s.setOpenPage);
 
   useEffect(() => {
     // One card only if the inventory has one, or if the reader has asked the
@@ -52,7 +54,19 @@ export function AdSlot({ slot }: { slot: Slot }) {
       <div className="ad__card" key={ad.id}>
         <p className="ad__headline">{ad.headline}</p>
         <p className="ad__body">{ad.body}</p>
-        {ad.action && <span className="ad__action">{ad.action} →</span>}
+        {/* **The action goes somewhere.** It said "See what premium does" and
+            did nothing, which is the same fault as a pricing page that
+            overstates - a claim in the interface that the application does not
+            honour (D157). */}
+        {ad.action && (
+          <button
+            type="button"
+            className="ad__action"
+            onClick={() => setOpenPage('premium')}
+          >
+            {ad.action} →
+          </button>
+        )}
       </div>
     </aside>
   );

@@ -230,6 +230,18 @@ class Settings(BaseSettings):
             "cookie travels in the clear (D147)."
         ),
     )
+    self_serve_premium: bool = Field(
+        default=True,
+        description=(
+            "Whether a signed-in account may change its own tier between free "
+            "and premium. **There is no payment processor**, so this is the "
+            "stand-in for one: it is what makes premium reachable from inside "
+            "the app at all, and it gives premium away. On by default because "
+            "this is a project nobody is billing, and it is the switch to "
+            "throw the moment anything here is charged for (D157). It can "
+            "never grant `admin` whatever it is set to."
+        ),
+    )
     lunar_layer_enabled: bool = Field(
         default=True,
         description=(

@@ -125,6 +125,17 @@ export function signIn(email: string, password: string): Promise<MeResponse | nu
   return post<MeResponse>('/api/auth/login', { email, password });
 }
 
+/**
+ * Move this account between free and premium (D157).
+ *
+ * A POST rather than a GET because it changes something, and through `post` so
+ * it carries the session cookie - the server decides from the session who is
+ * asking, and there is deliberately no account id in the call.
+ */
+export function changeTier(tier: 'free' | 'premium'): Promise<MeResponse | null> {
+  return post<MeResponse>('/api/auth/subscription', { tier });
+}
+
 export function signOut(): Promise<null> {
   return post<null>('/api/auth/logout') as Promise<null>;
 }

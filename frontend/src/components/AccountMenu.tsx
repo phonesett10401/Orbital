@@ -23,15 +23,15 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { fetchMe, signOut } from '../api/client';
-import { tierLabel } from '../auth';
+import { isPremium, tierLabel } from '../auth';
 import { useOrbitalStore } from '../state/store';
 
 export function AccountMenu() {
   const account = useOrbitalStore((s) => s.account);
   const accountChecked = useOrbitalStore((s) => s.accountChecked);
   const setAccount = useOrbitalStore((s) => s.setAccount);
-  const setSignInOpen = useOrbitalStore((s) => s.setSignInOpen);
-  const signInOpen = useOrbitalStore((s) => s.signInOpen);
+  const setOpenPage = useOrbitalStore((s) => s.setOpenPage);
+  const signInOpen = useOrbitalStore((s) => s.openPage) === 'signin';
 
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -74,7 +74,7 @@ export function AccountMenu() {
 
   const press = () => {
     if (!account) {
-      setSignInOpen(true);
+      setOpenPage('signin');
       return;
     }
     setOpen(!open);
@@ -96,6 +96,16 @@ export function AccountMenu() {
         <div className="account__panel" role="dialog" aria-label="Account">
           <p className="account__email">{account.email}</p>
           <p className="account__tier">{tierLabel(account.tier)} account</p>
+          <button
+            type="button"
+            className="account__switch"
+            onClick={() => {
+              setOpen(false);
+              setOpenPage('premium');
+            }}
+          >
+            {isPremium(account) ? 'Manage premium' : 'What premium does'}
+          </button>
           <button type="button" className="account__submit" onClick={leave} disabled={busy}>
             Sign out
           </button>

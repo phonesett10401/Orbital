@@ -8628,3 +8628,94 @@ is kept as the place the next thing baked into geometry has to declare itself.
 
 A removal is not only a deletion: it is every place the deleted thing was the
 reason something else had a shape.
+
+---
+
+## D157 - Premium becomes reachable, and the button does not say Buy
+
+The gap written down since D149: premium could only be granted by editing SQLite
+or running the admin command. There is now a page describing it and a switch that
+turns it on.
+
+### There is no payment, and that is the honest part
+
+A processor needs an account, live keys, a domain and a policy review, none of
+which belong in this repository. What would be **wrong** is pretending. A button
+labelled *Buy* that takes no money is a lie told in the interface, and it is the
+one kind of dishonesty an application can commit unnoticed, because nobody
+re-reads a pricing page.
+
+So the button says `Switch premium on`, the note saying there is no payment is
+set as plainly as everything else rather than as fine print, and a test asserts
+that none of the page's own words are `buy`, `purchase`, `pay` or `checkout`.
+That test exists to stop a future edit quietly making the page lie.
+
+`self_serve_premium` is the switch behind it: on because nobody is being billed,
+and the first thing to turn off the day anybody is - at which point the route is
+where a processor's webhook goes instead.
+
+### The one line that is not a placeholder
+
+`admin` is refused whatever the setting says. Any signed-in reader can reach this
+endpoint, so **a tier it accepts is a tier anybody can have**, and running the
+deployment must not be one of them. It is refused with the same answer as a
+nonsense tier, because which tiers exist beyond the two on offer is a fact about
+the deployment a stranger does not need.
+
+### The page is checked against the code it describes
+
+Every row in the comparison comes from `premium.ts`, and the tests assert the
+numbers match the modules that enforce them - the window against
+`entitlements.ts`, the ad rows against `ads.ts`. **A feature list that drifts
+from the code is a lie nobody notices.**
+
+`differences()` is its own function so that padding the list is visible rather
+than easy: the day it returns three rows, something was added to premium or taken
+away from free. Today it returns two, and the page says so by dimming the five
+rows where the tiers are identical rather than hiding them - hiding them would
+make premium look like most of the product, when it is two rows of it.
+
+### Everything that mentions premium now goes there
+
+The ad slots' call to action said *See what premium does* and did nothing, which
+is the same fault as an overstated pricing page: a claim in the interface the
+application does not honour. It is a button now. So is the line on the sign-in
+page, and the account menu's `What premium does` / `Manage premium`.
+
+### One boolean became a name
+
+`signInOpen` became `openPage: PageName | null`, because a second full-screen
+page arrived and two booleans would have made *both open at once* a state the
+types allow - the sort of thing that happens once and is then impossible to
+reproduce. Moving between the two pages **replaces** the history entry rather
+than pushing: they are siblings, not a trail, so Back from premium reached
+through sign-in returns to the map.
+
+### The bug that only appears on a pasted link
+
+Arriving on `#premium` left the page shut and the hash cleared, and it was
+intermittent before that.
+
+Both of `usePageRoute`'s effects run in the same commit. On the very first render
+the state is still `null` while the hash already says `premium`, so the
+address-follows-state effect reads *a page was closed*, calls `history.back()` -
+**navigating out of the application** - and the sync effect then reads the
+now-empty hash and agrees nothing is open. Effect order does not fix it: the
+second effect's `setPage` is not visible to the first one's closure until the
+next render, and whether the browser had applied `back()` by then decided whether
+it worked, which is why it worked once and failed later.
+
+The first run is skipped outright. That is also the honest rule: **a page opened
+by a link was not opened by the state, and there is nothing to push.**
+
+### A seventh instrument failure, for the collection
+
+A React *hooks order* error and a blank page, twice, on what looked like clean
+loads. It was Fast Refresh: adding a `useRef` to a custom hook in another module
+does not change `App`'s own signature, so React kept the mounted component and
+the hook list shifted by one at the tail. Restarting the dev server and loading
+once made it render perfectly.
+
+The rule this keeps re-teaching: **after editing a hook, a stale page is not
+evidence about the code.** The check that settles it is a server restart, not
+another reload.

@@ -18,6 +18,7 @@
 import { create } from 'zustand';
 import { withBestFix } from '../trackFix';
 import type { MoonSatellite } from '../moonSatellites';
+import type { PageName } from '../pageRoute';
 import type { Account } from '../auth';
 
 import type {
@@ -186,15 +187,20 @@ export interface OrbitalState {
   setAccount(account: Account | null): void;
 
   /**
-   * Whether the sign-in page is open (D153).
+   * Which full-screen page is open, or null for the map (D153, D157).
    *
-   * In the store rather than inside `AccountMenu` because the page covers the
-   * whole app and is rendered at the top of the tree, while the control that
-   * opens it lives in the header. It is also the one piece of chrome the
-   * browser's Back button can close, which needs a single place to say so.
+   * In the store rather than inside the component that opens it, because a page
+   * covers the whole app and is rendered at the top of the tree while the
+   * control that opens it lives in the header. It is also the one piece of
+   * chrome the browser's Back button can close, which needs a single place to
+   * say so.
+   *
+   * **One name rather than a flag per page.** Two booleans would make "both
+   * open at once" a state the types allow, and that is the sort of thing that
+   * happens once and is then impossible to reproduce.
    */
-  signInOpen: boolean;
-  setSignInOpen(open: boolean): void;
+  openPage: PageName | null;
+  setOpenPage(page: PageName | null): void;
 
   /**
    * Where the camera is heading, while a trip is in progress.
@@ -374,9 +380,9 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   setAccount(account) {
     set({ account, accountChecked: true });
   },
-  signInOpen: false,
-  setSignInOpen(open) {
-    if (useOrbitalStore.getState().signInOpen !== open) set({ signInOpen: open });
+  openPage: null,
+  setOpenPage(page) {
+    if (useOrbitalStore.getState().openPage !== page) set({ openPage: page });
   },
   moonPanelAt: null,
   setMoonPanelAt(at) {

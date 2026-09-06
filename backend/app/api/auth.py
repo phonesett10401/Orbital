@@ -42,7 +42,13 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.accounts.passwords import MIN_PASSWORD_LENGTH
 from app.accounts.sessions import SESSION_DAYS, SessionStore
-from app.accounts.store import Account, AccountStore, EmailTaken
+from app.accounts.store import (
+    TIER_FREE,
+    TIER_PREMIUM,
+    Account,
+    AccountStore,
+    EmailTaken,
+)
 from app.config import Settings
 from app.api.deps import get_settings_dep
 
@@ -237,6 +243,59 @@ def logout(
     response.delete_cookie(SESSION_COOKIE, path="/")
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
+
+
+class TierChange(BaseModel):
+    """The tier an account is asking to move itself to."""
+
+    tier: str
+
+
+@router.post("/subscription", response_model=MeResponse)
+def change_subscription(
+    body: TierChange,
+    account: Account = Depends(require_account),
+    accounts: AccountStore = Depends(get_accounts),
+    settings: Settings = Depends(get_settings_dep),
+) -> MeResponse:
+    """Move this account between free and premium (D157).
+
+    ## There is no payment here, and that is deliberate rather than unfinished
+
+    A real processor needs an account, live keys, a domain and a policy review,
+    and none of that belongs in this repository. What *would* be wrong is
+    pretending: a button labelled "Buy" that takes no money is a lie told in the
+    interface, so the page that calls this says exactly what it is.
+
+    `self_serve_premium` is the switch. It is on because nobody is being billed;
+    it is the first thing to turn off the day anybody is, at which point this
+    route is where a processor's webhook goes instead.
+
+    ## It can never make an administrator
+
+    The one line here that is not a placeholder. `admin` is not a purchasable
+    tier and never will be, so a request for it is refused whatever the setting
+    says - otherwise this endpoint, which any signed-in reader can reach, would
+    be a self-service route to running the deployment.
+    """
+    if not settings.self_serve_premium:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "premium cannot be changed from here"
+        )
+
+    wanted = body.tier.strip().lower()
+    if wanted not in {TIER_FREE, TIER_PREMIUM}:
+        # Deliberately the same answer for `admin` and for nonsense: this
+        # endpoint has no opinion about which tiers exist beyond the two it
+        # sells, and saying "admin is a real tier you may not have" is a fact
+        # about the deployment that a stranger does not need.
+        raise HTTPException(422, "that is not a tier you can change to")
+
+    updated = accounts.set_tier(account.id, wanted)
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "that account is gone")
+    logger.info("tier changed by self-service: id=%s tier=%s", updated.id, updated.tier)
+    return MeResponse(account=AccountView(email=updated.email, tier=updated.tier))
 
 
 @router.get("/me", response_model=MeResponse)
