@@ -13,13 +13,18 @@
 /**
  * Which layer an object belongs to.
  *
- * A union of two. It was carried as a union of one so the renderer could
+ * A union of three. It was carried as a union of one so the renderer could
  * discriminate if the backend ever served more than one kind of object —
  * retrofitting that into a contract spanning three layers is far worse than
  * carrying it from the start. Satellites arrived later (D93) and it cost one
- * line here. Adding a third member is a scope decision, not a code change.
+ * line here; ships arrived after that (D165) and cost the same one line, which
+ * is the second time the bet has paid.
+ *
+ * `backend/app/models.py` has a test that fails whenever this list changes, so
+ * that a new member has to be a written-down decision rather than a quiet
+ * addition. It has now fired twice, both times in a green suite.
  */
-export type ObjectType = 'aircraft' | 'satellite';
+export type ObjectType = 'aircraft' | 'satellite' | 'ship';
 
 /** One moving object at one instant. Source-agnostic by design (D4). */
 export interface TrackedObject {
@@ -256,4 +261,13 @@ export interface SearchResponse {
    * invents a comparison that does not exist (D89, D103).
    */
   satellites: TrackedObject[];
+  /**
+   * Vessels whose name or MMSI matches.
+   *
+   * A fourth list, for the same reason as the third — and the one whose
+   * absence would have been felt. With ships selected and no list to fill, the
+   * box would have gone on offering aircraft and airports: an answer to a
+   * question nobody asked, in a layer that cannot act on it (D103, D165).
+   */
+  ships: TrackedObject[];
 }

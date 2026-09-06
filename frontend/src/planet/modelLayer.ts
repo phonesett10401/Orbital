@@ -80,6 +80,21 @@ export interface ModelTarget {
  */
 export function modelTarget(object: RenderableObject | null | undefined): ModelTarget | null {
   if (!object || object.heading === null) return null;
+  // **A ship gets no model at all**, and this is a refusal rather than a fork.
+  //
+  // The comment below says an aeroplane must never appear in orbit. The same
+  // sentence is true of the sea, and the type check that enforces it was
+  // written when there were two kinds: `satellite ? spacecraft : airframe`,
+  // where the else-branch silently meant aircraft. A ship arriving (D165)
+  // therefore selected the airframe, and a 3D aeroplane sat on the water off
+  // Helsinki - found by looking at the map rather than by any test.
+  //
+  // Refused instead of given a hull because there is no ship geometry to give
+  // it, and inventing one here would be the wrong place to decide that. It
+  // costs nothing: the model exists to show the *shape* of a thing too small
+  // to make out, and at the zoom where a vessel is worth looking at closely
+  // the sprite already carries its heading and its type.
+  if (object.type === 'ship') return null;
   return {
     lon: object.renderLon,
     lat: object.renderLat,

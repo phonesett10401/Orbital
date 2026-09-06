@@ -20,6 +20,8 @@ decimetres, where the contract is metres per second and the panel says metres.
 
 from __future__ import annotations
 
+import time
+
 import httpx
 import pytest
 
@@ -28,12 +30,26 @@ from app.providers.base import ProviderBadResponse, ProviderRateLimited, Provide
 from app.providers.digitraffic import (
     MAX_PLAUSIBLE_KNOTS,
     SHIP_TTL_SECONDS,
+    SHIP_TYPE_BY_TENS,
+    SPECIAL_CRAFT,
     DigitrafficProvider,
     _eta,
     _heading,
     _ship_type,
     _speed_ms,
 )
+
+
+def just_now() -> int:
+    """The feed's timestamp for a vessel heard from a moment ago.
+
+    Relative to the clock rather than a captured constant, because the provider
+    now drops anything older than fifteen minutes (D165) - so a fixed
+    timestamp is a fixture that quietly expires, and every test using it starts
+    failing some time after it was written for a reason that has nothing to do
+    with what it asserts.
+    """
+    return int(time.time() * 1000)
 
 
 def feature(**properties) -> dict:
@@ -44,7 +60,7 @@ def feature(**properties) -> dict:
         "cog": 59.9,
         "navStat": 0,
         "heading": 61,
-        "timestampExternal": 1788713524127,
+        "timestampExternal": just_now(),
     }
     base.update(properties)
     return {
@@ -163,8 +179,9 @@ class TestTheRecord:
 
     @pytest.mark.anyio
     async def test_the_observation_time_is_the_feeds_not_ours(self) -> None:
-        records = await provider([feature(timestampExternal=1788713524127)]).fetch()
-        assert records[0].last_seen.timestamp() == pytest.approx(1788713524.127, abs=0.01)
+        stamp = just_now()
+        records = await provider([feature(timestampExternal=stamp)]).fetch()
+        assert records[0].last_seen.timestamp() == pytest.approx(stamp / 1000, abs=0.01)
 
     @pytest.mark.anyio
     async def test_draught_becomes_metres(self) -> None:
@@ -318,3 +335,115 @@ class TestTheTtl:
         # map of ghosts, where 39% of everything drawn was past the fade.
         assert SHIP_TTL_SECONDS >= 5 * 180
         assert SHIP_TTL_SECONDS < 3600
+
+
+class TestTheVocabularyIsAContract:
+    """The words this provider emits are read by a file in another language.
+
+    ``frontend/src/shipKind.ts`` maps each of them to a colour, and a word it
+    does not know falls through to grey rather than raising - so a vessel type
+    added here would silently lose its colour on the map, and nothing would
+    report it. There is nothing to import across that boundary, so the set is
+    written out on both sides and each side asserts it.
+    """
+
+    def test_the_emitted_words_are_exactly_the_ones_the_map_expects(self) -> None:
+        # Mirrored in frontend/src/shipKind.test.ts as BACKEND_VOCABULARY.
+        # Change one, and this test and its twin both fail - which is the
+        # point: the failure names the other file.
+        assert sorted(set(SHIP_TYPE_BY_TENS.values()) | set(SPECIAL_CRAFT.values())) == [
+            "Anti-pollution",
+            "Cargo",
+            "Diving support",
+            "Dredger",
+            "Fishing",
+            "High speed craft",
+            "Law enforcement",
+            "Medical transport",
+            "Military",
+            "Other",
+            "Passenger",
+            "Pilot vessel",
+            "Pleasure craft",
+            "Port tender",
+            "Sailing",
+            "Search and rescue",
+            "Special craft",
+            "Tanker",
+            "Towing",
+            "Towing (long)",
+            "Tug",
+            "Wing in ground",
+        ]
+
+    def test_every_code_the_feed_can_send_resolves_to_one_of_them(self) -> None:
+        # The tens-digit table covers 20-99 and the named table punches through
+        # it. Anything outside is None, not a word - so this also pins that
+        # codes 0-19 stay unnamed rather than acquiring a guess.
+        vocabulary = set(SHIP_TYPE_BY_TENS.values()) | set(SPECIAL_CRAFT.values())
+        for code in range(0, 100):
+            word = _ship_type(code)
+            assert word is None or word in vocabulary, code
+
+
+class TestTheStaleTailIsDroppedOnTheWayIn:
+    """The store's eviction cannot win against a source that never forgets.
+
+    Eviction assumes the source stops reporting what has gone. This one
+    re-serves its own day-old records on every poll, so the store deletes them
+    and the next poll puts them straight back - measured live as 920 vessels
+    served with 281 past the TTL, the oldest very nearly twenty-four hours
+    (D165).
+    """
+
+    @pytest.mark.anyio
+    async def test_a_vessel_not_heard_from_in_hours_is_not_emitted(self) -> None:
+        hours_ago = just_now() - 6 * 3600 * 1000
+        records = await provider([feature(timestampExternal=hours_ago)]).fetch()
+        assert records == []
+
+    @pytest.mark.anyio
+    async def test_a_vessel_heard_from_minutes_ago_is_kept(self) -> None:
+        # A moored Class A vessel transmits every three minutes, so the filter
+        # has to clear several missed reports without dropping a ship that is
+        # simply sitting at a berth.
+        recent = just_now() - 8 * 60 * 1000
+        records = await provider([feature(timestampExternal=recent)]).fetch()
+        assert len(records) == 1
+
+    @pytest.mark.anyio
+    async def test_the_boundary_is_the_ttl_and_nothing_else(self) -> None:
+        # Pinned against SHIP_TTL_SECONDS rather than a literal, so the two
+        # cannot drift apart - a filter looser than the store's TTL would let
+        # ghosts back in, and a tighter one would drop vessels the store is
+        # still holding.
+        inside = just_now() - int((SHIP_TTL_SECONDS - 60) * 1000)
+        outside = just_now() - int((SHIP_TTL_SECONDS + 60) * 1000)
+        kept = await provider([feature(mmsi=1, timestampExternal=inside)]).fetch()
+        dropped = await provider([feature(mmsi=2, timestampExternal=outside)]).fetch()
+        assert len(kept) == 1
+        assert dropped == []
+
+    @pytest.mark.anyio
+    async def test_the_cutoff_can_be_lifted_for_a_caller_that_wants_everything(self) -> None:
+        # Not a knob for its own sake: the end-to-end tests replay captured
+        # records, and a fixture with a real timestamp in it would otherwise
+        # expire quietly some time after it was written.
+        hours_ago = just_now() - 6 * 3600 * 1000
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/vessels"):
+                return httpx.Response(200, json=[])
+            return httpx.Response(
+                200,
+                json={
+                    "type": "FeatureCollection",
+                    "features": [feature(timestampExternal=hours_ago)],
+                },
+            )
+
+        keeps_everything = DigitrafficProvider(
+            client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+            max_age_seconds=float("inf"),
+        )
+        assert len(await keeps_everything.fetch()) == 1

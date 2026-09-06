@@ -200,11 +200,16 @@ export function useSearch(): void {
         .then((response) =>
           useOrbitalStore
             .getState()
-            .setSearchResults(response.aircraft, response.airports, response.satellites ?? []),
+            .setSearchResults(
+              response.aircraft,
+              response.airports,
+              response.satellites ?? [],
+              response.ships ?? [],
+            ),
         )
         .catch((error) => {
           if ((error as Error).name === 'AbortError') return;
-          useOrbitalStore.getState().setSearchResults([], [], []);
+          useOrbitalStore.getState().setSearchResults([], [], [], []);
         });
     }, 250);
 

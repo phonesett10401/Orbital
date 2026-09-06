@@ -18,6 +18,7 @@
  */
 
 import { REGIME_RGB, UNKNOWN_RGB, type OrbitRegime } from '../satelliteShell';
+import { KIND_COLOUR, KIND_LABEL, KIND_ORDER } from '../shipKind';
 import type { ObjectType } from '../types';
 
 export interface ScaleStop {
@@ -28,8 +29,16 @@ export interface ScaleStop {
 }
 
 export interface ShapeNote {
-  /** `aircraft`, `disc` or `dot` - which glyph the key draws. */
-  glyph: 'aircraft' | 'disc' | 'dot';
+  /**
+   * Which glyph the key draws.
+   *
+   * `ship` was added with the layer (D165) rather than reusing `aircraft`.
+   * They differ only in outline, and it was tempting to leave it - but a key
+   * showing an aeroplane beside the words "bow points the way it is pointing"
+   * is the same false statement about the subject that this whole module
+   * exists to prevent, made in the one place a reader goes to decode the map.
+   */
+  glyph: 'aircraft' | 'ship' | 'disc' | 'dot';
   text: string;
 }
 
@@ -75,7 +84,37 @@ export function satelliteBands(): ScaleStop[] {
   ];
 }
 
+export function shipBands(): ScaleStop[] {
+  return KIND_ORDER.map((kind) => ({ colour: KIND_COLOUR[kind], label: KIND_LABEL[kind] }));
+}
+
 export function chromeFor(layer: ObjectType, gradientStops: string[]): LayerChrome {
+  if (layer === 'ship') {
+    return {
+      // Says where, because this source cannot see anywhere else. A subtitle
+      // reading "live ships" over an empty Pacific is a false statement of
+      // exactly the kind this module exists to prevent: the reader would
+      // conclude the sea was quiet rather than that we are not looking at it
+      // (D165).
+      subtitle: 'ships in the Baltic',
+      searchPlaceholder: 'Search vessel name or MMSI, e.g. VIKING GRACE or 230982000',
+      countNoun: ['ship', 'ships'],
+      scaleTitle: 'Vessel type',
+      // Bands, and not the altitude ramp: every ship is at sea level, so a
+      // height scale would paint the whole fleet one colour. Nor a speed ramp,
+      // because four fifths of them are stopped - what varies here is what the
+      // vessel *is*.
+      scale: { kind: 'bands', bands: shipBands() },
+      shapes: [
+        { glyph: 'ship', text: 'Heading known — bow points the way it is pointing' },
+        { glyph: 'disc', text: 'Heading not transmitted' },
+        { glyph: 'dot', text: 'Faded — last reported over 2 minutes ago' },
+      ],
+      // Polled and observed, like aircraft: somebody had to have heard it.
+      freshness: 'age',
+    };
+  }
+
   if (layer === 'satellite') {
     return {
       subtitle: 'satellites on orbit',

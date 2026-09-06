@@ -64,9 +64,28 @@ So nearly a third of what this endpoint returns has not been heard from in over
 an hour. Serving it would repeat D86 exactly - a map of ghosts, where 39% of
 what was drawn was already past the fade. ``SHIP_TTL_SECONDS`` is 15 minutes:
 it sits on the cliff, it is five missed reports for a moored Class A vessel
-(which transmits every three minutes), and it drops the tail. It is a store
-setting rather than a filter here, because the store is where eviction already
-lives.
+(which transmits every three minutes), and it drops the tail.
+
+**And it is applied here, on the way in, not only by the store's eviction.**
+That was the first attempt and it does not work - which is a property of this
+source rather than a bug in the store, and worth understanding before anyone
+tries it again.
+
+Eviction assumes **the source forgets**. When an aircraft lands, adsb.lol stops
+reporting it: the record is never refreshed, ages past the TTL, is swept, and
+stays swept. Digitraffic never forgets. It re-serves the same day-old record on
+every single poll, so the store deletes it and the next poll puts it straight
+back. The two then race - eviction runs at most once a minute, the poll lands
+every 60 s give or take jitter - and whenever the poll gets there first the
+whole stale tail is served.
+
+Measured live, before this filter existed: **920 vessels served, 281 of them
+past the TTL, the oldest 86,359 seconds** - not quite twenty-four hours.
+Eviction was running correctly the entire time and losing.
+
+So the age is judged where it is known. Eviction still runs and still matters:
+it is what removes a vessel that leaves the coverage area altogether, which is
+the one case this source really does forget about.
 """
 
 from __future__ import annotations
@@ -220,10 +239,14 @@ class DigitrafficProvider(Provider):
         timeout_seconds: float = 30.0,
         user_agent: str = "Orbital/0.1 (CSC480 student project)",
         metadata_refresh_seconds: float = METADATA_REFRESH_SECONDS,
+        max_age_seconds: float = SHIP_TTL_SECONDS,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self._metadata_refresh = metadata_refresh_seconds
+        #: Positions older than this are not emitted at all. See the module
+        #: docstring for why this cannot be left to the store's eviction.
+        self._max_age = max_age_seconds
         #: MMSI -> the vessel's static and voyage data, refreshed slowly.
         self._metadata: dict[int, dict[str, Any]] = {}
         self._metadata_fetched_at: float | None = None
@@ -243,11 +266,15 @@ class DigitrafficProvider(Provider):
         )
 
     async def fetch(self, bbox: BBox | None = None) -> list[TrackedObjectRecord]:
-        """Every vessel the feed currently holds.
+        """Every vessel the feed has actually heard from lately.
 
         ``bbox`` is ignored, as the contract permits: the endpoint takes no
         bounding box and the whole feed is 37 KB, so filtering here would spend
         work to serve less. The API layer filters again on the way out.
+
+        The **age** filter is not optional in that way. See the module
+        docstring: this source re-serves its own day-old records on every poll,
+        so eviction downstream cannot win against it.
         """
         await self._refresh_metadata_if_due()
         payload = await self._get("/locations")
@@ -256,11 +283,24 @@ class DigitrafficProvider(Provider):
         if not isinstance(features, list):
             raise ProviderBadResponse("'features' was not a list")
 
+        now = datetime.now(timezone.utc)
         records = []
+        dropped = 0
         for feature in features:
             record = self._to_record(feature)
-            if record is not None:
-                records.append(record)
+            if record is None:
+                continue
+            if (now - record.last_seen).total_seconds() > self._max_age:
+                dropped += 1
+                continue
+            records.append(record)
+        if dropped:
+            logger.debug(
+                "digitraffic: dropped %d of %d vessels older than %.0fs",
+                dropped,
+                len(features),
+                self._max_age,
+            )
         return records
 
     async def _refresh_metadata_if_due(self) -> None:

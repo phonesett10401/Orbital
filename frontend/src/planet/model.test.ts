@@ -685,3 +685,22 @@ describe('the model is the size the aircraft is', () => {
   });
 
 });
+
+describe('a ship is never given an airframe', () => {
+  it('draws no model for a vessel', () => {
+    // The module's own rule is that an aeroplane must never appear in orbit.
+    // The same is true of the sea, and the check that enforced it was a fork
+    // on two types where the else-branch quietly meant "aircraft" - so a ship
+    // selected the airframe and a 3D aeroplane sat on the water off Helsinki
+    // (D165). Found by looking at the map; this is the test that would have
+    // found it first.
+    expect(modelTarget(object({ type: 'ship', heading: 61 }))).toBeNull();
+  });
+
+  it('still draws one for the two types that have geometry', () => {
+    // The guard has to refuse ships without refusing everything - a null here
+    // for aircraft would remove the feature rather than fix the defect.
+    expect(modelTarget(object({ type: 'aircraft', heading: 61 }))).not.toBeNull();
+    expect(modelTarget(object({ type: 'satellite', heading: 61 }))).not.toBeNull();
+  });
+});

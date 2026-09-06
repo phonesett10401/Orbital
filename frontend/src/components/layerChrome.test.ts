@@ -104,3 +104,80 @@ describe('countLabel', () => {
     expect(countLabel('satellite', 1432)).toBe('1,432 satellites');
   });
 });
+
+describe('the ships chrome', () => {
+  it('never describes ships as aircraft', () => {
+    // The same guard the satellite chrome has, and it caught the same thing:
+    // "live aircraft" over a harbour is a false statement of the kind a
+    // reader believes, because chrome is where they look to find out what is
+    // on screen.
+    const ship = chromeFor('ship', GRADIENT);
+    const words = [
+      ship.subtitle,
+      ship.searchPlaceholder,
+      ship.countNoun.join(' '),
+      ship.scaleTitle,
+    ]
+      .join(' ')
+      .toLowerCase();
+
+    expect(words).not.toContain('aircraft');
+    expect(words).not.toContain('callsign');
+    expect(words).not.toContain('airport');
+    expect(words).not.toContain('satellite');
+  });
+
+  it('says where the ships are, because the source cannot see anywhere else', () => {
+    // Digitraffic covers the northern Baltic and nothing else (D165). A
+    // subtitle reading "live ships" over an empty Pacific would have a reader
+    // conclude the sea is quiet rather than that we are not looking at it -
+    // and that is the one claim on this layer that would be actively
+    // misleading rather than merely thin.
+    expect(chromeFor('ship', GRADIENT).subtitle).toContain('Baltic');
+  });
+
+  it('offers a search example somebody could actually type', () => {
+    const placeholder = chromeFor('ship', GRADIENT).searchPlaceholder;
+    expect(placeholder).toMatch(/MMSI/i);
+    expect(placeholder).not.toMatch(/callsign/i);
+  });
+
+  it('colours by vessel type rather than by height or speed', () => {
+    // Every ship is at sea level and four fifths of them are stopped, so both
+    // of the scales the other two layers use would paint the whole fleet one
+    // colour and say nothing (D165).
+    const scale = chromeFor('ship', GRADIENT).scale;
+    expect(scale.kind).toBe('bands');
+    expect(chromeFor('ship', GRADIENT).scaleTitle).toBe('Vessel type');
+  });
+
+  it('reports an age, because a ship is observed rather than computed', () => {
+    // The satellite layer reports none: a computed position has no age (D95).
+    // A ship's is a real observation by a real receiver, so it does.
+    expect(chromeFor('ship', GRADIENT).freshness).toBe('age');
+  });
+
+  it('counts ships, singular and plural', () => {
+    expect(countLabel('ship', 1)).toBe('1 ship');
+    expect(countLabel('ship', 642)).toBe('642 ships');
+  });
+});
+
+describe('the key draws the right shape for its layer', () => {
+  it('shows a hull for ships, not an aeroplane', () => {
+    // The words "bow points the way it is pointing" beside an aircraft
+    // silhouette is a false statement about the subject, made in the one place
+    // a reader goes to decode the map (D165). It was an aeroplane at first,
+    // because the glyph type had only three values and one of them was close
+    // enough to reuse.
+    const glyphs = chromeFor('ship', GRADIENT).shapes.map((s) => s.glyph);
+    expect(glyphs).toContain('ship');
+    expect(glyphs).not.toContain('aircraft');
+  });
+
+  it('leaves the aircraft key drawing an aircraft', () => {
+    const glyphs = chromeFor('aircraft', GRADIENT).shapes.map((s) => s.glyph);
+    expect(glyphs).toContain('aircraft');
+    expect(glyphs).not.toContain('ship');
+  });
+});

@@ -36,6 +36,7 @@ import { wingspanFor } from '../wingspan';
 import { generalMetaRows } from './panelFields';
 import { legLabel, summariseRoute } from './routeSummary';
 import { SATELLITE_META_SHOWN, satelliteRows } from './satelliteFacts';
+import { SHIP_META_SHOWN, shipRows } from './shipFacts';
 import { useOrbitalStore } from '../state/store';
 
 const MS_PER_SECOND = 1000;
@@ -123,6 +124,56 @@ export function DetailPanel() {
       </button>
     </header>
   );
+
+  // A ship answers none of the aircraft questions either, and answers one of
+  // them badly: a vessel is at sea level, reported as zero rather than null
+  // because that is a fact and not a gap (D165), so the aircraft panel would
+  // print "Altitude 0 m" on every ship. True, useless, and in the row the
+  // reader is scanning for something that varies. Its own rows, for the reason
+  // satellites got theirs (D98).
+  if (detail.type === 'ship') {
+    return (
+      <aside className="panel" aria-label={`Details for ${detail.label}`}>
+        {header}
+        {/*
+          No photograph. The aircraft panel has one because a registration
+          identifies an airframe somebody has photographed, and the satellite
+          panel has one because a mission has a press image. Neither is true
+          here: there is no free image source keyed by MMSI, and a stock photo
+          of "a tanker" would be a picture of a different ship (D116, D118).
+        */}
+        <div className={`panel__age ${isStale ? 'panel__age--stale' : ''}`}>
+          Last reported {formatAge(ageSec)}
+          {isStale && ' — position shown is the last one we received'}
+        </div>
+        <dl className="panel__fields">
+          {shipRows(detail).map((row) => (
+            <div key={row.label}>
+              <dt>{row.label}</dt>
+              <dd>
+                {row.value}
+                {row.note && <span className="panel__note">{row.note}</span>}
+              </dd>
+            </div>
+          ))}
+          {Object.entries(detail.meta ?? {})
+            .filter(([key]) => !SHIP_META_SHOWN.has(key))
+            .map(([key, value]) => (
+              <div key={key}>
+                <dt>{formatMetaKey(key)}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          <div>
+            <dt>Position</dt>
+            <dd className="mono">
+              {detail.lat.toFixed(3)}, {detail.lon.toFixed(3)}
+            </dd>
+          </div>
+        </dl>
+      </aside>
+    );
+  }
 
   // A satellite answers none of the questions below - no airline, no type, no
   // departure airport, no scheduled route - and blank rows for them would read

@@ -109,6 +109,16 @@ const AIRCRAFT_FURNITURE = [
   LEADER_LAYER,
   LEADER_CASING_LAYER,
 ];
+import {
+  ICON_SHIP,
+  ICON_SHIP_UNKNOWN,
+  SHIP_LABEL_LAYER,
+  SHIP_LAYER,
+  SHIP_SOURCE,
+  shipFeatures,
+  shipLayers,
+} from './shipLayer';
+import { createShipIconCanvas, createShipUnknownIconCanvas } from './shipSprite';
 import { createBasemapControl } from './basemapControl';
 import {
   COVERAGE_FILL_LAYER,
@@ -534,6 +544,10 @@ export function PlanetView() {
             // each is tinted by its orbit regime rather than baked per colour
             // (D101).
             ...createSatelliteIconCanvases(),
+            // And a hull, SDF for the same reason again: one silhouette
+            // tinted per vessel type rather than one image per colour (D165).
+            [ICON_SHIP, createShipIconCanvas()],
+            [ICON_SHIP_UNKNOWN, createShipUnknownIconCanvas()],
           ] as Array<readonly [string, HTMLCanvasElement]>) {
             const context = canvas.getContext('2d');
             if (!context || map.hasImage(id)) continue;
@@ -656,6 +670,17 @@ export function PlanetView() {
           });
           for (const layer of satelliteLayers()) map.addLayer(layer);
 
+          // Ships. Added here with everything else rather than when the layer
+          // is first chosen, for the reason D120 established and D134 reused:
+          // adding layers while the view is changing is what caused a whole
+          // session of defects, and an empty source costs nothing to leave in
+          // place (D165).
+          map.addSource(SHIP_SOURCE, {
+            type: 'geojson',
+            data: shipFeatures([], Date.now()),
+          });
+          for (const layer of shipLayers()) map.addLayer(layer);
+
           // The three spacecraft in orbit around the Moon. Added here with
           // everything else rather than on arrival, because adding layers
           // during a body swap is what D120 went to some trouble to avoid;
@@ -757,12 +782,21 @@ export function PlanetView() {
             const layers =
               active === 'satellite'
                 ? [SATELLITE_LAYER, SATELLITE_LABEL_LAYER]
-                : undefined;
+                : active === 'ship'
+                  ? [SHIP_LAYER, SHIP_LABEL_LAYER]
+                  : undefined;
             useOrbitalStore
               .getState()
               .select(selectionFromHits(hitsAt(map, event.point, layers)));
           });
-          for (const layer of [AIRCRAFT_LAYER, AIRCRAFT_LABEL_LAYER, MOON_LAYER, MOON_LABEL_LAYER]) {
+          for (const layer of [
+            AIRCRAFT_LAYER,
+            AIRCRAFT_LABEL_LAYER,
+            SHIP_LAYER,
+            SHIP_LABEL_LAYER,
+            MOON_LAYER,
+            MOON_LABEL_LAYER,
+          ]) {
             map.on('mouseenter', layer, () => {
               if (map) map.getCanvas().style.cursor = 'pointer';
             });
@@ -789,19 +823,36 @@ export function PlanetView() {
             const source = map?.getSource(AIRCRAFT_SOURCE);
             if (!source || !('setData' in source)) return;
             const state = useOrbitalStore.getState();
-            const satelliteMode = state.activeLayer.id === 'satellite';
+            // **Which layer is active, asked once.** This used to be a single
+            // boolean, `satelliteMode`, which worked while there were two
+            // layers and quietly meant "not satellites, therefore aircraft"
+            // in five places. With a third layer every one of those would have
+            // fed the aircraft source with ships (D165).
+            const activeLayerId = state.activeLayer.id;
+            const satelliteMode = activeLayerId === 'satellite';
+            const shipMode = activeLayerId === 'ship';
             const objects = Array.from(state.objects.values());
 
             // Only the active layer is fed. The other is emptied rather than
             // left holding its last frame: a stale aircraft under a satellite
             // view is a claim that the aircraft is still there.
             (source as { setData: (data: unknown) => void }).setData(
-              aircraftFeatures(satelliteMode ? [] : objects, Date.now(), state.selectedId),
+              aircraftFeatures(
+                activeLayerId === 'aircraft' ? objects : [],
+                Date.now(),
+                state.selectedId,
+              ),
             );
             const satelliteSource = map?.getSource(SATELLITE_SOURCE);
             if (satelliteSource && 'setData' in satelliteSource) {
               (satelliteSource as { setData: (data: unknown) => void }).setData(
                 satelliteFeatures(satelliteMode ? objects : [], state.selectedId),
+              );
+            }
+            const shipSource = map?.getSource(SHIP_SOURCE);
+            if (shipSource && 'setData' in shipSource) {
+              (shipSource as { setData: (data: unknown) => void }).setData(
+                shipFeatures(shipMode ? objects : [], Date.now()),
               );
             }
 
@@ -841,7 +892,15 @@ export function PlanetView() {
                 [SATELLITE_LAYER, SATELLITE_LABEL_LAYER],
                 shellShowing ? 'none' : 'visible',
               );
-              setVisibility(map, AIRCRAFT_FURNITURE, satelliteMode ? 'none' : 'visible');
+              // **Only for aircraft**, not merely "not satellites". Written
+              // as a negation this showed airports and receiver coverage over
+              // a sea of ships - annotation about a subject that is not on
+              // screen, which is what this list exists to prevent (D96).
+              setVisibility(
+                map,
+                AIRCRAFT_FURNITURE,
+                activeLayerId === 'aircraft' ? 'visible' : 'none',
+              );
             }
 
             // The leader is redrawn on the same frame as the marker it joins,

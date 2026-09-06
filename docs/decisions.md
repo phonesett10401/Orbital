@@ -9329,3 +9329,72 @@ covered; what was uncovered was **which name gets handed to it**, which is
 exactly what the mutation changed.
 
 756 backend tests, up from 701.
+
+### The frontend half, and the pattern that showed up three times
+
+The layer cost one `LAYERS` entry, one module for kind-to-colour, one sprite,
+one MapLibre layer pair, one panel section and one key. The polling hook was
+not touched, for the third time.
+
+But three separate defects were the *same* defect, and it is worth naming
+because it will happen again the next time anything here grows a fourth of
+something.
+
+**A negation over a set of two is a coin flip that happens to be right.** Every
+one of these read as "not satellites, therefore aircraft", and every one was
+correct until a third value existed:
+
+| where | what it did with ships |
+|---|---|
+| `recentForLayer` | offered a ship box yesterday's aircraft and airports |
+| `SearchBar`'s `satelliteMode` | answered a vessel search with aeroplanes |
+| `PlanetView`'s furniture visibility | drew airports and receiver coverage over open sea |
+| `modelTarget` | **put a 3D aeroplane on the water off Helsinki** |
+
+The last one is the sharp one, because that module's own comment says an
+aeroplane must never appear in orbit and enforces it with `type === 'satellite'
+? spacecraft : airframe`. The rule was right, the guard was a fork on two
+values, and a ship took the else-branch. It was found by looking at the map -
+no test failed - and the test that would have caught it exists now.
+
+The fix in each case was to say which layer the thing is *for*, rather than
+which layer it is not.
+
+### Two more things the running app said and the tests did not
+
+**The search box's `aria-label` was hardcoded.** Its placeholder has been
+layer-aware since D103; the label a screen reader actually reads still said
+"callsign, aircraft address, or airport" on every layer, including one where
+none of the three exists. The right words were already in `layerChrome`.
+
+**The key drew an aeroplane** beside the words "bow points the way it is
+pointing", because the glyph type had three values and one of them was close
+enough to reuse. A key is where a reader goes to decode the map, so it is the
+worst place to be approximately right.
+
+### Where the layer differs from the two beside it, deliberately
+
+**Colour is the vessel's type.** Not altitude - every ship is at sea level, so
+the ramp would paint the fleet one colour. Not speed either, which is the
+tempting second answer: four fifths of them are stopped.
+
+**Knots first in the panel.** The contract carries m/s because that is one unit
+for every layer (D18), and the aircraft panel says m/s and km/h because that is
+how air speed is discussed. At sea it is knots, and a panel that made a reader
+convert would be missing its own point.
+
+**Names start at zoom 8, not 5.** Aircraft spread thinly across a sky; ships
+pack into harbours, and a hundred names inside a few kilometres is one
+illegible mass.
+
+**"Stopped" rather than "0.0 knots", and "Not transmitted" rather than
+"Unknown".** Both are the common case here rather than the edge, and they are
+different facts: one is a ship at a berth, the other is a transmitter that said
+nothing.
+
+**No photograph.** The aircraft panel has one because a registration identifies
+an airframe somebody has photographed; the satellite panel has one because a
+mission has a press image. There is no free image source keyed by MMSI, and a
+stock photo of "a tanker" is a picture of a different ship.
+
+1,007 frontend tests, up from 956. 762 backend, up from 701.

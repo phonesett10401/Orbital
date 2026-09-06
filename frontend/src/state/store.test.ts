@@ -213,11 +213,17 @@ describe('search', () => {
 
 describe('layers', () => {
   it('exposes exactly the declared layers, and no others', () => {
-    // Permanent guard against undeclared scope growth, re-aimed by D93. The
-    // question is no longer "is there more than one kind?" but "is every kind
-    // on screen one somebody decided to add?" - so this asserts the exact set,
-    // which fails on an addition as loudly as the length check it replaces.
-    expect(LAYERS.map((layer) => layer.id).sort()).toEqual(['aircraft', 'satellite']);
+    // Permanent guard against undeclared scope growth, re-aimed by D93 and
+    // again by D165. The question is no longer "is there more than one kind?"
+    // but "is every kind on screen one somebody decided to add?" - so this
+    // asserts the exact set, which fails on an addition as loudly as the
+    // length check it replaces. It has now fired twice, in a green suite both
+    // times, and its backend twin in test_models.py fires with it.
+    expect(LAYERS.map((layer) => layer.id).sort()).toEqual([
+      'aircraft',
+      'satellite',
+      'ship',
+    ]);
   });
 
   it('the satellite layer points at its own endpoint', () => {
@@ -232,9 +238,17 @@ describe('layers', () => {
     expect(new Set(resources).size).toBe(resources.length);
   });
 
-  it('offers both declared layers, since one renderer draws both', () => {
-    // The per-renderer filter is gone with the renderer that needed it (D104).
-    expect(LAYERS.map((layer) => layer.id).sort()).toEqual(['aircraft', 'satellite']);
+  it('the ships layer points at its own endpoint and is not viewport-scoped', () => {
+    // This was a second copy of the exact-set assertion above, left over from
+    // when the per-renderer filter was removed (D104) - it passed and failed
+    // in lockstep with it and so tested nothing the other did not. Re-aimed at
+    // the ships layer's own wiring, which nothing else covers: `resource` is
+    // the entire connection between the toggle and the backend, and
+    // `viewportScoped` decides whether a second bbox request is sent for a
+    // feed small enough that it would fetch the same bytes twice (D165).
+    const ships = LAYERS.find((layer) => layer.id === 'ship');
+    expect(ships?.resource).toBe('ships');
+    expect(ships?.viewportScoped).toBe(false);
   });
 
 

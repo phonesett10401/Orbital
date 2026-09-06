@@ -117,3 +117,13 @@ class SearchResponse(OrbitalModel):
             "ranking across them would invent a comparison (D89, D103)."
         ),
     )
+    ships: list[TrackedObject] = Field(
+        default_factory=list,
+        description=(
+            "Vessels whose name or MMSI matches. A fourth list, for the same "
+            "reason as the third - and it is the one whose absence would have "
+            "been felt: with ships selected and no list to fill, the box would "
+            "have gone on offering aircraft and airports, which is exactly the "
+            "answer-to-a-question-nobody-asked that D103 removed (D165)."
+        ),
+    )

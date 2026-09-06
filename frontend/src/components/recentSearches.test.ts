@@ -131,6 +131,7 @@ describe('recentForLayer', () => {
     { kind: 'airport' as const, id: 'VTBS', label: 'BKK', sublabel: 'Bangkok', lat: 13, lon: 100 },
     { kind: 'aircraft' as const, id: 'abc', label: 'THA677', sublabel: 'Aircraft', lat: 1, lon: 2 },
     { kind: 'satellite' as const, id: '25544', label: 'ISS (ZARYA)', sublabel: 'NORAD 25544', lat: 0, lon: 0 },
+    { kind: 'ship' as const, id: '230982000', label: 'VIKING GRACE', sublabel: 'MMSI 230982000', lat: 60, lon: 22 },
   ];
 
   it('offers a satellite box only satellites', () => {
@@ -154,6 +155,29 @@ describe('recentForLayer', () => {
 
   it('is empty rather than throwing when nothing matches', () => {
     expect(recentForLayer([entries[0]], 'satellite')).toEqual([]);
+  });
+
+  it('offers a ship box only ships', () => {
+    // **The test that would have caught the old implementation.** It read
+    // `layer === 'satellite' ? satellites : everything else`, which is a
+    // negation over a set of two: correct while "everything else" meant
+    // aircraft, and silently wrong the moment a third layer existed. A ship
+    // box would have offered yesterday's aircraft and airports, and both of
+    // the tests above would have gone on passing (D165).
+    expect(recentForLayer(entries, 'ship').map((e) => e.kind)).toEqual(['ship']);
+  });
+
+  it('never offers one layer the entries of another, for any layer', () => {
+    // Stated over the whole set rather than one pair at a time, so a fourth
+    // layer added without a rule fails here rather than quietly inheriting
+    // whichever branch the negation happened to fall into.
+    const layers = ['aircraft', 'satellite', 'ship'] as const;
+    for (const layer of layers) {
+      for (const entry of recentForLayer(entries, layer)) {
+        const owner = entry.kind === 'airport' ? 'aircraft' : entry.kind;
+        expect(owner, `${entry.kind} offered under ${layer}`).toBe(layer);
+      }
+    }
   });
 });
 

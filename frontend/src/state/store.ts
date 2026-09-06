@@ -37,12 +37,13 @@ import { toRenderable } from '../interpolate';
 /**
  * The available layers.
  *
- * Two entries. The abstraction was kept deliberately thin while there was only
- * one, on the grounds that a richer layer system built before a second layer
- * existed would be fitted to an imagined use case rather than a real one (D19).
- * The second arrived four months later (D93) and it cost one line here, one in
- * `ObjectType`, and nothing at all in the polling hook — which reads
- * `resource` and does not know or care what is behind it.
+ * Three entries. The abstraction was kept deliberately thin while there was
+ * only one, on the grounds that a richer layer system built before a second
+ * layer existed would be fitted to an imagined use case rather than a real one
+ * (D19). The second arrived four months later (D93) and cost one line here,
+ * one in `ObjectType`, and nothing at all in the polling hook — which reads
+ * `resource` and does not know or care what is behind it. The third cost the
+ * same (D165), and the polling hook has still never been touched for either.
  *
  * Order is the order the toggle draws them. Aircraft first because it is the
  * layer the app opens on.
@@ -50,6 +51,12 @@ import { toRenderable } from '../interpolate';
 export const LAYERS: LayerDescriptor[] = [
   { id: 'aircraft', label: 'Aircraft', resource: 'aircraft', viewportScoped: true },
   { id: 'satellite', label: 'Satellites', resource: 'satellites', viewportScoped: false },
+  // Not viewport-scoped, and for a different reason from satellites. Theirs is
+  // that a satellite is nowhere near where it appears to be. This one is
+  // simply small: the whole feed is about 900 vessels in 37 KB, so a second
+  // request for the part of it under the camera would fetch the same bytes
+  // twice (D165).
+  { id: 'ship', label: 'Ships', resource: 'ships', viewportScoped: false },
 ];
 
 
@@ -96,12 +103,14 @@ export interface OrbitalState {
   /** Airports matching the same query. Kept apart from aircraft (D89). */
   searchAirports: Airport[];
   searchSatellites: TrackedObject[];
+  searchShips: TrackedObject[];
   searching: boolean;
   setSearchQuery(query: string): void;
   setSearchResults(
     results: TrackedObject[],
     airports?: Airport[],
     satellites?: TrackedObject[],
+    ships?: TrackedObject[],
   ): void;
   setSearching(searching: boolean): void;
 
@@ -266,6 +275,7 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
       searchResults: [],
       searchAirports: [],
       searchSatellites: [],
+      searchShips: [],
       focusedAirport: null,
     });
   },
@@ -312,17 +322,25 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   searchResults: [],
   searchAirports: [],
   searchSatellites: [],
+  searchShips: [],
   searching: false,
   setSearchQuery(query) {
     set({ searchQuery: query });
     if (query.trim() === '')
-      set({ searchResults: [], searchAirports: [], searchSatellites: [], searching: false });
+      set({
+        searchResults: [],
+        searchAirports: [],
+        searchSatellites: [],
+        searchShips: [],
+        searching: false,
+      });
   },
-  setSearchResults(results, airports = [], satellites = []) {
+  setSearchResults(results, airports = [], satellites = [], ships = []) {
     set({
       searchResults: results,
       searchAirports: airports,
       searchSatellites: satellites,
+      searchShips: ships,
       searching: false,
     });
   },

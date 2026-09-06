@@ -1,4 +1,4 @@
-"""One search box, two kinds of answer.
+"""One search box, four kinds of answer.
 
 The search bar used to look up callsigns only, which meant it could answer
 "where is UAL1234" and not "what is flying at Heathrow" - and the second is how
@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Query
 from app.airports import search_airports
 from app.api.deps import get_store
 from app.api.satellites import get_satellites
+from app.api.ships import get_ship_store
 from app.api.schemas import SearchResponse
 from app.providers.satellites import SatelliteProvider
 from app.ingestion.store import ObjectStore
@@ -29,7 +30,7 @@ router = APIRouter(prefix="/api/search", tags=["search"])
 @router.get(
     "",
     response_model=SearchResponse,
-    summary="Find aircraft and airports by one query",
+    summary="Find aircraft, airports, satellites and ships by one query",
 )
 def search(
     q: str = Query(
@@ -39,6 +40,7 @@ def search(
     limit: int = Query(default=8, gt=0, le=50, description="Maximum of each kind."),
     store: ObjectStore = Depends(get_store),
     satellites: SatelliteProvider | None = Depends(get_satellites),
+    ships: ObjectStore | None = Depends(get_ship_store),
 ) -> SearchResponse:
     """Aircraft currently held, and airports from the static table.
 
@@ -54,4 +56,8 @@ def search(
         # Satellites come from the catalogue in memory rather than the store,
         # because that layer has no store (D95). Empty when the layer is off.
         satellites=satellites.search(q, limit=limit) if satellites else [],
+        # From its own store, which is the difference from satellites above:
+        # this layer is polled and held rather than computed on demand (D165).
+        # Empty when the layer is off, exactly as satellites are.
+        ships=ships.search(q, limit=limit) if ships else [],
     )

@@ -14,6 +14,7 @@ aircraft and satellite endpoints for their own data while ships are running.
 from __future__ import annotations
 
 import asyncio
+import time
 
 import httpx
 import pytest
@@ -57,6 +58,19 @@ VESSELS = [
 ]
 
 
+def just_now() -> int:
+    """When the feed says it heard this vessel.
+
+    The clock rather than a captured constant. The provider drops positions
+    older than fifteen minutes on the way in (D165), because this source
+    re-serves its own day-old records forever and eviction downstream cannot
+    win against that - so a fixed timestamp here is a fixture that expires, and
+    these tests would start failing some time after they were written for a
+    reason unrelated to what they assert.
+    """
+    return int(time.time() * 1000)
+
+
 def location(mmsi, lat, lon, sog=12.4, cog=59.9, heading=61, nav=0):
     return {
         "mmsi": mmsi,
@@ -68,7 +82,7 @@ def location(mmsi, lat, lon, sog=12.4, cog=59.9, heading=61, nav=0):
             "cog": cog,
             "navStat": nav,
             "heading": heading,
-            "timestampExternal": 1788713524127,
+            "timestampExternal": just_now(),
         },
     }
 

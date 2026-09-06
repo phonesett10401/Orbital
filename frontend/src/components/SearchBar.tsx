@@ -29,6 +29,7 @@ import {
   recentForLayer,
   remember,
   satelliteEntry,
+  shipEntry,
   saveRecent,
   type RecentSearch,
 } from './recentSearches';
@@ -41,6 +42,7 @@ export function SearchBar() {
   const results = useOrbitalStore((s) => s.searchResults);
   const airports = useOrbitalStore((s) => s.searchAirports);
   const satellites = useOrbitalStore((s) => s.searchSatellites);
+  const ships = useOrbitalStore((s) => s.searchShips);
   const searching = useOrbitalStore((s) => s.searching);
   const setSearchQuery = useOrbitalStore((s) => s.setSearchQuery);
   const select = useOrbitalStore((s) => s.select);
@@ -72,10 +74,7 @@ export function SearchBar() {
   // Only the remembered searches this layer can act on. Offering an airport
   // under a satellite search box would be offering an answer the box cannot
   // give, and choosing it would throw the user out of the layer (D103).
-  const visibleRecent = recentForLayer(
-    recent,
-    activeLayer.id === 'satellite' ? 'satellite' : 'aircraft',
-  );
+  const visibleRecent = recentForLayer(recent, activeLayer.id);
 
   const chooseSatellite = (object: TrackedObject) => {
     // Selected as well as flown to, unlike an airport: a satellite *is* a
@@ -84,6 +83,17 @@ export function SearchBar() {
     select(object.id);
     requestFlyTo(object.lat, object.lon, SATELLITE_ZOOM);
     keep(satelliteEntry(object));
+    setSearchQuery('');
+  };
+
+  const chooseShip = (object: TrackedObject) => {
+    // Selected as well as flown to, like a satellite and unlike an airport: a
+    // ship *is* a tracked object, so the panel has something honest to say
+    // (D103). No special zoom - a vessel is on the surface, so the default
+    // arrival is already the right distance for one.
+    select(object.id);
+    requestFlyTo(object.lat, object.lon);
+    keep(shipEntry(object));
     setSearchQuery('');
   };
 
@@ -128,15 +138,21 @@ export function SearchBar() {
   // backend still returns all three lists - "ISS" matches WISCASSET airport,
   // and offering that here would answer a question the user did not ask
   // (D103).
-  const satelliteMode = activeLayer.id === 'satellite';
-  const shownAircraft = satelliteMode ? [] : results;
-  const shownAirports = satelliteMode ? [] : airports;
-  const shownSatellites = satelliteMode ? satellites : [];
+  // **Which lists this layer may answer with.** This was three ternaries on a
+  // `satelliteMode` boolean, which is the same negation-over-two that
+  // `recentForLayer` carried: "not satellites" silently meant "aircraft", and
+  // a ship search would have answered with aeroplanes and airports (D165).
+  const layerId = activeLayer.id;
+  const shownAircraft = layerId === 'aircraft' ? results : [];
+  const shownAirports = layerId === 'aircraft' ? airports : [];
+  const shownSatellites = layerId === 'satellite' ? satellites : [];
+  const shownShips = layerId === 'ship' ? ships : [];
   const nothingFound =
     !searching &&
     shownAircraft.length === 0 &&
     shownAirports.length === 0 &&
-    shownSatellites.length === 0;
+    shownSatellites.length === 0 &&
+    shownShips.length === 0;
   const showRecent = trimmed.length === 0 && focused && recent.length > 0;
 
   return (
@@ -146,7 +162,11 @@ export function SearchBar() {
         type="search"
         value={query}
         placeholder={chromeFor(activeLayer.id, []).searchPlaceholder}
-        aria-label="Search by callsign, aircraft address, or airport"
+        // The placeholder has been layer-aware since D103; this was not, so a
+        // screen reader was told "callsign, aircraft address, or airport" on
+        // every layer, including one where none of the three exists. The
+        // chrome module already holds the right words for each (D165).
+        aria-label={chromeFor(activeLayer.id, []).searchPlaceholder}
         onChange={(event) => setSearchQuery(event.target.value)}
         onFocus={() => setFocused(true)}
         // Deferred so a click on a result lands before the list is removed.
@@ -160,6 +180,7 @@ export function SearchBar() {
             // first, so Enter never jumps the user out of the layer they are
             // looking at (D103).
             if (shownSatellites.length > 0) chooseSatellite(shownSatellites[0]);
+            else if (shownShips.length > 0) chooseShip(shownShips[0]);
             else if (shownAircraft.length > 0) chooseAircraft(shownAircraft[0]);
             else if (shownAirports.length > 0) chooseAirport(shownAirports[0]);
           }
@@ -185,9 +206,12 @@ export function SearchBar() {
           {searching && <li className="search__hint">Searching…</li>}
           {nothingFound && (
             <li className="search__hint">
-              {satelliteMode
-                ? 'No match. Try a satellite name or its catalogue number.'
-                : 'No match. Aircraft are only findable while the backend is tracking them.'}
+              {layerId === 'satellite' &&
+                'No match. Try a satellite name or its catalogue number.'}
+              {layerId === 'ship' &&
+                'No match. Ships are only findable while the backend is tracking them, and this feed covers the Baltic.'}
+              {layerId === 'aircraft' &&
+                'No match. Aircraft are only findable while the backend is tracking them.'}
             </li>
           )}
 
@@ -201,6 +225,19 @@ export function SearchBar() {
                     ? 'altitude unknown'
                     : `${Math.round(object.altitude / 1000).toLocaleString()} km`}
                 </span>
+              </button>
+            </li>
+          ))}
+
+          {shownShips.length > 0 && <li className="search__group">Ships</li>}
+          {shownShips.map((object) => (
+            <li key={`ship-${object.id}`}>
+              <button className="search__result" onClick={() => chooseShip(object)}>
+                <span className="search__callsign">{object.label}</span>
+                {/* The vessel type, not an altitude: every ship is at sea
+                    level, so the field the other two groups use here would
+                    read "0 m" on every row (D165). */}
+                <span className="search__meta">{object.model ?? 'type unreported'}</span>
               </button>
             </li>
           ))}

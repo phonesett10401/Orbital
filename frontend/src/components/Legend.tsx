@@ -102,6 +102,14 @@ export function Legend() {
                   d="M12 3 L13 6 L13.2 11 L21 15 L20.8 16.4 L13.4 15 L13.2 18.4 L16.8 20.2 L16.6 21.4 L12 20.2 L7.4 21.4 L7.2 20.2 L10.8 18.4 L10.6 15 L3.2 16.4 L3 15 L10.8 11 L11 6 Z"
                   fill="currentColor"
                 />
+              ) : shape.glyph === 'ship' ? (
+                /* The same hull `shipSprite` draws, bow up: pointed forward,
+                   square at the transom, because the square end is the whole
+                   of how a reader tells which way it is facing (D165). */
+                <path
+                  d="M12 3 L14.4 8 L15.2 14 L14.8 20 L9.2 20 L8.8 14 L9.6 8 Z"
+                  fill="currentColor"
+                />
               ) : (
                 <circle cx="12" cy="12" r={shape.glyph === 'disc' ? 6 : 4} fill="currentColor" />
               )}
