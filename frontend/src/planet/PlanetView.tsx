@@ -164,6 +164,7 @@ import {
   surfaceTilesFor,
   visibilityFor,
   globeLayerIds,
+  BACKGROUND_LAYER,
 } from './bodySurface';
 
 /** How often to republish the viewport, matching the globe view's cadence. */
@@ -234,6 +235,12 @@ function applySolarView(map: import('maplibre-gl').Map, inSolarView: boolean): v
   if (!style) return;
   if (!inSolarView) {
     applyBody(map, useOrbitalStore.getState().activeBody);
+    // Restored here rather than by `applyBody`, which decides visibility from
+    // the cartography and Orbital's own layers and has never had an opinion
+    // about the background (D143).
+    if (map.getLayer(BACKGROUND_LAYER)) {
+      map.setLayoutProperty(BACKGROUND_LAYER, 'visibility', 'visible');
+    }
     return;
   }
   for (const id of globeLayerIds(style as never, [SHELL_LAYER, MODEL_LAYER, MOON_SHELL_LAYER])) {

@@ -253,6 +253,13 @@ describe('handing the view over to the solar system', () => {
     expect(globeLayerIds(style, CUSTOM_LAYERS)).toContain('orbital-satellite-shell');
   });
 
+  it('hides the background, which belongs to neither category', () => {
+    // Found by painting it red at solar zoom and watching the leftover disc
+    // turn red. It has no source, so the cartography rule missed it, and no
+    // `orbital-` prefix, so Orbital's own rule missed it too (D143).
+    expect(globeLayerIds(style, CUSTOM_LAYERS)).toContain('background');
+  });
+
   it('never hides the solar system, which is what the view hands over to', () => {
     expect(globeLayerIds(style, CUSTOM_LAYERS)).not.toContain('orbital-solar-system');
   });

@@ -7760,3 +7760,46 @@ to need a temporary probe compiled into the layer; it now needs one glance at
 the line already on screen. **A thing that is hard to check gets checked
 wrongly** - twice, here - and the cheapest fix for that is to make the state
 visible rather than to be more careful next time.
+
+## D143 - The one layer that belonged to neither category
+
+Phone, with a zoom range attached: *"we need to fix this overlapping, z-1.1 and
+z-1.0 check that overlapping."* A soft disc, larger than the Earth and centred
+on it, in a view where the globe was supposed to be gone.
+
+Asking the running map at exactly those zooms: **every style layer hidden
+except one**, and that one was `background`.
+
+D139's `globeLayerIds` is built from two rules, and `background` falls outside
+both:
+
+- `cartographyLayerIds` finds layers **by source**, and the background layer has
+  no source.
+- `ownLayerIds` finds them **by the `orbital-` prefix**, and the background
+  layer has no prefix.
+
+A rule made of two categories will miss whatever belongs to neither, and this
+style has exactly one such layer. It went on painting the globe's disc after
+everything else was switched off.
+
+Proved rather than argued: painting it red at z-1.1 turned the leftover disc
+red. That test had been run before and was inconclusive, because the app was in
+a state I had already broken with earlier probes - the same experiment on a
+clean load answered in one frame.
+
+It is restored explicitly on the way back in, rather than by `applyBody`, which
+decides from the cartography and Orbital's own layers and has never had an
+opinion about the background. In globe projection this layer paints the globe
+rather than the canvas, so hiding it leaves space black rather than leaving a
+hole - checked at zoom 2.5, where the Earth comes back whole.
+
+### The pattern this is the third instance of
+
+D141 hid every layer and the atmosphere remained, because the atmosphere is not
+a layer. D139 hid every ground layer and a disc remained, because it was two
+thousand aircraft. Now: hid everything the two rules name, and a disc remained,
+because one layer is named by neither rule.
+
+Each time the fix was cheap and finding it was not, and each time the thing that
+found it was **asking the running map what was still visible** rather than
+reasoning about what should have been.

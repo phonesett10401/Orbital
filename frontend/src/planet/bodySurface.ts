@@ -195,8 +195,26 @@ export function globeLayerIds(
     ...ownLayerIds(style, customLayerIds),
     IMAGERY_FAR,
     IMAGERY_NEAR,
+    BACKGROUND_LAYER,
   ].filter((id) => id !== SOLAR_LAYER);
 }
+
+/**
+ * The basemap's background layer, which **both halves of the rule missed**.
+ *
+ * `cartographyLayerIds` finds layers by their source and this one has no
+ * source; `ownLayerIds` finds them by the `orbital-` prefix and this one has no
+ * prefix. So the one layer belonging to neither category went on painting the
+ * globe's disc after everything else was switched off - a soft circle around
+ * nothing, which is what "the overlapping at z-1.0 and z-1.1" was.
+ *
+ * Proved rather than reasoned: painting it red at that zoom turned the disc red
+ * (D143).
+ *
+ * In globe projection this layer paints the globe itself rather than the whole
+ * canvas, which is why hiding it leaves space black instead of leaving a hole.
+ */
+export const BACKGROUND_LAYER = 'background';
 
 /** The solar system's own layer, which the handover must never hide. */
 export const SOLAR_LAYER = 'orbital-solar-system';
