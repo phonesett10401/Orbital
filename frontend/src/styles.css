@@ -80,10 +80,23 @@ body {
  * empty rather than taking any from the search box, and `flex: 0 1 auto` means
  * that when the header does run out of room this is the thing that gives way.
  */
+/*
+ * Straight after the layer toggle rather than pinned to the far corner: on a
+ * wide screen the corner isolates it, and this row is where the header already
+ * runs out of things to hold.
+ */
 .ad--banner {
-  margin-left: auto;
   align-items: center;
-  max-width: 260px;
+  /*
+   * **Capped against the viewport, not just at a fixed size.** A shrink factor
+   * is not enough: shrinkage is weighted by base size, so a wide pill still
+   * takes a share from the search box - measured at 1043px, the search input
+   * lost 77px to a pill allowed 420. The row needs about 770px for the brand,
+   * a full-width search box, the layer toggle and the gaps, so anything left
+   * over past 800 is what the ad may have and no more. Below the breakpoint
+   * further down it is not rendered at all.
+   */
+  max-width: min(420px, calc(100vw - 800px));
   padding: 7px 12px;
   /*
    * **It gives way first, and it gives way hard.** The search box is `flex: 1`,
@@ -123,6 +136,50 @@ body {
 
 @media (max-width: 900px), (max-height: 620px) {
   .ad--rail {
+    display: none;
+  }
+}
+
+/*
+ * The status strip, in the run after the data age.
+ *
+ * No surface and no border: this row is a gradient over the map with plain text
+ * on it, and a boxed card here would look like a control that had fallen out of
+ * the header. It is the label that marks it, as everywhere else.
+ *
+ * **It stops well short of the attribution.** That control sits at the right of
+ * this same row and is a licence obligation - OpenFreeMap, OpenMapTiles,
+ * OpenStreetMap and NASA all require it - so it is the one thing on screen an
+ * advertisement must never crowd. Hence the cap and the breakpoint.
+ */
+.ad--status {
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  max-width: 300px;
+  background: none;
+  backdrop-filter: none;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.ad--status .ad__headline {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-dim);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ad--status .ad__body,
+.ad--status .ad__action {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .ad--status {
     display: none;
   }
 }

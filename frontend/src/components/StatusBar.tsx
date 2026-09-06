@@ -13,7 +13,9 @@
 
 import { useEffect, useState } from 'react';
 
+import { AdSlot } from './AdSlot';
 import { chromeFor } from './layerChrome';
+import { showsAds } from '../ads';
 import { bodyFor } from '../bodies';
 import { formatInstant } from '../timeTravel';
 import { useOrbitalStore } from '../state/store';
@@ -32,6 +34,10 @@ export function StatusBar() {
   const activeLayer = useOrbitalStore((s) => s.activeLayer);
   const feed = useOrbitalStore((s) => s.feed);
   const count = useOrbitalStore((s) => s.objects.size);
+  // The third slot, in the run of empty strip after the data age (D150). Read
+  // before the early return below, so the hook order is the same on every
+  // world - the same reason the rest of this component's hooks are up here.
+  const ads = showsAds(useOrbitalStore((s) => s.account));
 
   // Ticks once a second so the age counts up between polls instead of
   // freezing at whatever it was when the last response arrived.
@@ -66,6 +72,7 @@ export function StatusBar() {
             ? `surface imagery · ${moonCraft} spacecraft in orbit, from JPL Horizons`
             : 'surface imagery — no live objects here'}
         </span>
+        {ads && <AdSlot slot="status" />}
       </div>
     );
   }
@@ -113,6 +120,7 @@ export function StatusBar() {
         {feed.source ? ` · ${feed.source}` : ''}
       </span>
 
+
       {feed.stale && !feed.error && (
         <span className="status__item status__item--warn">
           upstream is not responding — showing last known positions
@@ -124,6 +132,22 @@ export function StatusBar() {
           cannot reach the Orbital backend ({feed.error})
         </span>
       )}
+
+      {/*
+        Last, and only while the strip has nothing wrong to report.
+
+        Last because when everything is fine the data age is the final item, so
+        this lands exactly in the empty run after it - but when it is not fine,
+        an advertisement must not come between a reader and the sentence saying
+        the feed is down.
+
+        And absent entirely on a fault, which is the same judgement one step
+        further: this row is the one place Orbital admits something is broken,
+        and that is not a moment to be selling anything. It stops well short of
+        the map's attribution control, which shares this row and is a licence
+        obligation rather than chrome (D150).
+      */}
+      {ads && severity === 'ok' && <AdSlot slot="status" />}
     </footer>
   );
 }

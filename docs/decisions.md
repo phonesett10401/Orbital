@@ -8186,6 +8186,43 @@ Two rules fell out of measuring rather than guessing:
   pill is not rendered - an ad that shrinks the search box has taken the map's
   space by another route.
 
+### A third slot, and two more measurements
+
+Phone pointed at two more empty runs: the header past the layer toggle, and the
+status strip past the data age. Both are chrome that was already there, so both
+are free by the rule above.
+
+- **The header pill moved next to the toggle** instead of being pinned to the
+  far corner with `margin-left: auto`. On a 1900px screen the corner isolates
+  it; beside the toggle it is in the flow of the row that had run out of things
+  to hold.
+- **A third slot in the status strip**, plain text with no surface and no
+  border, because that row is a gradient over the map with text on it and a
+  boxed card there looks like a control that fell out of the header.
+
+Two rules the status slot needed, neither of them obvious until the row was
+looked at with something wrong in it:
+
+- **It is last, and it is absent on a fault.** Placed after the data age it sat
+  between the age and "cannot reach the Orbital backend". An advertisement must
+  not come between a reader and the sentence saying the feed is down - and one
+  step further, this row is the one place Orbital admits something is broken,
+  which is not a moment to be selling anything. So it renders only while the
+  severity is `ok`.
+- **It stops well short of the attribution.** That control shares this row and
+  is a licence obligation - OpenFreeMap, OpenMapTiles, OpenStreetMap and NASA
+  all require it - so it is the one thing on screen an ad may never crowd. At
+  1043px the attribution starts at x553 and the slot is not rendered at all;
+  at 1900px the slot ends at x753 and the attribution begins at x1410.
+
+**And a shrink factor turned out not to be enough.** The rule that the ad yields
+before the search box does was already written, and the pill still took 77px
+from the search input once its cap rose to 420: flex shrinkage is weighted by
+base size, so a wider pill simply takes a larger share of a bigger overflow.
+The fix is to cap it against the viewport - `min(420px, calc(100vw - 800px))` -
+so the row cannot overflow on the ad's account at all. Measured after: the
+search input holds its full 380px at both 1043 and 1900.
+
 Rotation is a slow crossfade, switched off entirely under
 `prefers-reduced-motion`, in the component *and* in the stylesheet. Movement in
 the corner of the eye is precisely what that preference is set to stop, and an

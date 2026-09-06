@@ -32,8 +32,17 @@
 
 import { type Account, isPremium } from './auth';
 
-/** Where an ad can go. */
-export type AdSlot = 'banner' | 'rail';
+/**
+ * Where an ad can go.
+ *
+ * All three are places the chrome was already empty - the header past the layer
+ * toggle, the corner the detail panel uses when one is open, and the run of
+ * status bar after the data age. None of them takes a pixel from the map.
+ */
+export type AdSlot = 'banner' | 'rail' | 'status';
+
+/** Fixed order, so each slot can be given a different starting card. */
+const SLOTS: AdSlot[] = ['banner', 'rail', 'status'];
 
 export interface Ad {
   id: string;
@@ -86,6 +95,29 @@ const HOUSE: Record<AdSlot, Ad[]> = {
       action: null,
     },
   ],
+  status: [
+    {
+      id: 'status-premium',
+      sponsor: 'Orbital',
+      headline: 'Premium removes these',
+      body: 'And moves the satellite view seven days either way.',
+      action: null,
+    },
+    {
+      id: 'status-adsb',
+      sponsor: 'Orbital',
+      headline: 'Aircraft from volunteer receivers',
+      body: 'The coverage gaps are where nobody is listening.',
+      action: null,
+    },
+    {
+      id: 'status-elements',
+      sponsor: 'Orbital',
+      headline: 'Orbits from CelesTrak and SatNOGS',
+      body: 'Refreshed on their own schedule, never on the request path.',
+      action: null,
+    },
+  ],
   rail: [
     PREMIUM_PITCH,
     {
@@ -129,7 +161,10 @@ export function inventoryFor(slot: AdSlot): Ad[] {
  */
 export function adAt(slot: AdSlot, tick: number): Ad {
   const inventory = inventoryFor(slot);
-  const offset = slot === 'rail' ? 1 : 0;
+  // Each slot starts at a different card, so two of them on one screen never
+  // show the same thing - which reads as a rendering fault rather than as an
+  // advertisement shown twice.
+  const offset = SLOTS.indexOf(slot);
   // `%` keeps a negative tick negative in JavaScript, and a tick should never
   // be negative - but a clock read backwards or a counter reset would make one,
   // and an ad slot is not where that should show up as a crash.

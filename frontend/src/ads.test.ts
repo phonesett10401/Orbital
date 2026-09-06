@@ -29,16 +29,19 @@ describe('who sees them', () => {
   });
 });
 
+const SLOTS = ['banner', 'rail', 'status'] as const;
+
 describe('the inventory', () => {
-  it('offers something for both slots', () => {
-    expect(inventoryFor('banner').length).toBeGreaterThan(0);
-    expect(inventoryFor('rail').length).toBeGreaterThan(0);
+  it('offers something for every slot', () => {
+    for (const slot of SLOTS) {
+      expect(inventoryFor(slot).length, slot).toBeGreaterThan(0);
+    }
   });
 
   it('names a sponsor on every card', () => {
     // An advertisement that does not say who is speaking is a different thing
     // with a different name.
-    for (const slot of ['banner', 'rail'] as const) {
+    for (const slot of SLOTS) {
       for (const ad of inventoryFor(slot)) {
         expect(ad.sponsor, ad.id).toBeTruthy();
       }
@@ -48,14 +51,14 @@ describe('the inventory', () => {
   it('gives every card a distinct id within its slot', () => {
     // Ids key the React list and drive the crossfade; a duplicate makes one
     // card fail to animate for reasons nobody would find.
-    for (const slot of ['banner', 'rail'] as const) {
+    for (const slot of SLOTS) {
       const ids = inventoryFor(slot).map((ad) => ad.id);
       expect(new Set(ids).size).toBe(ids.length);
     }
   });
 
   it('sells premium somewhere, because that is what the slot is for', () => {
-    const everything = [...inventoryFor('banner'), ...inventoryFor('rail')];
+    const everything = SLOTS.flatMap((slot) => inventoryFor(slot));
     expect(everything.some((ad) => /premium/i.test(ad.body + ad.headline))).toBe(true);
   });
 });
@@ -70,11 +73,12 @@ describe('rotation', () => {
     expect(adAt('banner', 1)).not.toEqual(adAt('banner', 0));
   });
 
-  it('does not show the same card in both slots at once', () => {
-    // Two identical cards on one screen read as a rendering fault rather than
-    // as an advertisement shown twice.
+  it('never shows the same card in two slots at once', () => {
+    // All three can be on screen together, and two identical cards read as a
+    // rendering fault rather than as an advertisement shown twice.
     for (let tick = 0; tick < 12; tick += 1) {
-      expect(adAt('banner', tick).id, `tick ${tick}`).not.toBe(adAt('rail', tick).id);
+      const shown = SLOTS.map((slot) => adAt(slot, tick).id);
+      expect(new Set(shown).size, `tick ${tick}`).toBe(SLOTS.length);
     }
   });
 
@@ -82,8 +86,10 @@ describe('rotation', () => {
     // `%` keeps a negative negative in JavaScript, so the naive version indexes
     // off the end and hands back undefined. An ad slot is not where a clock
     // read backwards should surface as a crash.
-    expect(adAt('banner', -1)).toBeDefined();
-    expect(adAt('rail', -7)).toBeDefined();
+    for (const slot of SLOTS) {
+      expect(adAt(slot, -1), slot).toBeDefined();
+      expect(adAt(slot, -7), slot).toBeDefined();
+    }
   });
 
   it('rotates slowly enough to be read', () => {
