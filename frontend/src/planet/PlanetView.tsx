@@ -50,7 +50,12 @@ import {
 } from './airportLayer';
 import { createSatelliteIconCanvases } from './satelliteSprite';
 import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
-import { SOLAR_LAYER, createSolarSystemLayer, type SolarLayer } from './solarSystemLayer';
+import {
+  SOLAR_LAYER,
+  SOLAR_MAX_ZOOM,
+  createSolarSystemLayer,
+  type SolarLayer,
+} from './solarSystemLayer';
 import {
   MOON_LABEL_LAYER,
   MOON_LAYER,
@@ -216,7 +221,7 @@ function lonLatCenter(at: readonly [number, number, number]): [number, number] {
  * The same point the solar layer reaches full opacity, so one picture fades out
  * exactly as the other finishes fading in.
  */
-const SOLAR_HANDOVER_ZOOM = -1.0;
+const SOLAR_HANDOVER_ZOOM = SOLAR_MAX_ZOOM;
 
 /**
  * Switch between standing on a world and looking at the system it belongs to.

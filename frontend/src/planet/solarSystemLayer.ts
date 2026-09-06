@@ -53,8 +53,24 @@ export const SOLAR_LAYER = 'orbital-solar-system';
  * planets only have somewhere to be once the globe is small. Below this they
  * fade in, so the transition is a dissolve rather than an appearance.
  */
-export const SOLAR_MAX_ZOOM = 0.5;
-export const SOLAR_FULL_ZOOM = -1.0;
+/**
+ * **The handover point, and there is only one.**
+ *
+ * The planets used to start fading in here at 0.5 while the globe stayed until
+ * -1.0, which left a zoom and a half where both worlds were on screen: a
+ * full-size Earth sitting among planets drawn a twentieth of its size, with
+ * Jupiter smaller than the globe it orbits beside. Every fix aimed at the
+ * overlap kept missing because the overlap was not a leak, it was the design -
+ * two numbers for one transition (D144).
+ *
+ * One number now. Above it, the globe and nothing else; below it, the solar
+ * system and no globe. The imagery and the atmosphere dissolve on the approach
+ * so the swap is not a cut.
+ */
+export const SOLAR_MAX_ZOOM = -1.0;
+
+/** Where the planets reach full opacity, half a zoom below the handover. */
+export const SOLAR_FULL_ZOOM = -1.5;
 
 /** Colours by body, matching the picker's dots so the two agree. */
 const COLOURS: Record<string, number> = {
@@ -569,17 +585,14 @@ const clampToFarPlane = (material: THREE.Material): THREE.Material => {
       // switches that globe off across this same range and this draws the body
       // properly scaled in its place - which is the whole of "the selected
       // planet should get smaller when I zoom out" (D139).
-      // **Only once the globe has actually gone.** The planets start fading in
-      // at `SOLAR_MAX_ZOOM` but the basemap does not hand over until
-      // `SOLAR_FULL_ZOOM`, so for a zoom and a half both were drawn: a
-      // full-size globe with a small sphere of the same world sitting inside
-      // it. Gated on the same number the handover uses, so the one appears in
-      // the frame the other disappears (D140).
-      const handedOver = zoom <= SOLAR_FULL_ZOOM;
-      const placements: ScenePlacement[] = [...scenePlacements(date, centre)];
-      if (handedOver) {
-        placements.push(...homeBodies(standingOn(), date));
-      }
+      // The world under the camera is drawn among its neighbours whenever this
+      // layer draws at all, because the globe it replaces is gone by then: the
+      // handover and the first frame of the solar system are the same moment
+      // (D144).
+      const placements: ScenePlacement[] = [
+        ...scenePlacements(date, centre),
+        ...homeBodies(standingOn(), date),
+      ];
       const sun = placements.find((p) => p.id === 'sun');
       if (sun) sunlight.position.set(sun.at[0], sun.at[1], sun.at[2]);
       for (const placement of placements) {

@@ -7803,3 +7803,37 @@ because one layer is named by neither rule.
 Each time the fix was cheap and finding it was not, and each time the thing that
 found it was **asking the running map what was still visible** rather than
 reasoning about what should have been.
+
+## D144 - The overlap was the design, not a leak
+
+Phone, with a screenshot at zoom -0.1: a full-size Earth complete with its
+aircraft, sitting among planets drawn a twentieth of its size - Jupiter smaller
+than the globe beside it - and the question *"cannot we just make our original
+Earth that size in it?"*
+
+**No, and the reason is worth stating once.** MapLibre draws the world under the
+camera at radius 1 at every zoom; it is the projection, not an object. The
+alternative is to scale the system up around it, and that does not fit either:
+the camera bottoms out at zoom -2 with about **27 globe radii** on screen, and
+matching a radius-1 Earth would put Neptune's orbit at 75. Neither the globe nor
+the system can be resized, so the globe hands over.
+
+### Three fixes had missed it because it was not a bug
+
+D140 gated the origin body, D141 removed the atmosphere, D143 found the
+background layer. Each removed something real, and the overlap stayed, because
+the overlap was **two numbers for one transition**: the planets began fading in
+at 0.5 and the globe did not leave until -1.0. A zoom and a half where both
+worlds were on screen at once - by design, and correctly implemented.
+
+One number now. `SOLAR_MAX_ZOOM` *is* the handover: above it the globe and
+nothing else, below it the solar system and no globe. `PlanetView` imports that
+constant rather than repeating it, and a test asserts the basemap agrees.
+
+The imagery dissolves over the three tenths of a zoom above the handover, since
+it is the one part of the swap that can be half-done and it is the part carrying
+the picture. Everything else is a visibility switch, which cannot fade.
+
+Measured after: at -0.1 the globe alone with its traffic and `not drawn - zoom
+-0.1 past -1`; at -1.15 the globe gone and the planets at 0.30; at -1.7 the full
+system with no globe and no halo.

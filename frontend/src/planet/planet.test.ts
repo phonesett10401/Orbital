@@ -232,9 +232,24 @@ describe('withImagery', () => {
 
   it('turns the imagery off in the other direction', () => {
     // The switch has to cut both ways, or flat mode is a photograph with
-    // cartography drawn twice over it.
+    // cartography drawn twice over it. It sits inside the handover dissolve
+    // now, so the switch is the interpolate's *output* rather than the whole
+    // property - the shape the near tier has always used, because `zoom` may
+    // only be the input to a top-level expression.
     const far = style.layers.find((l) => l.id === 'orbital-imagery-far');
-    expect(asRaster(far!).paint?.['raster-opacity']).toEqual(whenFlat(0, 1));
+    const opacity = asRaster(far!).paint?.['raster-opacity'] as unknown[];
+    expect(opacity[opacity.length - 1]).toEqual(whenFlat(0, 1));
+  });
+
+  it('dissolves the globe as the handover approaches', () => {
+    // Without this the globe cuts out in one frame while the planets fade in
+    // over the next half zoom, which reads as a glitch rather than a handover.
+    const far = style.layers.find((l) => l.id === 'orbital-imagery-far');
+    const opacity = asRaster(far!).paint?.['raster-opacity'] as unknown[];
+    expect(opacity[0]).toBe('interpolate');
+    expect(opacity[2]).toEqual(['zoom']);
+    expect(opacity[3]).toBe(SOLAR_HANDOVER_FULL);
+    expect(opacity[4]).toBe(0);
   });
 
   it('crossfades the close imagery in over the far one', () => {
@@ -1271,10 +1286,22 @@ describe('the globe halo', () => {
     expect(ATMOSPHERE_BLEND).toBeGreaterThan(0.5);
   });
 
-  it('hands over at the same zoom the solar layer does', () => {
-    // Two files naming the same transition. If they drift, the halo outlives
-    // the globe again by however much they disagree.
-    expect(SOLAR_HANDOVER_FULL).toBe(SOLAR_FULL_ZOOM);
-    expect(SOLAR_HANDOVER_START).toBe(SOLAR_MAX_ZOOM);
+  it('hands over at the same zoom the solar layer starts drawing', () => {
+    // **One number for one transition.** They were two, a zoom and a half
+    // apart, which left a band where a full-size globe sat among planets a
+    // twentieth of its size. If these drift again, that band comes back (D144).
+    expect(SOLAR_HANDOVER_FULL).toBe(SOLAR_MAX_ZOOM);
+  });
+
+  it('dissolves the globe just before the handover rather than long before', () => {
+    // Close above it, so the transition is a dissolve and not a long stretch
+    // of half-transparent Earth.
+    expect(SOLAR_HANDOVER_START).toBeGreaterThan(SOLAR_HANDOVER_FULL);
+    expect(SOLAR_HANDOVER_START - SOLAR_HANDOVER_FULL).toBeLessThan(0.5);
+  });
+
+  it('fades the planets in below the handover, not above it', () => {
+    // The globe is gone by the time anything else is drawn.
+    expect(SOLAR_FULL_ZOOM).toBeLessThan(SOLAR_MAX_ZOOM);
   });
 });

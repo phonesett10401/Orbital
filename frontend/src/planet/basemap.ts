@@ -54,8 +54,16 @@ export const IMAGERY_NEAR_MAX_ZOOM = config.imageryCloseMaxZoom;
  * draws. They match `solarSystemLayer`'s `SOLAR_FULL_ZOOM` and `SOLAR_MAX_ZOOM`,
  * and a test holds the two files to the same numbers.
  */
+/** The handover itself: below this there is no globe. Matches `SOLAR_MAX_ZOOM`. */
 export const SOLAR_HANDOVER_FULL = -1.0;
-export const SOLAR_HANDOVER_START = 0.5;
+
+/**
+ * Where the globe starts dissolving on the way out.
+ *
+ * Only three tenths of a zoom above the handover, so the dissolve is a
+ * transition rather than a long stretch of half-transparent Earth (D144).
+ */
+export const SOLAR_HANDOVER_START = -0.7;
 
 /**
  * MapLibre's own atmosphere around the globe.
@@ -527,7 +535,26 @@ export function withImagery(style: StyleSpecification): StyleSpecification {
     id: 'orbital-imagery-far',
     type: 'raster',
     source: 'orbital-imagery-far',
-    paint: { 'raster-opacity': whenFlat(0, 1) },
+    paint: {
+      // **The globe dissolves on its way out.** Everything else about the
+      // handover is a visibility switch, which cannot be half-done; this is the
+      // one part that can fade, and it is the part carrying the picture, so
+      // fading it is what turns a cut into a transition (D144).
+      //
+      // A top-level interpolate on zoom whose *outputs* are the mode
+      // expression - the only shape the style spec allows, and the same one the
+      // near tier uses. A `zoom` expression nested deeper is rejected, and a
+      // rejected paint property fails the entire style (defect #25).
+      'raster-opacity': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        SOLAR_HANDOVER_FULL,
+        0,
+        SOLAR_HANDOVER_START,
+        whenFlat(0, 1),
+      ],
+    },
   };
 
   const near: LayerSpecification = {
