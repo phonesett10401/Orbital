@@ -8316,3 +8316,124 @@ The durations reach the stylesheet as custom properties rather than being writte
 twice, so the CSS gets zero without needing to know why. `prefersReducedMotion`
 is one function in `motion.ts` for the same reason `isPremium` is one function:
 the answer must not differ between the places that ask.
+
+---
+
+## D152 - An admin tier, and a command that can make one
+
+Two things Orbital did not have: a tier above premium for whoever runs the
+deployment, and any supported way to create an account that is not free. The
+second was recorded as an honest gap - "no way to become premium except editing
+the database by hand" - and this closes it.
+
+### Admin is a tier, and it is in a set
+
+`TIER_ADMIN` sits alongside free and premium rather than being a separate
+`is_admin` flag, because everything that reads an account already reads a tier
+and a second axis would give every gate two questions to get right instead of
+one.
+
+More importantly it is a member of `PAID_TIERS`, and every entitlement asks the
+**set** rather than comparing to `TIER_PREMIUM`:
+
+```python
+window = PREMIUM_WINDOW if tier in PAID_TIERS else FREE_WINDOW
+```
+
+**The failure this avoids is silent.** A gate written `tier == TIER_PREMIUM`
+gives an administrator *less* than a paying customer, and nothing anywhere
+reports a fault: the account works, signs in, shows a badge, and is simply short
+of what it should have. The frontend keeps the same set for the same reason, and
+both sides have a test that says so in as many words.
+
+The safe direction is preserved: a tier nobody has heard of is still read as
+free. `administrator` is not `admin`, and a typo in the database must not be a
+free upgrade.
+
+### The password is typed, never passed
+
+There is deliberately no `--password` flag, and a test asserts its absence. An
+argument is visible in `ps` to every other user on the machine and lands in
+shell history, where it outlives the memory of having typed it. `getpass` reads
+it without echoing, asks twice, and the value never leaves the process except as
+a scrypt hash.
+
+Asking twice is not ceremony. Nothing in Orbital can reset a password, so a typo
+in the one that creates the administrator locks them out of their own
+deployment.
+
+That is also why this is a command and not an endpoint. An endpoint that makes
+administrators is an endpoint somebody can reach; a command needs the file and
+the machine, which is the access an administrator already implies.
+
+### A vacuous test, caught by breaking the code
+
+`test_asks_again_when_the_two_do_not_match` was written with the same password
+throughout, and it **passed with the confirmation check deleted** - the
+mismatched second entry was simply discarded and the right password stored
+anyway. Rewritten so the first attempt differs from the final one, it fails
+exactly when the check is gone. This is the third variety of vacuous test this
+project has found by mutating the code under a green suite.
+
+### And a real footgun, on the first real run
+
+`Settings.accounts_db_path` is relative to the working directory. Running the
+command from `backend/` resolved to `backend/.cache/orbital-accounts.sqlite`
+while the server, started from the repository root, reads `.cache/` there. Two
+databases, no error, and an administrator who cannot sign in with credentials
+that are provably correct.
+
+Hence `--db`, and hence every command printing the path it resolved *before* it
+does anything.
+
+---
+
+## D153 - The sign-in became a page
+
+It was a dropdown hanging off a header button. It is now a screen, which is what
+signing in looks like nearly everywhere else and gives two fields, their rules,
+their failure messages and a second mode the room to be read.
+
+Nothing about the form changed - `auth.ts` still holds the rules, and
+`authAnimation.ts` still holds the phases from D151. Only where it happens.
+
+**Signing out stayed a dropdown**, which is not an inconsistency: signing in is a
+form that earns a screen, and signing out is one button that would be ceremony
+behind a full page.
+
+### A page without a router
+
+Orbital has no routing and adding a router for one screen would be a large
+change to justify. But what a page actually needs from a router is smaller than
+a router: **an address while it is open, and a Back button that closes it.** Both
+are a hash and two calls to `history`.
+
+A full-screen view that swallows Back is the commonest way a single-page app
+breaks a browser - the reader presses it expecting to dismiss what is in front of
+them, and instead the app navigates away from something else while the overlay
+stays put.
+
+`moveFor` decides what happens to the history stack, so the rule is testable
+without a browser. Closing has to **go back** rather than replace: opening pushes
+an entry, and closing any other way has to remove the one it pushed, or the stack
+grows an entry per open-and-dismiss and Back then appears to do nothing for as
+many presses as the page was opened. Measured in the running app: four
+open-and-close cycles grow the history by zero.
+
+### What a full-screen overlay owes the reader
+
+- **Escape closes it**, and focus returns to the button that opened it, so a
+  keyboard reader is not dropped at the top of the document.
+- **Tab stays inside.** The map behind is still in the tab order as far as the
+  browser is concerned, and tabbing into a form nobody can see is worse than no
+  keyboard support at all.
+- **The email field is focused on arrival**, because a page whose whole purpose
+  is one form should not need a click first.
+- **The form is fresh every time it opens.** Reopening onto a half-filled
+  attempt is the same class of fault as the panel that reopened in register mode
+  (D148): state kept across a close that should not have been.
+
+The globe stays faintly visible behind a blur rather than being blanked. A
+sign-in that hides the map entirely makes Orbital feel like it navigated
+somewhere else, when the map is exactly where the reader is about to be
+returned to.

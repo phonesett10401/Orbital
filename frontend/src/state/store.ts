@@ -197,6 +197,17 @@ export interface OrbitalState {
   setAccount(account: Account | null): void;
 
   /**
+   * Whether the sign-in page is open (D153).
+   *
+   * In the store rather than inside `AccountMenu` because the page covers the
+   * whole app and is rendered at the top of the tree, while the control that
+   * opens it lives in the header. It is also the one piece of chrome the
+   * browser's Back button can close, which needs a single place to say so.
+   */
+  signInOpen: boolean;
+  setSignInOpen(open: boolean): void;
+
+  /**
    * Where the camera is heading, while a trip is in progress.
    *
    * Held so the solar system layer can brighten the destination on the way
@@ -373,6 +384,10 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   accountChecked: false,
   setAccount(account) {
     set({ account, accountChecked: true });
+  },
+  signInOpen: false,
+  setSignInOpen(open) {
+    if (useOrbitalStore.getState().signInOpen !== open) set({ signInOpen: open });
   },
   trueScale: false,
   setTrueScale(on) {

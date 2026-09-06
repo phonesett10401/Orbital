@@ -22,7 +22,7 @@ from app.accounts.entitlements import (
     travel_window,
     within_travel_window,
 )
-from app.accounts.store import TIER_FREE, TIER_PREMIUM
+from app.accounts.store import TIER_ADMIN, TIER_FREE, TIER_PREMIUM
 
 NOW = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
 
@@ -36,6 +36,12 @@ class TestTheWindows:
         # who has never made an account is not in a degraded state.
         assert travel_window(None) == travel_window(TIER_FREE) == FREE_WINDOW
 
+    def test_an_administrator_is_not_given_less_than_a_paying_customer(self) -> None:
+        # The failure this guards is silent: a gate written `tier == "premium"`
+        # leaves an admin account working perfectly and simply short of what it
+        # should have, with nothing anywhere reporting a fault.
+        assert travel_window(TIER_ADMIN) == travel_window(TIER_PREMIUM)
+
     def test_an_unknown_tier_is_treated_as_free(self) -> None:
         # A tier added to the database by hand, or one this deployment has not
         # been taught about, must not fall through to the largest window.
@@ -45,7 +51,7 @@ class TestTheWindows:
         # The property the module exists to keep. Past seven days SGP4 is not
         # answering the question any more, so a purchasable window that
         # exceeded it would be selling confident nonsense.
-        for tier in [None, TIER_FREE, TIER_PREMIUM, "whatever-comes-next"]:
+        for tier in [None, TIER_FREE, TIER_PREMIUM, TIER_ADMIN, "whatever-comes-next"]:
             assert travel_window(tier) <= ACCURACY_WINDOW, tier
 
     def test_premium_is_the_whole_of_the_reach_that_exists(self) -> None:
@@ -103,14 +109,15 @@ class TestWhatTheReaderIsTold:
         assert "premium" in message.lower()
         assert "7 days" in message
 
-    def test_a_premium_refusal_blames_physics_rather_than_offering_an_upsell(
+    def test_a_paid_refusal_blames_physics_rather_than_offering_an_upsell(
         self,
     ) -> None:
         # There is nothing above premium here, so a refusal that hinted at one
-        # would be a lie told for money.
-        message = travel_refusal(TIER_PREMIUM)
-        assert "premium" not in message.lower()
-        assert "accurate" in message
+        # would be a lie told for money. An admin must not be sold to either.
+        for tier in [TIER_PREMIUM, TIER_ADMIN]:
+            message = travel_refusal(tier)
+            assert "premium" not in message.lower(), tier
+            assert "accurate" in message, tier
 
     @pytest.mark.parametrize(
         "window,expected",

@@ -79,8 +79,20 @@ export function failureMessage(status: number | null, detail: string): string {
   return detail || 'That did not work.';
 }
 
+/**
+ * Tiers that get everything a paid account gets.
+ *
+ * **Admin is in here rather than being special-cased at each gate.** A check
+ * written `tier === 'premium'` gives an administrator *less* than a paying
+ * customer and does it silently: the account works, it is simply short of what
+ * it should have, and nothing reports a fault. The backend keeps the same set
+ * for the same reason (D152).
+ */
+const PAID = new Set(['premium', 'admin']);
+
 /** How a tier is written in the chrome. */
 export function tierLabel(tier: string): string {
+  if (tier === 'admin') return 'Admin';
   return tier === 'premium' ? 'Premium' : 'Free';
 }
 
@@ -92,5 +104,5 @@ export function tierLabel(tier: string): string {
  * the free tier is the product, not a degraded state.
  */
 export function isPremium(account: Account | null): boolean {
-  return account?.tier === 'premium';
+  return account !== null && PAID.has(account.tier);
 }

@@ -43,6 +43,15 @@ from dataclasses import dataclass
 #: that a laptop serving this project does not stall on sign-in. OWASP's
 #: recommendation is higher (2**17); raising it here is a one-line change that
 #: old hashes survive, which is the reason the parameters are stored.
+#: Shortest password accepted anywhere - the API, and the command line that
+#: makes administrators. Length is the only rule: composition rules push people
+#: towards `Password1!` and are worth less than four more characters.
+#:
+#: It lives here, beside the hashing it constrains, rather than in the HTTP
+#: layer where it started. The command line has no HTTP in it and must not have
+#: to import a router to find out how short is too short.
+MIN_PASSWORD_LENGTH = 10
+
 SCRYPT_N = 2**15
 SCRYPT_R = 8
 SCRYPT_P = 1

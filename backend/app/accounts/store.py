@@ -41,6 +41,21 @@ from app.accounts.passwords import hash_password, needs_rehash, verify_password
 TIER_FREE = "free"
 TIER_PREMIUM = "premium"
 
+#: An account that runs the deployment. It is a *tier* rather than a separate
+#: flag because everything that reads an account already reads one of those, and
+#: a second axis would mean every gate has two questions to get right instead of
+#: one.
+TIER_ADMIN = "admin"
+
+#: The tiers that get everything a paid account gets.
+#:
+#: **Admin is in here rather than being special-cased at each gate**, which is
+#: the whole reason the set exists: a gate written as `tier == TIER_PREMIUM`
+#: silently gives an administrator *less* than a paying customer, and it does so
+#: without failing anything - the account works, it is simply short of what it
+#: should have. Every entitlement asks this set.
+PAID_TIERS = frozenset({TIER_PREMIUM, TIER_ADMIN})
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +92,8 @@ class Account:
 
     @property
     def is_premium(self) -> bool:
-        return self.tier == TIER_PREMIUM
+        """Whether this account gets what a paid one gets. Admin does."""
+        return self.tier in PAID_TIERS
 
 
 def fold_email(email: str) -> str:
@@ -172,6 +188,19 @@ class AccountStore:
         with self._connect() as db:
             db.execute("UPDATE accounts SET tier = ? WHERE id = ?", (tier, account_id))
         return self.by_id(account_id)
+
+    def all(self) -> list[Account]:
+        """Every account, oldest first, and without a hash among them.
+
+        For the command line (D152). The ordering is by id rather than by
+        email so the first row is the first account, which is usually the one
+        somebody is looking for.
+        """
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT id, email, tier, created_at FROM accounts ORDER BY id"
+            ).fetchall()
+        return [self._account(row) for row in rows]
 
     def count(self) -> int:
         with self._connect() as db:

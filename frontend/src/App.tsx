@@ -20,6 +20,7 @@ import { MoonPanel } from './components/MoonPanel';
 import { TrueScaleToggle } from './components/TrueScaleToggle';
 import { AccountMenu } from './components/AccountMenu';
 import { AdSlot } from './components/AdSlot';
+import { SignInPage } from './components/SignInPage';
 import { MoonSatelliteList } from './components/MoonSatelliteList';
 import { LayerToggle } from './components/LayerToggle';
 import { Legend } from './components/Legend';
@@ -29,11 +30,14 @@ import { chromeFor } from './components/layerChrome';
 import { useOrbitalStore } from './state/store';
 import { PlanetView } from './planet/PlanetView';
 import { useObjectPolling, useSearch, useSelectedDetail } from './hooks/usePolling';
+import { useSignInRoute } from './hooks/useSignInRoute';
 
 export function App() {
   useObjectPolling();
   useSelectedDetail();
   useSearch();
+  // Gives the sign-in page an address and makes Back close it (D153).
+  useSignInRoute();
 
   // The wordmark's subtitle names what is on screen, so it has to follow the
   // layer rather than being written once for aircraft (D100).
@@ -118,6 +122,10 @@ export function App() {
       <StatusBar />
 
       {ads && !scrubberShown && <AdSlot slot="anchor" />}
+
+      {/* Last, so it is over everything without needing a z-index taller than
+          the rest of the chrome put together. */}
+      <SignInPage />
     </div>
   );
 }

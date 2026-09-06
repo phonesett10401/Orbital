@@ -40,6 +40,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
 
+from app.accounts.passwords import MIN_PASSWORD_LENGTH
 from app.accounts.sessions import SESSION_DAYS, SessionStore
 from app.accounts.store import Account, AccountStore, EmailTaken
 from app.config import Settings
@@ -56,9 +57,9 @@ SESSION_COOKIE = "orbital_session"
 MAX_ATTEMPTS = 8
 ATTEMPT_WINDOW_SECONDS = 300
 
-#: Shortest password accepted. Length is the only rule: composition rules push
-#: people towards `Password1!` and are worth less than four more characters.
-MIN_PASSWORD_LENGTH = 10
+# `MIN_PASSWORD_LENGTH` is re-exported from `app.accounts.passwords`, where it
+# now lives beside the hashing it constrains. Imported rather than restated, so
+# the API and the admin command line cannot drift apart.
 
 _attempts: dict[str, list[float]] = defaultdict(list)
 

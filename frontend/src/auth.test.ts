@@ -96,6 +96,10 @@ describe('tiers', () => {
     expect(tierLabel('free')).toBe('Free');
   });
 
+  it('writes admin as itself, because it is not premium and should not read as it', () => {
+    expect(tierLabel('admin')).toBe('Admin');
+  });
+
   it('treats an unknown tier as free rather than showing it raw', () => {
     // A tier added on the server and not yet known here must not appear in the
     // interface as a word nobody chose.
@@ -108,5 +112,17 @@ describe('tiers', () => {
     expect(isPremium(null)).toBe(false);
     expect(isPremium({ email: 'a@b.com', tier: 'free' })).toBe(false);
     expect(isPremium({ email: 'a@b.com', tier: 'premium' })).toBe(true);
+  });
+
+  it('gives an administrator everything a paying customer gets', () => {
+    // The failure this guards is silent: a check written `tier === 'premium'`
+    // leaves an admin account working and simply short of what it should have.
+    expect(isPremium({ email: 'a@b.com', tier: 'admin' })).toBe(true);
+  });
+
+  it('still treats a tier it has never heard of as free', () => {
+    // The safe direction. Widening the paid set by accident is how a typo in
+    // the database becomes a free upgrade.
+    expect(isPremium({ email: 'a@b.com', tier: 'administrator' })).toBe(false);
   });
 });

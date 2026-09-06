@@ -39,7 +39,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from app.accounts.store import TIER_PREMIUM
+from app.accounts.store import PAID_TIERS, TIER_PREMIUM
 
 #: Past this, propagated positions are not answers. Physics, not pricing.
 ACCURACY_WINDOW = timedelta(days=7)
@@ -66,7 +66,7 @@ def travel_window(tier: str | None) -> timedelta:
     free tier is the product, not a degraded state, and a reader who has never
     made an account gets exactly what a free account gets.
     """
-    window = PREMIUM_WINDOW if tier == TIER_PREMIUM else FREE_WINDOW
+    window = PREMIUM_WINDOW if tier in PAID_TIERS else FREE_WINDOW
     return min(window, ACCURACY_WINDOW)
 
 
@@ -93,7 +93,7 @@ def travel_refusal(tier: str | None) -> str:
     this one is a restriction we chose and should be willing to state.
     """
     allowed = describe_window(travel_window(tier))
-    if tier == TIER_PREMIUM:
+    if tier in PAID_TIERS:
         return (
             f"positions can only be computed within {allowed} of now; "
             "past that the elements are no longer accurate"
