@@ -127,13 +127,20 @@ describe('the ships chrome', () => {
     expect(words).not.toContain('satellite');
   });
 
-  it('says where the ships are, because the source cannot see anywhere else', () => {
-    // Digitraffic covers the northern Baltic and nothing else (D165). A
-    // subtitle reading "live ships" over an empty Pacific would have a reader
-    // conclude the sea is quiet rather than that we are not looking at it -
-    // and that is the one claim on this layer that would be actively
+  it('does not claim to show every ship at sea', () => {
+    // **This asserted "Baltic" and the assertion went stale in one session.**
+    // It was right while Digitraffic was the only source (D165); the global
+    // stream added 17,848 vessels and made it false (D166).
+    //
+    // What replaces it is the claim that actually needs guarding, and it
+    // survives another source being added: both feeds are *terrestrial* AIS,
+    // listening from the shore, so the Indian Ocean returned 2 vessels and the
+    // Gulf returned 0. "live ships" would read as completeness over an empty
+    // ocean - the one statement on this layer that would be actively
     // misleading rather than merely thin.
-    expect(chromeFor('ship', GRADIENT).subtitle).toContain('Baltic');
+    const subtitle = chromeFor('ship', GRADIENT).subtitle;
+    expect(subtitle).toContain('coastal');
+    expect(subtitle).not.toMatch(/^live ships$/);
   });
 
   it('offers a search example somebody could actually type', () => {

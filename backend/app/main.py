@@ -28,7 +28,9 @@ from app.providers import registry
 from app.accounts.sessions import SessionStore
 from app.accounts.store import AccountStore
 from app.providers.lunar import LunarTracker
+from app.providers.aisstream import AisStreamProvider
 from app.providers.digitraffic import DigitrafficProvider
+from app.providers.shipunion import ShipUnionProvider
 from app.providers.satellites import SatelliteProvider
 from app.providers.base import Provider
 from app.models import ObjectType
@@ -145,15 +147,33 @@ def create_app(
         # Its own jobs, too. The quota presets are a credit ladder built for a
         # metered source; Digitraffic meters nothing, so SHIP_JOBS is one job
         # at the cadence the upstream's own Cache-Control asks for.
-        ships: DigitrafficProvider | None = None
+        ships: Provider | None = None
+        ship_stream: AisStreamProvider | None = None
         ship_store: ObjectStore | None = None
         ship_poller: Poller | None = None
         if settings.ship_layer_enabled:
-            ships = DigitrafficProvider(
-                base_url=settings.digitraffic_base_url,
-                timeout_seconds=settings.digitraffic_timeout_seconds,
-                user_agent=settings.adsblol_user_agent,
-            )
+            sources: list[Provider] = [
+                DigitrafficProvider(
+                    base_url=settings.digitraffic_base_url,
+                    timeout_seconds=settings.digitraffic_timeout_seconds,
+                    user_agent=settings.adsblol_user_agent,
+                )
+            ]
+            # The global stream, when there is a key for it. **The key is the
+            # switch**: without one the layer is the northern Baltic and
+            # nothing else, which is a smaller map rather than a broken one
+            # (D166).
+            if settings.ship_global_enabled and settings.aisstream_api_key:
+                ship_stream = AisStreamProvider(api_key=settings.aisstream_api_key)
+                sources.append(ship_stream)
+            elif settings.ship_global_enabled:
+                logger.info(
+                    "ships: no ORBITAL_AISSTREAM_API_KEY, so coverage is the "
+                    "Baltic only - see D166"
+                )
+            # A union even with one source, so that adding or removing the
+            # stream changes a list rather than a type.
+            ships = ShipUnionProvider(sources)
             ship_store = ObjectStore(
                 object_ttl_seconds=settings.ship_object_ttl_seconds,
                 track_history_points=settings.track_history_points,
@@ -183,11 +203,18 @@ def create_app(
         app.state.store = store
         app.state.ship_store = ship_store
         app.state.ship_poller = ship_poller
+        app.state.ship_stream = ship_stream
         app.state.flights = flights
         app.state.routes = route_lookup
         app.state.poller = poller
 
         await poller.start()
+        if ship_stream is not None:
+            # Before the poller, so the first ship poll has something to read.
+            # It will still be nearly empty - the stream needs a minute or two
+            # to accumulate a world - and that is fine: the store fills in as
+            # the polls land, exactly as it does for any other source.
+            await ship_stream.start()
         if ship_poller is not None:
             await ship_poller.start()
         if satellites is not None:
@@ -201,7 +228,9 @@ def create_app(
             active_provider.name,
             settings.quota_preset,
             "on" if satellites else "off",
-            ships.name if ships else "off",
+            (
+                "digitraffic+aisstream" if ship_stream else "digitraffic"
+            ) if ships else "off",
         )
         try:
             yield

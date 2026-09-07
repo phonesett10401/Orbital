@@ -91,12 +91,19 @@ export function shipBands(): ScaleStop[] {
 export function chromeFor(layer: ObjectType, gradientStops: string[]): LayerChrome {
   if (layer === 'ship') {
     return {
-      // Says where, because this source cannot see anywhere else. A subtitle
-      // reading "live ships" over an empty Pacific is a false statement of
-      // exactly the kind this module exists to prevent: the reader would
-      // conclude the sea was quiet rather than that we are not looking at it
-      // (D165).
-      subtitle: 'ships in the Baltic',
+      // **Says where, and "the Baltic" is no longer where.** It said that
+      // while Digitraffic was the only source (D165); the global stream added
+      // 17,848 vessels and made it false (D166).
+      //
+      // "live ships" would be the parallel to the aircraft layer and is worse,
+      // because it claims completeness this layer has not got: both sources
+      // are *terrestrial* AIS, listening from the shore, so the holes are the
+      // open ocean and every coast without a volunteer receiver - the Indian
+      // Ocean returned 2 vessels and the Gulf returned 0.
+      //
+      // "coastal waters" is the one phrase that is true of both the global
+      // stream and the Baltic-only fallback, and true of neither's holes.
+      subtitle: 'ships in coastal waters',
       searchPlaceholder: 'Search vessel name or MMSI, e.g. VIKING GRACE or 230982000',
       countNoun: ['ship', 'ships'],
       scaleTitle: 'Vessel type',

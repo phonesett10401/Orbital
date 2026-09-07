@@ -99,6 +99,17 @@ from typing import Any
 import httpx
 
 from app.models import BBox, ObjectType, TrackedObjectRecord
+from app.providers.ais import (
+    SHIP_TTL_SECONDS,
+    eta_text,
+    heading,
+    is_position,
+    nav_status,
+    number,
+    ship_type,
+    speed_ms,
+    text,
+)
 from app.providers.base import (
     Provider,
     ProviderBadResponse,
@@ -108,12 +119,6 @@ from app.providers.base import (
 
 logger = logging.getLogger(__name__)
 
-KNOTS_TO_MS = 0.514444
-
-#: Drop a vessel not re-observed within this window. See the module docstring:
-#: the endpoint retains 24 hours and 28% of it is over an hour old.
-SHIP_TTL_SECONDS = 900.0
-
 #: How often the names are refetched, against every poll for the positions.
 #:
 #: A vessel's name, IMO number and hull dimensions are fixed; its destination
@@ -121,109 +126,6 @@ SHIP_TTL_SECONDS = 900.0
 #: needs and still turns 916 metadata rows into one request in ten rather than
 #: one per poll.
 METADATA_REFRESH_SECONDS = 600.0
-
-#: AIS "not available" encodings, which arrive as ordinary numbers (D165).
-COG_UNAVAILABLE = 360.0
-HEADING_UNAVAILABLE = 511
-
-#: The fastest a vessel is believed, in knots.
-#:
-#: **The sentinel is not the whole problem, and checking only for it let a
-#: 250-metre tanker sail at 102 knots.** Speed over ground is transmitted in
-#: tenths of a knot, where 1023 means "not available" and 1022 means "102.2 or
-#: higher" - so the first version of this refused anything at or above 102.3,
-#: which is precise, correct, and missed three vessels sending 102.2. Caught by
-#: sorting the live feed by speed and reading the top of the list.
-#:
-#: Reading further down it was worse than an off-by-one. The next eleven, in
-#: one sample:
-#:
-#: | knots | what it was |
-#: |---|---|
-#: | 102.2 | NOUNOU, a 250 m tanker, under way |
-#: | 102.2 | RATNIK, a tug, **moored** |
-#: | 85.0 | MYRA, a 228 m tanker, **at anchor** |
-#: | 81.0 | VYATICH, a tug, **moored** |
-#: | 79.6 | CORE AXIS, a 274 m tanker |
-#:
-#: None of those is a sentinel. They are broken transmitters, and there is no
-#: encoding that separates them from real readings - so the only thing that
-#: can is knowing what a ship can do. The fastest vessel ever in commercial
-#: service, the HSC Francisco, does about 58 knots; military hydrofoils reach
-#: roughly 60. Above that is not a fast ship, it is a wrong number.
-#:
-#: 60 knots drops all fourteen readings above it in that sample.
-#:
-#: **What it does not fix, stated rather than left to be discovered.** Under
-#: the ceiling the fastest survivors were a tug at 49.5 knots, a tanker at 47.5
-#: and a cargo ship at 44.3 - implausible for those hulls by a factor of three.
-#: They stay because nothing in the message distinguishes them from a real
-#: reading: a 45-knot patrol boat is an ordinary thing and the ship type is
-#: missing for 13% of the feed, so a per-type limit would be a table of guesses
-#: dressed as a rule. This constant claims only what it can defend - that no
-#: vessel does 80 knots - and the residue is left visible rather than filtered
-#: by something that cannot be checked. Cross-referencing consecutive positions
-#: would settle it properly, and the store already holds the track to do it
-#: with; that is a different piece of work from decoding a message.
-MAX_PLAUSIBLE_KNOTS = 60.0
-
-#: Navigational status, message 1/2/3 field 2. Carried into ``meta`` because on
-#: this layer it is the field that says what a vessel is *doing* - four fifths
-#: of them are stationary, and "moored" and "at anchor" and "aground" are three
-#: very different reasons to be.
-NAV_STATUS: dict[int, str] = {
-    0: "Under way using engine",
-    1: "At anchor",
-    2: "Not under command",
-    3: "Restricted manoeuvrability",
-    4: "Constrained by draught",
-    5: "Moored",
-    6: "Aground",
-    7: "Engaged in fishing",
-    8: "Under way sailing",
-    9: "Reserved (high speed craft)",
-    10: "Reserved (wing in ground)",
-    11: "Under tow astern",
-    12: "Under tow alongside",
-    13: "Reserved",
-    14: "AIS-SART, MOB or EPIRB",
-    15: "Undefined",
-}
-
-#: Ship type, from the tens digit of the AIS type code.
-#:
-#: The full table is a hundred entries of which most are "reserved"; the tens
-#: digit is the part that carries meaning and the part a reader wants. 70-79 is
-#: cargo, 80-89 tanker, 60-69 passenger, and so on.
-SHIP_TYPE_BY_TENS: dict[int, str] = {
-    2: "Wing in ground",
-    3: "Special craft",
-    4: "High speed craft",
-    5: "Special craft",
-    6: "Passenger",
-    7: "Cargo",
-    8: "Tanker",
-    9: "Other",
-}
-
-#: The 30s and 50s are not one kind of thing, so they are spelled out.
-SPECIAL_CRAFT: dict[int, str] = {
-    30: "Fishing",
-    31: "Towing",
-    32: "Towing (long)",
-    33: "Dredger",
-    34: "Diving support",
-    35: "Military",
-    36: "Sailing",
-    37: "Pleasure craft",
-    50: "Pilot vessel",
-    51: "Search and rescue",
-    52: "Tug",
-    53: "Port tender",
-    54: "Anti-pollution",
-    55: "Law enforcement",
-    58: "Medical transport",
-}
 
 
 class DigitrafficProvider(Provider):
@@ -368,23 +270,23 @@ class DigitrafficProvider(Provider):
         coordinates = geometry.get("coordinates")
         if not isinstance(coordinates, list) or len(coordinates) < 2:
             return None
-        lon = _number(coordinates[0])
-        lat = _number(coordinates[1])
+        lon = number(coordinates[0])
+        lat = number(coordinates[1])
         mmsi = properties.get("mmsi")
         if lon is None or lat is None or not isinstance(mmsi, int):
             return None
-        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+        if not is_position(lat, lon):
             # AIS transmits 91 and 181 for "position not available", and the
             # contract's own validators would raise on them - which would take
             # the whole poll down over one bad vessel.
             return None
 
-        observed_ms = _number(properties.get("timestampExternal"))
+        observed_ms = number(properties.get("timestampExternal"))
         if observed_ms is None:
             return None
 
         static = self._metadata.get(mmsi, {})
-        name = _text(static.get("name"))
+        name = text(static.get("name"))
 
         return TrackedObjectRecord(
             id=str(mmsi),
@@ -396,13 +298,13 @@ class DigitrafficProvider(Provider):
             # source did not say, and would leave anything that reasons about
             # altitude with a hole where a fact belongs.
             altitude=0.0,
-            velocity=_speed_ms(properties.get("sog")),
-            heading=_heading(properties),
+            velocity=speed_ms(properties.get("sog")),
+            heading=heading(properties.get("heading"), properties.get("cog")),
             # The name when the feed knows it, the MMSI when it does not.
             # Never an empty string: this is what the map draws and what search
             # matches, and 13% of these vessels have no metadata row.
             label=name or str(mmsi),
-            model=_ship_type(static.get("shipType")),
+            model=ship_type(static.get("shipType")),
             last_seen=datetime.fromtimestamp(observed_ms / 1000.0, tz=timezone.utc),
             type=self.object_type,
             meta=_meta(properties, static),
@@ -410,60 +312,6 @@ class DigitrafficProvider(Provider):
 
     async def aclose(self) -> None:
         await self._client.aclose()
-
-
-def _speed_ms(value: Any) -> float | None:
-    """Speed over ground in metres per second, or None.
-
-    Refused above ``MAX_PLAUSIBLE_KNOTS`` rather than converted. See that
-    constant: the AIS sentinel is only the loudest of the wrong answers here,
-    and eleven vessels in one sample were faster than any ship has ever been
-    without using it.
-    """
-    knots = _number(value)
-    if knots is None or knots < 0 or knots > MAX_PLAUSIBLE_KNOTS:
-        return None
-    return knots * KNOTS_TO_MS
-
-
-def _heading(properties: dict) -> float | None:
-    """Which way the vessel is pointing, or moving, or None.
-
-    **True heading first, course over ground second**, which is the opposite of
-    the aircraft layer's preference and right for the same underlying reason:
-    the field should describe the picture. A ship at anchor swings on its cable
-    and has a heading but no course, and a ferry crossing a current points
-    somewhere other than where it is going. Both are worth drawing accurately;
-    an aircraft's track is the honest answer because an aeroplane does not hold
-    station.
-
-    511 and 360 are the two "not available" encodings, and between them they
-    covered 230 of 916 vessels in one sample.
-    """
-    heading = _number(properties.get("heading"))
-    if heading is not None and 0 <= heading < HEADING_UNAVAILABLE:
-        return heading % 360.0
-    course = _number(properties.get("cog"))
-    if course is not None and 0 <= course < COG_UNAVAILABLE:
-        return course
-    return None
-
-
-def _ship_type(code: Any) -> str | None:
-    """What the source says this vessel is, in words.
-
-    ``model`` promises "a designator the source chose", and the source chose a
-    number from a hundred-entry table. The tens digit is the part that carries
-    meaning - 70-79 cargo, 80-89 tanker - so it is read that way, except in the
-    30s and 50s where the ones digit distinguishes a tug from a dredger from a
-    warship, which nobody would thank us for flattening to "special craft".
-    """
-    if not isinstance(code, int) or isinstance(code, bool) or code <= 0 or code > 99:
-        return None
-    named = SPECIAL_CRAFT.get(code)
-    if named is not None:
-        return named
-    return SHIP_TYPE_BY_TENS.get(code // 10)
 
 
 def _meta(properties: dict, static: dict) -> dict[str, str]:
@@ -474,16 +322,16 @@ def _meta(properties: dict, static: dict) -> dict[str, str]:
     """
     meta: dict[str, str] = {"mmsi": str(properties.get("mmsi"))}
 
-    status = properties.get("navStat")
-    if isinstance(status, int) and status in NAV_STATUS:
-        meta["navigationStatus"] = NAV_STATUS[status]
+    status = nav_status(properties.get("navStat"))
+    if status:
+        meta["navigationStatus"] = status
 
     for key, name in (
         ("name", "vesselName"),
         ("callSign", "callSign"),
         ("destination", "destination"),
     ):
-        value = _text(static.get(key))
+        value = text(static.get(key))
         if value:
             meta[name] = value
 
@@ -491,12 +339,15 @@ def _meta(properties: dict, static: dict) -> dict[str, str]:
     if isinstance(imo, int) and imo > 0:
         meta["imo"] = str(imo)
 
-    ship_type = _ship_type(static.get("shipType"))
-    if ship_type:
-        meta["shipType"] = ship_type
+    kind = ship_type(static.get("shipType"))
+    if kind:
+        meta["shipType"] = kind
 
-    # Decimetres in the AIS message, which is a unit nobody thinks in.
-    draught = _number(static.get("draught"))
+    # **Decimetres here**, which is a unit nobody thinks in - and the reason
+    # this conversion is not shared: aisstream sends the same fact in metres
+    # already, so a common helper would have to ask which source it was
+    # talking to, and a helper that asks that is not shared (D166).
+    draught = number(static.get("draught"))
     if draught is not None and draught > 0:
         meta["draught"] = f"{draught / 10:.1f} m"
 
@@ -504,60 +355,33 @@ def _meta(properties: dict, static: dict) -> dict[str, str]:
     # bow, stern, port and starboard - so the hull is A+B long and C+D wide.
     # Reported that way because a length is a fact about the ship and an
     # antenna offset is a fact about its wiring.
-    bow = _number(static.get("referencePointA"))
-    stern = _number(static.get("referencePointB"))
-    port = _number(static.get("referencePointC"))
-    starboard = _number(static.get("referencePointD"))
+    bow = number(static.get("referencePointA"))
+    stern = number(static.get("referencePointB"))
+    port = number(static.get("referencePointC"))
+    starboard = number(static.get("referencePointD"))
     if bow is not None and stern is not None and bow + stern > 0:
         meta["length"] = f"{bow + stern:.0f} m"
     if port is not None and starboard is not None and port + starboard > 0:
         meta["beam"] = f"{port + starboard:.0f} m"
 
-    eta = _eta(static.get("eta"))
+    eta = _packed_eta(static.get("eta"))
     if eta:
         meta["eta"] = eta
     return meta
 
 
-def _eta(value: Any) -> str | None:
-    """Estimated arrival, out of the bitfield AIS packs it into.
+def _packed_eta(value: Any) -> str | None:
+    """Digitraffic's ETA, out of the bitfield AIS packs it into.
 
-    Twenty bits: four of month, five of day, five of hour, six of minute, all
-    UTC. Zero month or day means not stated, hour 24 and minute 60 likewise -
-    and a vessel that has not set an ETA sends all of them, so the guards here
-    are the common path rather than the edge.
-
-    No year is transmitted, so none is claimed: the string says a day and a
-    time and stops there.
+    Twenty bits: four of month, five of day, five of hour, six of minute. The
+    *unpacking* is this source's business - aisstream sends the same four
+    fields as a struct - and what the numbers mean is `ais.eta_text`'s (D166).
     """
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         return None
-    month = (value >> 16) & 0b1111
-    day = (value >> 11) & 0b11111
-    hour = (value >> 6) & 0b11111
-    minute = value & 0b111111
-    if not (1 <= month <= 12) or not (1 <= day <= 31):
-        return None
-    if hour > 23 or minute > 59:
-        return None
-    return f"{day:02d}/{month:02d} {hour:02d}:{minute:02d} UTC"
-
-
-def _number(value: Any) -> float | None:
-    if isinstance(value, bool) or value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    return None
-
-
-def _text(value: Any) -> str | None:
-    """A non-empty trimmed string, or None.
-
-    AIS pads static text to a fixed width with spaces and '@', so a vessel with
-    no destination sends a field full of padding rather than an absent one.
-    """
-    if not isinstance(value, str):
-        return None
-    trimmed = value.replace("@", " ").strip()
-    return trimmed or None
+    return eta_text(
+        month=(value >> 16) & 0b1111,
+        day=(value >> 11) & 0b11111,
+        hour=(value >> 6) & 0b11111,
+        minute=value & 0b111111,
+    )

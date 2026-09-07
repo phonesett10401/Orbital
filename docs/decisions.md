@@ -9398,3 +9398,128 @@ mission has a press image. There is no free image source keyed by MMSI, and a
 stock photo of "a tanker" is a picture of a different ship.
 
 1,007 frontend tests, up from 956. 762 backend, up from 701.
+
+---
+
+## D166 - Ships everywhere there is a receiver
+
+D165 chose Digitraffic because it asked for nothing, and queued the global
+source. Phone asked for global ships, so this connects the queued one.
+
+### It works, and the numbers are the argument
+
+Subscribed to the whole planet with a real key:
+
+| after | vessels | with a name |
+|---|---|---|
+| 15 s | 2,876 | 95% |
+| 60 s | 6,379 | 95% |
+| 120 s | 12,446 | 95% |
+| **240 s** | **17,848** | **95%** |
+
+**Twenty-eight times Digitraffic's 643**, at about 158 messages a second. And
+the ship's name arrives in the metadata of *every* message, so the second
+endpoint, the 260 KB join and the ten-minute metadata cache that Digitraffic
+needs have no equivalent here.
+
+### "Global" means "where the receivers are", and the subtitle now says so
+
+Terrestrial AIS - volunteer coastal stations, no satellite AIS:
+
+| region | vessels | | region | vessels |
+|---|---|---|---|---|
+| N Europe / Baltic | **9,202** | | SE Asia | 310 |
+| Mediterranean | 2,600 | | W Africa | 100 |
+| US Pacific | 1,491 | | **Indian Ocean** | **2** |
+| N Atlantic | 1,417 | | **Gulf / Red Sea** | **0** |
+
+The Singapore Strait is the busiest waterway on earth and all of SE Asia
+returns 310. Same shape as the OpenSky/adsb.lol comparison (D83): comparable,
+different holes, free.
+
+So the subtitle changed from "ships in the Baltic" to **"ships in coastal
+waters"**. "live ships" would be the parallel to the aircraft layer and is the
+one phrasing that would actively mislead - it claims a completeness the layer
+has not got, over an ocean that is empty because nobody is listening rather
+than because nothing is there.
+
+### A stream fits `Provider.fetch()` because the shape was already here
+
+The temptation is to bypass the provider seam and let a background task write
+into the store, which would be a second ingestion path for one source.
+
+Not needed: **the satellite layer already solved this.** It refreshes elements
+on a background task and answers from memory so no request waits on an upstream
+(D93, D95). This is the same arrangement with a different thing refreshed - a
+task accumulates positions, `fetch()` returns the accumulation. The poller, the
+store, the router and the frontend cannot tell the difference.
+
+### Three defects, and two of them were mine before the map saw them
+
+**The disconnections were self-inflicted.** One drop every four minutes, then a
+run that died saying `sent 1011 (internal error) keepalive ping timeout`. *Sent*
+1011 means the **client** closed it: the library's 20-second pong deadline is
+not met while 158 messages a second are decoded on the same task, so it was
+killing connections the server was happy with. `ping_timeout=None` plus a
+30-second idle timeout on the data replaces a deadline measuring our own decode
+loop with one measuring the network. Zero reconnects afterwards.
+
+**Identities were being pruned with positions.** A position expires because a
+ship moves; a name and a hull type do not expire at all. Static data is a
+*six-minute* message against a position every few seconds, so type coverage
+climbs slowly - measured at 3%, 7%, 11%, 15%, 22% over five minutes - and every
+eviction gave part of it back. Positions now expire at 15 minutes and
+identities at six hours.
+
+**The union would have lost colour by adding a source.** The merge rule was
+"freshest wins", per vessel, which is honest as far as it goes. But only 22% of
+stream vessels have a type against **87% on Digitraffic**, and half the
+stream's coverage is the Baltic - so a fully described Finnish ferry was
+overwritten every minute by a bare position from a volunteer receiver that
+heard it a second later. Now the fresher record supplies the *position* and
+anything it does not know is filled from the other: a field loses to a value,
+never to a blank. Confirmed live - **Baltic 55% typed against 7-9% elsewhere**.
+
+### What was extracted, and why the draught proves the seam is right
+
+`providers/ais.py` now holds what is true about the **protocol** - the
+sentinels, the plausibility ceiling, the status and type tables - shared by
+both sources. Field *mapping* deliberately stayed put, and two differences show
+why a "shared converter" would have been worse than a duplicated one:
+
+| | Digitraffic | aisstream |
+|---|---|---|
+| draught | `draught`, **decimetres** (82) | `MaximumStaticDraught`, **metres** (1.9) |
+| ETA | one packed 20-bit integer | a struct of four fields |
+
+A shared draught helper would have to ask which source it was talking to, and a
+helper that asks that is not shared.
+
+### The test suite was quietly calling three third-party services
+
+`create_app` with default settings starts a Digitraffic poller, a CelesTrak
+refresh and a JPL Horizons task, because all three layers default to on -
+correctly, since each costs nothing in a deployment. So every test that built
+an app to assert something about *aircraft* was calling out.
+
+Invisible until ships arrived, because a ship poll fires immediately and then
+every sixty seconds: **the suite went from 156 s to over 400 s, and three ETag
+tests began failing in the full run while passing alone.** Neither symptom named
+the cause, and the second is the worse - a test that fails only in company is a
+test nobody trusts.
+
+The three layers are now off in `conftest` unless a test asks, set as
+environment so an explicit `ship_layer_enabled=True` still wins. **The suite is
+now faster than before this session started: 116 s.** It is the same rule D114
+already had for the aircraft provider, applied to the layers beside it.
+
+### The licence, recorded rather than resolved
+
+aisstream's commercial-use terms were asked about publicly in April 2026 and
+have not been answered. Phone's decision was to build on it as a free public
+service, credit it, and keep `ORBITAL_SHIP_GLOBAL_ENABLED` as the switch to
+throw the day anything here is charged for - the same posture the OpenSky
+non-profit clause already gets. Said here rather than left in a tracker nobody
+reads.
+
+816 backend tests, up from 762.

@@ -27,17 +27,8 @@ import pytest
 
 from app.models import ObjectType
 from app.providers.base import ProviderBadResponse, ProviderRateLimited, ProviderUnavailable
-from app.providers.digitraffic import (
-    MAX_PLAUSIBLE_KNOTS,
-    SHIP_TTL_SECONDS,
-    SHIP_TYPE_BY_TENS,
-    SPECIAL_CRAFT,
-    DigitrafficProvider,
-    _eta,
-    _heading,
-    _ship_type,
-    _speed_ms,
-)
+from app.providers.ais import SHIP_TTL_SECONDS
+from app.providers.digitraffic import DigitrafficProvider, _packed_eta
 
 
 def just_now() -> int:
@@ -104,48 +95,8 @@ def failing(status: int) -> DigitrafficProvider:
     return DigitrafficProvider(client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
 
 
-class TestSentinels:
-    """AIS says "I do not know" with a number that looks like an answer."""
-
-    @pytest.mark.parametrize("knots", [102.3, 102.2, 85.0, 81.0, 79.6])
-    def test_an_impossible_speed_is_no_speed(self, knots: float) -> None:
-        # Every one of these was on the live feed, attached to a real vessel:
-        # 102.3 is the AIS sentinel, 102.2 is the saturation value one below it
-        # that the first version of this let through, and the rest are simply
-        # broken transmitters - one of them on a *moored* tug.
-        assert _speed_ms(knots) is None
-
-    def test_the_fastest_believable_ship_is_still_believed(self) -> None:
-        # The ceiling has to refuse the impossible without refusing fast craft;
-        # a limit that clipped a 50-knot patrol boat would be trading one wrong
-        # answer for another.
-        assert _speed_ms(MAX_PLAUSIBLE_KNOTS) == pytest.approx(30.87, abs=0.01)
-
-    def test_knots_become_metres_per_second(self) -> None:
-        # 12.4 kt is 6.4 m/s. Left in knots the client would dead-reckon every
-        # vessel at twice its real speed (D71).
-        assert _speed_ms(12.4) == pytest.approx(6.38, abs=0.02)
-
-    def test_a_stopped_ship_is_stopped_not_unknown(self) -> None:
-        # Four fifths of this feed is moored or at anchor. Treating zero as
-        # falsy here would erase the speed of most of the layer.
-        assert _speed_ms(0.0) == 0.0
-
-    def test_heading_511_falls_through_to_course(self) -> None:
-        assert _heading({"heading": 511, "cog": 88.0}) == pytest.approx(88.0)
-
-    def test_course_360_is_not_due_north(self) -> None:
-        # 88 vessels were sending it. Read as a bearing it points every one of
-        # them at the North Pole.
-        assert _heading({"heading": 511, "cog": 360.0}) is None
-
-    def test_neither_available_means_no_heading(self) -> None:
-        assert _heading({"heading": 511, "cog": 360.0}) is None
-
-    def test_true_heading_wins_over_course(self) -> None:
-        # The opposite of the aircraft layer's choice, and deliberate: a ship
-        # at anchor swings on its cable and has a heading but no course.
-        assert _heading({"heading": 12, "cog": 200.0}) == pytest.approx(12.0)
+class TestDigitrafficsOwnShape:
+    """The parts that are this source's, not the protocol's."""
 
     def test_a_position_of_91_degrees_is_skipped_not_raised(self) -> None:
         # AIS sends lat 91 / lon 181 for "position not available". The
@@ -155,8 +106,25 @@ class TestSentinels:
         bad["geometry"]["coordinates"] = [181.0, 91.0]
         assert provider([bad])._to_record(bad) is None
 
+    def test_the_packed_eta_bitfield_decodes(self) -> None:
+        # This source packs the four ETA fields into twenty bits; aisstream
+        # sends them as a struct. The unpacking is Digitraffic's business, and
+        # what the numbers mean is shared (D166). 602432 was on the live feed.
+        assert _packed_eta(602432) == "06/09 05:00 UTC"
+
+    def test_an_unset_eta_is_no_eta(self) -> None:
+        assert _packed_eta(0) is None
+
 
 class TestTheRecord:
+    @pytest.mark.anyio
+    async def test_the_draught_is_decimetres_here(self) -> None:
+        # **The conversion that must not be shared.** Digitraffic sends 82 for
+        # 8.2 m; aisstream sends 1.9 for 1.9 m. A common helper would have to
+        # ask which source it was talking to (D166).
+        records = await provider([feature(mmsi=256371000)], [NOUNOU]).fetch()
+        assert records[0].meta["draught"] == "8.2 m"
+
     @pytest.mark.anyio
     async def test_a_vessel_arrives_with_its_name(self) -> None:
         records = await provider([feature(mmsi=256371000)], [NOUNOU]).fetch()
@@ -203,42 +171,6 @@ class TestTheRecord:
         # fifths of them are stationary.
         records = await provider([feature(navStat=5)]).fetch()
         assert records[0].meta["navigationStatus"] == "Moored"
-
-
-class TestShipType:
-    def test_the_tens_digit_carries_the_meaning(self) -> None:
-        assert _ship_type(70) == "Cargo"
-        assert _ship_type(79) == "Cargo"
-        assert _ship_type(80) == "Tanker"
-        assert _ship_type(69) == "Passenger"
-
-    def test_the_thirties_and_fifties_are_spelled_out(self) -> None:
-        # Flattening these to "special craft" would put a tug, a dredger and a
-        # warship in one bucket.
-        assert _ship_type(52) == "Tug"
-        assert _ship_type(33) == "Dredger"
-        assert _ship_type(51) == "Search and rescue"
-
-    def test_no_type_is_none_rather_than_a_guess(self) -> None:
-        assert _ship_type(0) is None
-        assert _ship_type(None) is None
-        assert _ship_type(150) is None
-
-
-class TestEta:
-    def test_the_bitfield_decodes(self) -> None:
-        # 602432 was on the live feed: month 9, day 6, hour 5, minute 0.
-        assert _eta(602432) == "06/09 05:00 UTC"
-
-    def test_an_unset_eta_is_no_eta(self) -> None:
-        # A vessel that has not stated one sends zeroes, which decode to month
-        # zero and day zero - a date that does not exist.
-        assert _eta(0) is None
-
-    def test_the_not_available_hour_is_refused(self) -> None:
-        # Hour 24 and minute 60 are the field's own "unknown", and both are
-        # out of range for a clock.
-        assert _eta((9 << 16) | (6 << 11) | (24 << 6) | 60) is None
 
 
 class TestFailure:
@@ -335,55 +267,6 @@ class TestTheTtl:
         # map of ghosts, where 39% of everything drawn was past the fade.
         assert SHIP_TTL_SECONDS >= 5 * 180
         assert SHIP_TTL_SECONDS < 3600
-
-
-class TestTheVocabularyIsAContract:
-    """The words this provider emits are read by a file in another language.
-
-    ``frontend/src/shipKind.ts`` maps each of them to a colour, and a word it
-    does not know falls through to grey rather than raising - so a vessel type
-    added here would silently lose its colour on the map, and nothing would
-    report it. There is nothing to import across that boundary, so the set is
-    written out on both sides and each side asserts it.
-    """
-
-    def test_the_emitted_words_are_exactly_the_ones_the_map_expects(self) -> None:
-        # Mirrored in frontend/src/shipKind.test.ts as BACKEND_VOCABULARY.
-        # Change one, and this test and its twin both fail - which is the
-        # point: the failure names the other file.
-        assert sorted(set(SHIP_TYPE_BY_TENS.values()) | set(SPECIAL_CRAFT.values())) == [
-            "Anti-pollution",
-            "Cargo",
-            "Diving support",
-            "Dredger",
-            "Fishing",
-            "High speed craft",
-            "Law enforcement",
-            "Medical transport",
-            "Military",
-            "Other",
-            "Passenger",
-            "Pilot vessel",
-            "Pleasure craft",
-            "Port tender",
-            "Sailing",
-            "Search and rescue",
-            "Special craft",
-            "Tanker",
-            "Towing",
-            "Towing (long)",
-            "Tug",
-            "Wing in ground",
-        ]
-
-    def test_every_code_the_feed_can_send_resolves_to_one_of_them(self) -> None:
-        # The tens-digit table covers 20-99 and the named table punches through
-        # it. Anything outside is None, not a word - so this also pins that
-        # codes 0-19 stay unnamed rather than acquiring a guess.
-        vocabulary = set(SHIP_TYPE_BY_TENS.values()) | set(SPECIAL_CRAFT.values())
-        for code in range(0, 100):
-            word = _ship_type(code)
-            assert word is None or word in vocabulary, code
 
 
 class TestTheStaleTailIsDroppedOnTheWayIn:

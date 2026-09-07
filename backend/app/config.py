@@ -294,12 +294,24 @@ class Settings(BaseSettings):
     aisstream_api_key: str = Field(
         default="",
         description=(
-            "Key for aisstream.io, which is the only free source with **global** "
-            "coverage (D165). Empty means the ships layer runs on Digitraffic "
-            "alone, which is the northern Baltic and nothing else - a smaller "
-            "map, not a broken one. Created by signing in to aisstream.io with "
-            "GitHub; it is a WebSocket stream rather than a polled endpoint, so "
-            "it is wired in separately from the provider registry."
+            "Key for aisstream.io, the only free source with **global** coverage "
+            "(D165, D166). Empty means the ships layer runs on Digitraffic alone "
+            "- the northern Baltic and nothing else, which is a smaller map "
+            "rather than a broken one. Created by signing in to aisstream.io "
+            "with GitHub. Measured with a real key: **17,848 vessels in four "
+            "minutes against Digitraffic's 643**, 95% of them named."
+        ),
+    )
+    ship_global_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether the global AIS stream runs alongside the regional feed. On "
+            "by default, but it does nothing without `aisstream_api_key` - so "
+            "the switch that actually turns it on is the key. **This is the one "
+            "to throw the day anything here is charged for**: aisstream's "
+            "commercial-use terms were asked about publicly in April 2026 and "
+            "have not been answered, so it is used on the footing of a free "
+            "public service and credited as one (D166)."
         ),
     )
 

@@ -43,10 +43,40 @@ def _settings_ignore_local_env():
     removed = {k: v for k, v in os.environ.items() if k.startswith("ORBITAL_")}
     for key in removed:
         del os.environ[key]
+    # **The three optional layers are off unless a test asks for them.**
+    #
+    # They default to *on* in `config.py`, correctly: each costs nothing to run
+    # and a deployment should get them without being asked. But `create_app`
+    # with default settings then starts a Digitraffic poller, a CelesTrak
+    # element refresh and a JPL Horizons task - so any test that builds an app
+    # to assert something about aircraft was quietly calling three third-party
+    # services it never mentions.
+    #
+    # It was invisible until ships arrived, because a ship poll fires
+    # immediately and then every sixty seconds: the suite went from 156 s to
+    # over 400 s, and three ETag tests began failing in the full run while
+    # passing alone. Neither symptom named the cause, and the second one is the
+    # worse of the two - a test that fails only in company is a test nobody
+    # trusts.
+    #
+    # Set as environment rather than by editing the defaults, because init
+    # arguments beat the environment in pydantic-settings: a test that says
+    # `ship_layer_enabled=True` still gets it, and a test that says nothing
+    # makes no outbound calls. That is the standing rule this suite already had
+    # for the aircraft provider (D114), applied to the layers beside it.
+    os.environ["ORBITAL_SHIP_LAYER_ENABLED"] = "false"
+    os.environ["ORBITAL_SATELLITE_LAYER_ENABLED"] = "false"
+    os.environ["ORBITAL_LUNAR_LAYER_ENABLED"] = "false"
     try:
         yield
     finally:
         Settings.model_config["env_file"] = original
+        for key in (
+            "ORBITAL_SHIP_LAYER_ENABLED",
+            "ORBITAL_SATELLITE_LAYER_ENABLED",
+            "ORBITAL_LUNAR_LAYER_ENABLED",
+        ):
+            os.environ.pop(key, None)
         os.environ.update(removed)
 
 

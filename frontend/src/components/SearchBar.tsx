@@ -209,7 +209,7 @@ export function SearchBar() {
               {layerId === 'satellite' &&
                 'No match. Try a satellite name or its catalogue number.'}
               {layerId === 'ship' &&
-                'No match. Ships are only findable while the backend is tracking them, and this feed covers the Baltic.'}
+                'No match. Ships are only findable while the backend is tracking them, and AIS is received from the shore — the open ocean is not covered.'}
               {layerId === 'aircraft' &&
                 'No match. Aircraft are only findable while the backend is tracking them.'}
             </li>
