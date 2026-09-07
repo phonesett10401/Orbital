@@ -43,6 +43,7 @@ that tier under all configurations.
 | Bhone Pyae Hein | 6708381 | System Analysis, Co-Developer |
 | Han Phyo Htet | 6708463 | Quality Assurance, Business Analysis, Co-Tester |
 | Nyan Lin Htet | 6708397 | Technical Engineer, Tester |
+| Pyae Phyo Maung | 6708170 | To be confirmed |
 
 ## 3.2 Functional Requirements
 

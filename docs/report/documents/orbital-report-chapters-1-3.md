@@ -6,6 +6,7 @@ author:
   - "Bhone Pyae Hein (6708381)"
   - "Han Phyo Htet (6708463)"
   - "Nyan Lin Htet (6708397)"
+  - "Pyae Phyo Maung (6708170)"
 date: "CSC480 --- 7 September 2026"
 lang: en-GB
 ---
@@ -192,7 +193,7 @@ on live services before being designed around.
 | Hosting during development | 0 |
 | Total | 0 |
 
-The real cost is labour: four students over one semester.
+The real cost is labour: five students over one semester.
 
 ### The quota is the budget
 
@@ -385,6 +386,7 @@ that tier under all configurations.
 | Bhone Pyae Hein | 6708381 | System Analysis, Co-Developer |
 | Han Phyo Htet | 6708463 | Quality Assurance, Business Analysis, Co-Tester |
 | Nyan Lin Htet | 6708397 | Technical Engineer, Tester |
+| Pyae Phyo Maung | 6708170 | To be confirmed |
 
 ## 3.2 Functional Requirements
 

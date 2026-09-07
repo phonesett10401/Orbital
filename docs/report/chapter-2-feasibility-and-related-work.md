@@ -54,7 +54,7 @@ on live services before being designed around.
 | Hosting during development | 0 |
 | Total | 0 |
 
-The real cost is labour: four students over one semester.
+The real cost is labour: five students over one semester.
 
 ### The quota is the budget
 
