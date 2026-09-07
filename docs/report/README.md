@@ -28,14 +28,19 @@ not artifacts nobody needs to keep.
 
 | File | |
 |---|---|
-| `Orbital-Report-Chapters-1-3.docx` | Word, 28 pages |
+| `Orbital-Report-Chapters-1-3.docx` | Word, 20 pages, black and white |
 | `Orbital-Report-Chapters-1-3.pdf` | The same document, exported by Word itself |
 
 **Rebuild** with `python docs/report/build_report.py` after editing any chapter.
 The pipeline is markdown → `.docx` via pandoc, then `.docx` → `.pdf` via Word,
 so the PDF is the *same document* rather than a second rendering of the source.
 
-Two things the build had to correct, noted because they are silent failures:
+The document is deliberately plain: black headings and text throughout, no
+section rules, and no discursive asides — it is written to be presented in ten
+to fifteen minutes rather than read at length. Tables keep a header rule and a
+closing rule, which aid scanning.
+
+Two things the build had to correct, because both fail silently:
 
 - **`\newpage` does nothing for a Word target.** It is a LaTeX command; pandoc
   dropped it without an error and without leaving literal text, so every chapter
