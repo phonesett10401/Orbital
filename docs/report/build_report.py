@@ -11,7 +11,9 @@ import subprocess
 
 REPO = pathlib.Path(r"C:\Orbital")
 SRC = REPO / "docs" / "report"
-OUT = SRC / "build"
+# Not `build/`: .gitignore excludes that as compiled output, and these are
+# documents for submission rather than artifacts nobody needs to keep.
+OUT = SRC / "documents"
 OUT.mkdir(parents=True, exist_ok=True)
 
 # A page break Word honours.

@@ -22,7 +22,9 @@ already exists in `docs/decisions.md`, `docs/architecture.md`,
 
 ## Built documents
 
-`build/` holds the two deliverables and the script that makes them:
+`documents/` holds the two deliverables. It is deliberately not called `build/`,
+which `.gitignore` excludes as compiled output — these are files for submission,
+not artifacts nobody needs to keep.
 
 | File | |
 |---|---|
