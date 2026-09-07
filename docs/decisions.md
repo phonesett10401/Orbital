@@ -9717,4 +9717,32 @@ thing actually wrong was the dev-only diagnostics overlay: anchored 8 px from
 the right with a 380 px max-width, it started at x = -13 on a phone and covered
 the layer toggle.
 
+### Postscript: where the vessel types settle
+
+The open question from D166 - whether type coverage plateaus low - measured
+over **fifty-four minutes** against the running backend:
+
+| | 12 min | 54 min |
+|---|---|---|
+| N Europe | 47% | **67%** |
+| SE Asia | 42% | 62% |
+| N Atlantic | 36% | 57% |
+| Mediterranean | 36% | 57% |
+| US / Canada | 34% | 55% |
+| S America | 35% | 53% |
+| Australia / NZ | 33% | 52% |
+| E Asia | 27% | 47% |
+| **global** | **41%** | **62%** |
+
+Still climbing at the end - 59% to 62% over the last fifteen minutes - so it
+approaches something near three quarters rather than stopping at a half. The
+vessel count was flat at ~28,000 throughout, so this is identity accumulating
+rather than the population changing.
+
+**And it is not a European effect.** The spread from best to worst region is
+twenty points, with SE Asia (62%) above the Mediterranean (57%): the ordering
+tracks receiver density, which is the same thing the vessel counts show. The
+six-hour identity TTL is what makes it work - a vessel gets sixty chances at a
+six-minute message instead of two.
+
 823 backend tests, 1,019 frontend.
