@@ -362,3 +362,56 @@ class TestStatus:
         assert status["vessels"] == 1
         assert status["messages"] >= 2
         await provider.aclose()
+
+
+# AIS message 19: a position report that *also* carries a name, a ship type and
+# hull dimensions. Real, off the live stream.
+EXTENDED_CLASS_B = {
+    "MessageType": "ExtendedClassBPositionReport",
+    "MetaData": {"MMSI": 477996378, "ShipName": "NEW LEGEND 18"},
+    "Message": {
+        "ExtendedClassBPositionReport": {
+            "MessageID": 19,
+            "Valid": True,
+            "Cog": 261.7,
+            "Sog": 0,
+            "TrueHeading": 511,
+            "Latitude": 22.29879833333333,
+            "Longitude": 113.94418999999999,
+            "Name": "NEW LEGEND 18",
+            "Type": 60,
+            "Dimension": {"A": 10, "B": 5, "C": 2, "D": 2},
+        }
+    },
+}
+
+
+class TestMessageNineteenIsBothThings:
+    """A position report that is also a static report.
+
+    The first version listed it as a position type and used `elif`, so every
+    vessel that identifies itself this way stayed grey for ever. Found by
+    asking which message types carry a `Type` field rather than by re-reading
+    the list: 17 in 160 seconds, every one carrying it, every one ignored
+    (D166).
+    """
+
+    @pytest.mark.anyio
+    async def test_its_position_is_taken(self) -> None:
+        provider = await provider_with([EXTENDED_CLASS_B])
+        record = (await provider.fetch())[0]
+        assert record.lat == pytest.approx(22.2988, abs=0.001)
+        await provider.aclose()
+
+    @pytest.mark.anyio
+    async def test_its_type_is_taken_too(self) -> None:
+        # The whole defect. A vessel reporting only this way was drawn grey.
+        provider = await provider_with([EXTENDED_CLASS_B])
+        assert (await provider.fetch())[0].model == "Passenger"
+        await provider.aclose()
+
+    @pytest.mark.anyio
+    async def test_its_dimensions_are_taken_too(self) -> None:
+        provider = await provider_with([EXTENDED_CLASS_B])
+        assert (await provider.fetch())[0].meta["length"] == "15 m"
+        await provider.aclose()

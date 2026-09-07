@@ -110,7 +110,23 @@ POSITION_TYPES = ("PositionReport", "StandardClassBPositionReport", "ExtendedCla
 #: `ShipStaticData` is Class A and carries everything - name, IMO, destination,
 #: draught, dimensions. `StaticDataReport` is the Class B equivalent and is
 #: split into two parts, of which part B holds the type and dimensions.
-STATIC_TYPES = ("ShipStaticData", "StaticDataReport")
+#:
+#: **`ExtendedClassBPositionReport` is in both lists, and that is the point.**
+#: AIS message 19 is a position report that also carries a name, a ship type
+#: and hull dimensions - so treating it as a position only, which the first
+#: version did, threw away the identity of every vessel that sends it. Found by
+#: asking which message types carry a type field rather than by reading the
+#: list back: 17 of them in 160 seconds, every one carrying `Type`, every one
+#: ignored.
+#:
+#: It is rare enough that it is not the reason coverage starts low - that is
+#: simply how often static data is sent - but a vessel that reports *only* this
+#: way would have stayed grey for ever.
+STATIC_TYPES = (
+    "ShipStaticData",
+    "StaticDataReport",
+    "ExtendedClassBPositionReport",
+)
 
 #: Seconds without a single message before the connection is assumed dead.
 #:
@@ -283,9 +299,11 @@ class AisStreamProvider(Provider):
             self._static.setdefault(mmsi, {})["name"] = name
             self._static_at[mmsi] = time.monotonic()
 
+        # **Not `elif`.** One message type is in both lists: AIS 19 is a
+        # position report that also names the vessel and gives its type.
         if kind in POSITION_TYPES:
             self._absorb_position(mmsi, body, metadata)
-        elif kind in STATIC_TYPES:
+        if kind in STATIC_TYPES:
             self._absorb_static(mmsi, body)
 
     def _absorb_position(self, mmsi: int, body: dict, metadata: dict) -> None:

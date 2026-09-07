@@ -9522,4 +9522,58 @@ throw the day anything here is charged for - the same posture the OpenSky
 non-profit clause already gets. Said here rather than left in a tracker nobody
 reads.
 
-816 backend tests, up from 762.
+### Verifying the vessel type, which Europe alone could not answer
+
+The first pass measured type coverage globally and split it only into "Baltic"
+and "elsewhere", which is exactly the mistake D85 records for the adsb.lol
+global sweep: four sample points, all inside the covered half, reading as
+"one circle is enough". Phone said so, and the second pass measured eleven
+regions once a minute for twelve minutes.
+
+**The answer is that types are not a European phenomenon.** Coverage climbs at
+much the same rate everywhere - the population stabilised at ~29,000 vessels
+while the percentage kept rising about a point a minute in every box:
+
+| region | 3 min | 12 min |
+|---|---|---|
+| N Europe / Baltic | 37% | **47%** |
+| W Africa | 35% | 46% |
+| SE Asia | 28% | 42% |
+| Mediterranean | 28% | 36% |
+| N Atlantic | 26% | 36% |
+| S America | 26% | 35% |
+| US / Canada | 25% | 34% |
+| Australia / NZ | 24% | 33% |
+| E Asia | 18% | 27% |
+| **global** | **32%** | **41%** |
+
+Europe leads the lowest region by thirteen points, and Digitraffic's joined
+metadata explains at most four of them - it covers ~640 vessels of the 14,544
+in that box. The rest is receiver density, which is the same thing the vessel
+*counts* already show. **It is a time effect, not a place effect.**
+
+### Why it starts low, and why the fix was the identity TTL
+
+A position is transmitted every few seconds and a vessel's static message every
+six minutes, measured at **26.5 static against 114 positions per second**. A
+receiver therefore gets dozens of chances to hear where a ship is and one
+chance every six minutes to hear what it is, so type coverage cannot start high
+however good the network is.
+
+That is what makes the identity TTL load-bearing rather than a tidy-up: over
+six hours a vessel gets around sixty chances instead of two, and coverage keeps
+climbing long after the vessel count has settled. **It had not plateaued at
+twelve minutes**, which is worth saying rather than rounding off.
+
+### One real gap, found by asking rather than re-reading
+
+`ExtendedClassBPositionReport` - AIS message 19 - is a position report that
+**also carries a name, a ship type and hull dimensions**. It was in the position
+list, matched by an `elif`, and its identity was thrown away every time. Found
+by asking the live stream which message types carry a type field: 17 in 160
+seconds, every one carrying `Type`, every one ignored.
+
+It is rare enough not to be the reason coverage starts low, but a vessel that
+identifies itself *only* that way would have stayed grey for ever.
+
+819 backend tests, up from 762.
