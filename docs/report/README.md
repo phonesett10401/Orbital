@@ -20,6 +20,29 @@ Chapters 4–8 are largely assembly rather than research: much of their content
 already exists in `docs/decisions.md`, `docs/architecture.md`,
 `docs/test-plan.md` and `docs/data-contract.md`.
 
+## Built documents
+
+`build/` holds the two deliverables and the script that makes them:
+
+| File | |
+|---|---|
+| `Orbital-Report-Chapters-1-3.docx` | Word, 28 pages |
+| `Orbital-Report-Chapters-1-3.pdf` | The same document, exported by Word itself |
+
+**Rebuild** with `python docs/report/build_report.py` after editing any chapter.
+The pipeline is markdown → `.docx` via pandoc, then `.docx` → `.pdf` via Word,
+so the PDF is the *same document* rather than a second rendering of the source.
+
+Two things the build had to correct, noted because they are silent failures:
+
+- **`\newpage` does nothing for a Word target.** It is a LaTeX command; pandoc
+  dropped it without an error and without leaving literal text, so every chapter
+  ran on from the bottom of the previous page. Real page breaks are raw
+  OpenXML.
+- **The use case diagram wrapped inside its own boxes** at pandoc's default
+  11 pt code font, destroying the ASCII alignment. The reference document sets
+  it to 8 pt; the widest line is 73 characters.
+
 ## Where the facts come from
 
 Every figure in these chapters was taken from the repository or measured against
