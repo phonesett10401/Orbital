@@ -238,17 +238,18 @@ describe('layers', () => {
     expect(new Set(resources).size).toBe(resources.length);
   });
 
-  it('the ships layer points at its own endpoint and is not viewport-scoped', () => {
-    // This was a second copy of the exact-set assertion above, left over from
-    // when the per-renderer filter was removed (D104) - it passed and failed
-    // in lockstep with it and so tested nothing the other did not. Re-aimed at
-    // the ships layer's own wiring, which nothing else covers: `resource` is
-    // the entire connection between the toggle and the backend, and
-    // `viewportScoped` decides whether a second bbox request is sent for a
-    // feed small enough that it would fetch the same bytes twice (D165).
+  it('the ships layer points at its own endpoint and is scoped to the view', () => {
+    // `resource` is the entire connection between the toggle and the backend.
+    //
+    // **`viewportScoped` was false and that was a defect.** It was sound while
+    // the feed was 916 Baltic vessels, which fit under the 2,000 thinning cap
+    // whole (D165). With 29,000 an unbounded request is thinned across the
+    // *whole planet*: measured over the North Sea at zoom 7, the box held
+    // 9,159 vessels and the map drew **37**. Nothing failed - the sea just
+    // looked empty (D167).
     const ships = LAYERS.find((layer) => layer.id === 'ship');
     expect(ships?.resource).toBe('ships');
-    expect(ships?.viewportScoped).toBe(false);
+    expect(ships?.viewportScoped).toBe(true);
   });
 
 

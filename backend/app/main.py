@@ -278,11 +278,28 @@ def create_app(
         allow_headers=["*"],
     )
 
-    # A thinned 2000-object response is ~328 KB of extremely repetitive JSON --
-    # the same nine keys two thousand times -- which gzips to about a fifth of
-    # that. At a ten-second client poll that is the difference between 1.9 MB
-    # and 0.4 MB per minute (D38).
-    app.add_middleware(GZipMiddleware, minimum_size=settings.gzip_min_bytes)
+    # A thinned 2000-object response is ~366 KB of extremely repetitive JSON --
+    # the same nine keys two thousand times -- which gzips to about a
+    # fifteenth of that. At a ten-second client poll that is the difference
+    # between 2.1 MB and 0.14 MB per minute (D38).
+    #
+    # **Level 3, not the library's default of 9.** Measured on exactly that
+    # response:
+    #
+    # | level | size | cost |
+    # |---|---|---|
+    # | 1 | 35.7 KB | 0.21 ms |
+    # | **3** | **24.5 KB** | **0.74 ms** |
+    # | 6 | 24.1 KB | 1.59 ms |
+    # | 9 | 23.0 KB | 5.39 ms |
+    #
+    # Nine buys 1.5 KB over three and charges 4.6 ms for it - on a response
+    # that is already a fifteenth of its original size, against a backend whose
+    # whole request is 62 ms. Three is where the curve flattens: everything
+    # after it is paying milliseconds for bytes that were already gone (D167).
+    app.add_middleware(
+        GZipMiddleware, minimum_size=settings.gzip_min_bytes, compresslevel=3
+    )
 
     app.include_router(auth.router)
     app.include_router(moon.router)

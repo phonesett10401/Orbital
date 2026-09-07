@@ -119,6 +119,7 @@ import {
   shipLayers,
 } from './shipLayer';
 import { createShipIconCanvas, createShipUnknownIconCanvas } from './shipSprite';
+import { rebuildIntervalMs } from './refreshRate';
 import { createBasemapControl } from './basemapControl';
 import {
   COVERAGE_FILL_LAYER,
@@ -808,6 +809,19 @@ export function PlanetView() {
           // Positions are interpolated between polls, so the source is rewritten
           // on a frame loop rather than only when a poll lands -- the same
           // reason the globe rebuilt its marker buffers every frame.
+          //
+          // **But not on every frame, which was costing more than the picture
+          // was worth.** Measured at zoom 7 with 2,000 vessels, rebuilding
+          // every frame cost 7.4 ms at the median and 43 ms at the tail: p99
+          // frame time 55.1 ms against 12.4 ms with the rebuild removed. At
+          // that zoom a pixel is 750 m, so a ship crosses one every two
+          // minutes - almost all of that work was animating motion below the
+          // resolution of the screen. `refreshRate.ts` derives the interval
+          // from the view instead (D167).
+          let lastBuiltAt = 0;
+          let lastObjects: unknown = null;
+          let lastSelected: string | null = null;
+          let lastLayerId: string | null = null;
           // **No memo of what was last set here, deliberately.** There used to
           // be two, and they caused the defect D154 fixes: `applyBody` turns
           // every Earth layer back on when the camera returns from the solar
@@ -831,26 +845,62 @@ export function PlanetView() {
             const activeLayerId = state.activeLayer.id;
             const satelliteMode = activeLayerId === 'satellite';
             const shipMode = activeLayerId === 'ship';
-            const objects = Array.from(state.objects.values());
+
+            // **What is not motion rebuilds immediately.** A poll landing, a
+            // selection changing or the layer switching are all things a
+            // reader caused or is waiting for, and making any of them wait out
+            // an interpolation interval would read as lag on a click. Only
+            // *movement* is rate-limited, because only movement is the thing
+            // the interval is measuring.
+            const changed =
+              state.objects !== lastObjects ||
+              state.selectedId !== lastSelected ||
+              activeLayerId !== lastLayerId;
+            const now = performance.now();
+            const due =
+              now - lastBuiltAt >=
+              rebuildIntervalMs(
+                state.activeLayer.id,
+                map?.getZoom() ?? 0,
+                map?.getCenter().lat ?? 0,
+              );
+            // **A flag, not an early return.** The first version of this
+            // returned here, which would have re-introduced D154 and D162 in
+            // one line: the visibility management further down *must* run
+            // every frame, because `applyBody` is a second writer that can
+            // turn Earth layers back on at any moment, and reading the style
+            // once a second instead of once a frame is how receiver coverage
+            // ended up drawn over Mars. Only the source rebuilds are rated.
+            const rebuild = changed || due;
+            if (rebuild) {
+              lastBuiltAt = now;
+              lastObjects = state.objects;
+              lastSelected = state.selectedId;
+              lastLayerId = activeLayerId;
+            }
+
+            const objects = rebuild ? Array.from(state.objects.values()) : [];
 
             // Only the active layer is fed. The other is emptied rather than
             // left holding its last frame: a stale aircraft under a satellite
             // view is a claim that the aircraft is still there.
-            (source as { setData: (data: unknown) => void }).setData(
-              aircraftFeatures(
-                activeLayerId === 'aircraft' ? objects : [],
-                Date.now(),
-                state.selectedId,
-              ),
-            );
+            if (rebuild) {
+              (source as { setData: (data: unknown) => void }).setData(
+                aircraftFeatures(
+                  activeLayerId === 'aircraft' ? objects : [],
+                  Date.now(),
+                  state.selectedId,
+                ),
+              );
+            }
             const satelliteSource = map?.getSource(SATELLITE_SOURCE);
-            if (satelliteSource && 'setData' in satelliteSource) {
+            if (rebuild && satelliteSource && 'setData' in satelliteSource) {
               (satelliteSource as { setData: (data: unknown) => void }).setData(
                 satelliteFeatures(satelliteMode ? objects : [], state.selectedId),
               );
             }
             const shipSource = map?.getSource(SHIP_SOURCE);
-            if (shipSource && 'setData' in shipSource) {
+            if (rebuild && shipSource && 'setData' in shipSource) {
               (shipSource as { setData: (data: unknown) => void }).setData(
                 shipFeatures(shipMode ? objects : [], Date.now()),
               );
@@ -907,8 +957,12 @@ export function PlanetView() {
             // from the same interpolated position, so the two cannot disagree
             // about where the aircraft is - which is the whole defect this
             // fixes (D72).
+            // On the same schedule as the marker it joins, from the same
+            // interpolated position - the two disagreeing about where the
+            // aircraft is *is* the defect D72 fixed, so this is gated by the
+            // same flag rather than left to run free.
             const leader = map?.getSource(LEADER_SOURCE);
-            if (leader && 'setData' in leader) {
+            if (rebuild && leader && 'setData' in leader) {
               const selected = state.selectedId ? state.objects.get(state.selectedId) : null;
               (leader as { setData: (data: unknown) => void }).setData(
                 leaderFeature(

@@ -51,12 +51,20 @@ import { toRenderable } from '../interpolate';
 export const LAYERS: LayerDescriptor[] = [
   { id: 'aircraft', label: 'Aircraft', resource: 'aircraft', viewportScoped: true },
   { id: 'satellite', label: 'Satellites', resource: 'satellites', viewportScoped: false },
-  // Not viewport-scoped, and for a different reason from satellites. Theirs is
-  // that a satellite is nowhere near where it appears to be. This one is
-  // simply small: the whole feed is about 900 vessels in 37 KB, so a second
-  // request for the part of it under the camera would fetch the same bytes
-  // twice (D165).
-  { id: 'ship', label: 'Ships', resource: 'ships', viewportScoped: false },
+  // **Viewport-scoped, and it was not, and that was a real defect.**
+  //
+  // D165 set this false on sound reasoning that expired: the feed was 916
+  // Baltic vessels in 37 KB, which fits under the 2,000 thinning cap whole, so
+  // a second request for the part under the camera would have fetched the same
+  // bytes twice. Adding the global stream made it 29,000 (D166), and an
+  // unbounded request is then thinned to 2,000 spread across the *entire
+  // planet*.
+  //
+  // Measured over the North Sea at zoom 7 - the busiest water in the world -
+  // the box holds **9,159 vessels and the map drew 37**. Scoped to the
+  // viewport the same request returns the full 2,000. Nothing failed and no
+  // test noticed; the sea simply looked empty (D167).
+  { id: 'ship', label: 'Ships', resource: 'ships', viewportScoped: true },
 ];
 
 

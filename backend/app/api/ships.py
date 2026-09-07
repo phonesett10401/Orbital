@@ -120,7 +120,16 @@ def list_ships(
     """
     held = _store(store)
     box = _parse_bbox(bbox)
-    cap = limit or settings.max_objects_per_response
+    # **Clamped, not trusted.** `limit` had no ceiling, so `?limit=999999999`
+    # answered 200 and serialised the entire store - measured at 472 ms for
+    # 29,000 vessels, on a single-threaded event loop, which stalls every other
+    # request and the poller behind it. One query string was a denial of
+    # service (D167).
+    #
+    # Clamped rather than refused with a 422: the parameter means "at most this
+    # many", the configured cap means "and never more than this", and a client
+    # asking for more than exists is not making a mistake worth an error.
+    cap = min(limit or settings.max_objects_per_response, settings.max_objects_per_response)
 
     etag = compute_etag(
         version=held.updates_applied,

@@ -288,3 +288,42 @@ class TestItTouchesNothingElse:
         ships = {o["id"] for o in client.get("/api/ships").json()["objects"]}
         aircraft = {o["id"] for o in client.get("/api/aircraft").json()["objects"]}
         assert not (ships & aircraft)
+
+
+class TestTheLimitIsClamped:
+    """One query string used to be a denial of service.
+
+    `limit` had no ceiling, so `?limit=999999999` answered 200 and serialised
+    the whole store - 472 ms for 29,000 vessels, on a single-threaded event
+    loop, with every other request and the poller waiting behind it (D167).
+    """
+
+    def test_an_enormous_limit_is_capped_rather_than_obeyed(self, client) -> None:
+        # **Asserted through the ETag, because the fixture is three vessels.**
+        # The obvious test - `returned <= the cap` - passes whether or not the
+        # clamp exists when there is nothing like a capful of data, and
+        # mutation testing said exactly that: removing the clamp failed
+        # nothing. The tag hashes the *effective* cap, so an absurd limit
+        # producing the same tag as the configured one is the clamp itself
+        # being observed.
+        capped = Settings().max_objects_per_response
+        huge = client.get("/api/ships", params={"limit": 999_999_999})
+        exact = client.get("/api/ships", params={"limit": capped})
+        assert huge.headers["etag"] == exact.headers["etag"]
+
+    def test_a_limit_below_the_cap_still_changes_the_representation(self, client) -> None:
+        # The guard on the guard: if every limit produced the same tag, the
+        # test above would pass for the wrong reason.
+        capped = Settings().max_objects_per_response
+        small = client.get("/api/ships", params={"limit": 2})
+        exact = client.get("/api/ships", params={"limit": capped})
+        assert small.headers["etag"] != exact.headers["etag"]
+
+    def test_it_answers_rather_than_refusing(self, client) -> None:
+        # Clamped, not 422: the parameter means "at most this many", and a
+        # client asking for more than exists is not making a mistake.
+        assert client.get("/api/ships", params={"limit": 999_999_999}).status_code == 200
+
+    def test_a_limit_under_the_cap_is_still_honoured(self, client) -> None:
+        # The clamp must not become "always serve the maximum".
+        assert client.get("/api/ships", params={"limit": 2}).json()["returned"] == 2

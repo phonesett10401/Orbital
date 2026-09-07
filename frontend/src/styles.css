@@ -1545,7 +1545,11 @@ body {
   top: 52px;
   right: 8px;
   z-index: 3;
-  max-width: 380px;
+  /* `380px` alone runs off the left edge of a phone: anchored 8px from the
+     right of a 375px viewport it started at x = -13 and covered the layer
+     toggle. Dev-only, so it was never a production defect - but a readout that
+     hides the control you are trying to press is a bad instrument (D167). */
+  max-width: min(380px, calc(100vw - 16px));
   padding: 6px 9px;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.72);

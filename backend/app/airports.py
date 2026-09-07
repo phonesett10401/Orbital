@@ -135,7 +135,7 @@ def origin_of(track: "Iterable[object]") -> Airport | None:
 
 
 @lru_cache(maxsize=1)
-def _searchable() -> tuple[tuple[str, str, str, str, dict], ...]:
+def _searchable() -> tuple[tuple[str, str, str, str, str, str, dict], ...]:
     """Every airport with its match keys pre-upper-cased.
 
     Built once. Upper-casing 28,291 rows on each keystroke is the kind of work
@@ -148,7 +148,27 @@ def _searchable() -> tuple[tuple[str, str, str, str, dict], ...]:
     rows = []
     for code, row in airportsdata.load("ICAO").items():
         iata = (row["iata"] or "").upper()
-        rows.append((code.upper(), iata, (row["name"] or "").upper(), (row["city"] or "").upper(), row))
+        name = (row["name"] or "").upper()
+        city = (row["city"] or "").upper()
+        # **Word boundaries are precomputed here, not tested per keystroke.**
+        # The tier-2 check asks whether the query starts any word in the name
+        # or the city, and it did that with `haystack.split()` - allocating a
+        # word list for 28,291 rows on every keystroke, measured at **17.9 ms
+        # of a 25 ms scan**. Normalising the whitespace and prefixing a space
+        # turns the same question into one substring test: a word starts where
+        # a space precedes it, and the leading space makes that true of the
+        # first word too (D167).
+        rows.append(
+            (
+                code.upper(),
+                iata,
+                name,
+                city,
+                " " + " ".join(name.split()),
+                " " + " ".join(city.split()),
+                row,
+            )
+        )
     return tuple(rows)
 
 
@@ -169,13 +189,24 @@ def search_airports(query: str, *, limit: int = 8) -> list[Airport]:
     if not needle:
         return []
 
-    tiers: tuple[list[tuple[int, Airport]], ...] = ([], [], [], [])
-    for icao, iata, name, city, row in _searchable():
+    # **Ranked on the raw rows, and only the survivors become models.**
+    #
+    # This used to build an `Airport` for every match before sorting. A search
+    # for "A" matches **27,917 of the 28,291 airports**, so it constructed
+    # 27,917 pydantic models and sorted them to return eight - measured at
+    # **136 ms**, which is most of what the search endpoint costs and is paid
+    # on *every keystroke*, on the single-threaded event loop, while the poller
+    # and every other request wait behind it (D167).
+    #
+    # The tiers hold `(has_no_iata, icao, row)` instead. That is exactly the
+    # sort key the models were being ordered by, so the result is unchanged.
+    tiers: tuple[list[tuple[int, str, dict]], ...] = ([], [], [], [])
+    for icao, iata, name, city, name_words, city_words, row in _searchable():
         if needle in (icao, iata):
             tier = 0
         elif icao.startswith(needle) or iata.startswith(needle):
             tier = 1
-        elif _starts_a_word(city, needle) or _starts_a_word(name, needle):
+        elif _starts_a_word(city_words, needle) or _starts_a_word(name_words, needle):
             tier = 2
         elif needle in name or needle in city:
             tier = 3
@@ -189,31 +220,48 @@ def search_airports(query: str, *, limit: int = 8) -> list[Airport]:
                 # you meant" available here, and without it a search for London
                 # answers with two private airfields before Heathrow.
                 0 if iata else 1,
-                Airport(
-                    icao=icao,
-                    name=row["name"],
-                    lat=row["lat"],
-                    lon=row["lon"],
-                    country=row["country"] or None,
-                    municipality=row["city"] or None,
-                    iata=row["iata"] or None,
-                ),
+                icao,
+                row,
             )
         )
 
-    ranked = [
-        airport
-        for tier in tiers
-        for _, airport in sorted(tier, key=lambda pair: (pair[0], pair[1].icao))
+    # The ICAO string is carried through rather than read back off the row:
+    # `_searchable` upper-cases the dictionary *key*, which is what the old
+    # sort ordered by and what the result carried, and that is not necessarily
+    # the same text as the row's own `icao` field.
+    chosen: list[tuple[str, dict]] = []
+    for tier in tiers:
+        if len(chosen) >= limit:
+            break
+        tier.sort()
+        chosen.extend((icao, row) for _, icao, row in tier[: limit - len(chosen)])
+
+    return [
+        Airport(
+            icao=icao,
+            name=row["name"],
+            lat=row["lat"],
+            lon=row["lon"],
+            country=row["country"] or None,
+            municipality=row["city"] or None,
+            iata=row["iata"] or None,
+        )
+        for icao, row in chosen
     ]
-    return ranked[:limit]
 
 
-def _starts_a_word(haystack: str, needle: str) -> bool:
-    """Whether ``needle`` begins ``haystack`` or any word inside it.
+def _starts_a_word(prepared: str, needle: str) -> bool:
+    """Whether ``needle`` begins any word in a prepared haystack.
 
     Matching only the whole string would rank an airfield literally named
     "Heathrow" above London Heathrow, whose name begins with "London". People
     search for the distinctive word, wherever it sits in the name.
+
+    ``prepared`` comes from :func:`_searchable`: whitespace collapsed to single
+    spaces and one space prepended, so that "starts a word" is exactly "has a
+    space before it" and the first word is not a special case. Written that way
+    because the obvious form - ``any(w.startswith(needle) for w in
+    haystack.split())`` - allocated a word list per row per keystroke and cost
+    17.9 ms of a 25 ms scan (D167).
     """
-    return any(word.startswith(needle) for word in haystack.split())
+    return f" {needle}" in prepared

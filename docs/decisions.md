@@ -9577,3 +9577,144 @@ It is rare enough not to be the reason coverage starts low, but a vessel that
 identifies itself *only* that way would have stayed grey for ever.
 
 819 backend tests, up from 762.
+
+---
+
+## D167 - Where the time actually went
+
+Phone asked for a system review, high-end latency, and a bug hunt. Measured
+first in every case, and two of the things that looked most worth optimising
+turned out not to be.
+
+### The frame loop was rebuilding a picture nobody could see
+
+The map rewrote every layer's GeoJSON **on every frame** so interpolated
+positions moved smoothly (D71). At zoom 7 with 2,000 vessels:
+
+| | p50 | p90 | p99 |
+|---|---|---|---|
+| rebuilding every frame | 11.6 ms | 18.2 ms | **55.1 ms** |
+| not rebuilding at all | 4.2 ms | 4.9 ms | 12.4 ms |
+
+7.4 ms of every frame at the median and 43 ms at the tail - 86 fps against 238,
+and a p99 long enough to be seen as a stutter.
+
+**Almost all of it was invisible.** At zoom 7 a pixel is 750 m, so a ship
+making 6 m/s crosses one **every two minutes**. Two thousand features were
+rebuilt and re-uploaded eighty-nine times a second to animate that.
+
+`refreshRate.ts` derives the interval from the view instead: the time in which
+the fastest thing on the layer travels **half a pixel**, floored at one frame
+and capped at a second. Zoomed in it still rebuilds every frame, because there
+it earns it - at zoom 14 an aircraft crosses a pixel in 20 ms.
+
+Measured after: **355 rebuilds in 4 s became 4**, and p99 went 55.1 ms to
+**5.9 ms**.
+
+**One trap, caught before it landed.** The first version put an early `return`
+in the tick. That skips the visibility management below it, which is precisely
+what D154 and D162 exist to keep running every frame - `applyBody` is a second
+writer, and reading the style once a second instead of once a frame is how
+receiver coverage ended up drawn over Mars. It is a flag now; only the source
+rebuilds are rated, and the leader line is rated with them because a leader
+drawn from a different position than its marker *is* the defect D72 fixed.
+
+### The ships layer was drawing 37 vessels where there were 9,159
+
+`viewportScoped: false` was sound in D165: the feed was 916 Baltic vessels,
+which fits under the 2,000 thinning cap whole, so a second request for the part
+under the camera would have fetched the same bytes twice. **The global stream
+made it 29,000** (D166), and an unbounded request is then thinned across the
+entire planet.
+
+Measured over the North Sea at zoom 7 - the busiest water in the world - the
+box held 9,159 vessels and the map drew **37**. Nothing failed and no test
+noticed; the sea just looked empty. Scoped to the viewport: **1,984 drawn.**
+
+A decision that was right when it was made and wrong two sessions later, with
+nothing in between to say so.
+
+### One query string was a denial of service
+
+`limit` had no ceiling. `?limit=999999999` answered 200 and serialised the
+whole store - **472 ms for 29,000 vessels**, on a single-threaded event loop,
+with every other request and the poller waiting behind it. Clamped in all three
+routers to the configured cap.
+
+Clamped rather than refused with a 422: the parameter means "at most this
+many", the configured cap means "and never more than this", and a client asking
+for more than exists is not making a mistake worth an error.
+
+### Search cost 132 ms per keystroke, in two layers
+
+`/api/search?q=a` measured **311 ms**, and it fires on every keystroke behind a
+250 ms debounce. Two causes, both in the airport table:
+
+**It built a model for every match.** "A" matches **27,917 of 28,291
+airports**, and the code constructed 27,917 pydantic `Airport` objects and
+sorted them to return eight. Ranking now happens on the raw rows and only the
+survivors become models: 132 ms -> 27 ms.
+
+**It split every string on every keystroke.** The tier-2 check asks whether the
+query begins any word in the name or city, and did it with `haystack.split()` -
+28,291 word lists allocated per search, **17.9 ms of a 25 ms scan**.
+`_searchable` is built once, so the whitespace is normalised and a space
+prepended there; "starts a word" is then one substring test. 27 ms -> **11.7
+ms**.
+
+Together: **132 ms -> 11.7 ms**, with byte-identical results verified across
+fifteen queries at two limits.
+
+### Compression was paying milliseconds for bytes that were already gone
+
+`GZipMiddleware` defaults to level 9. On the 366 KB ship response:
+
+| level | size | cost |
+|---|---|---|
+| 1 | 35.7 KB | 0.21 ms |
+| **3** | **24.5 KB** | **0.74 ms** |
+| 6 | 24.1 KB | 1.59 ms |
+| 9 | 23.0 KB | 5.39 ms |
+
+Nine buys 1.5 KB over three and charges 4.6 ms for it, on a response already a
+fifteenth of its original size.
+
+### And the one that failed
+
+`thin()` is the single most expensive thing the backend does - profiled at
+**44 ms of a 62 ms request**. The waste looked obvious: 1,512 occupied cells
+holding ~19 records each are sorted in full, and the round-robin reads a depth
+of 2. About 28,700 records ordered to serve 3,024.
+
+Replacing the sort with an exactly-computed depth and `heapq.nsmallest`
+produced byte-identical output and was **slower in two of six measured
+shapes** - ships 19.6 -> 24.8 ms, a viewport 10.3 -> 15.0 ms. `nsmallest` with
+a key costs more than `list.sort` on a nineteen-element list; the cost is the
+29,000-iteration bucketing loop, which is close to what a per-record loop costs
+in Python at all.
+
+Reverted, and the finding written into the function so the next person does not
+spend the afternoon on it. **The way to make `thin` faster is not to call it
+with 29,000 records** - which is exactly what scoping a layer to the viewport
+does.
+
+`model_construct` instead of the envelope's `model_validate(model_dump())` was
+the other measured non-win: 7.18 ms against 6.89 ms. Left alone.
+
+### What the bug hunt cleared
+
+Every endpoint answers; malformed bboxes, zero and negative limits, path
+traversal and null bytes all refuse correctly. All three layers switch cleanly,
+selection and deselection work, and every page opens from its hash.
+
+**The solar system page was confirmed on a real screen at last** - the item
+that had stood in HANDOFF since D163. It renders, labels every body, drags
+roughly 1:1, wheel-zooms, and holds **4.1 ms frames**.
+
+Mobile at 375 px is 4.2 ms p50 with 915 markers, so the density there is a
+legibility question rather than a latency one and was left alone. The only
+thing actually wrong was the dev-only diagnostics overlay: anchored 8 px from
+the right with a 380 px max-width, it started at x = -13 on a phone and covered
+the layer toggle.
+
+823 backend tests, 1,019 frontend.

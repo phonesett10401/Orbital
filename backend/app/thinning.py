@@ -97,6 +97,24 @@ def thin(
     function costing ~20 ms, which on a single-threaded event loop delays every
     other request and the poller with it. The flat version computes the same
     values (D35).
+
+    **It is still the most expensive thing the backend does, and an attempt to
+    fix that failed.** Profiled at 29,000 objects it is 44 ms of a 62 ms
+    request. The obvious waste is visible in the code below: 1,512 occupied
+    cells holding ~19 records each are sorted in full, and the round-robin then
+    reads a depth of 2 - about 28,700 records ordered to serve 3,024.
+
+    Replacing the sort with an exactly-computed depth and ``heapq.nsmallest``
+    produced byte-identical output and was **slower** in two of six measured
+    shapes (ships 19.6 -> 24.8 ms, a viewport 10.3 -> 15.0 ms): ``nsmallest``
+    with a key function costs more than ``list.sort`` on a nineteen-element
+    list. The cost is the 29,000-iteration bucketing loop itself, which is
+    close to what a per-record loop costs in Python at all.
+
+    So the way to make this faster is **not to call it with 29,000 records**,
+    which is what scoping a layer to the viewport does (D167). Left simple on
+    purpose; do not re-attempt the partial sort without measuring these shapes
+    first.
     """
     if limit <= 0:
         return []
