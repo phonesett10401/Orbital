@@ -52,7 +52,7 @@ import { createSatelliteIconCanvases } from './satelliteSprite';
 import { setVisibility } from './layerSync';
 import { prefersReducedMotion } from '../motion';
 import { journeyMs } from '../journey';
-import { SHELL_LAYER, SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
+import { SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
 import {
   MOON_LABEL_LAYER,
   MOON_LAYER,
@@ -134,7 +134,8 @@ import {
   coverageLayers,
   createHatchImage,
 } from './coverageLayer';
-import { MODEL_LAYER, createModelLayer, modelTarget } from './modelLayer';
+import { createModelLayer, modelTarget } from './modelLayer';
+import { CUSTOM_LAYER_IDS } from './customLayers';
 import { createTerminatorControl } from './terminatorControl';
 import { createTerminatorLayer } from './terminatorLayer';
 import {
@@ -383,10 +384,13 @@ function applyBody(map: import('maplibre-gl').Map, bodyId: string): void {
   }
 
   // Custom layers are **absent from `getStyle()`**, so they have to be named
-  // here or the rule cannot see them - which is how two thousand Earth
-  // satellites ended up in orbit around Mars (D133).
+  // or the rule cannot see them - which is how two thousand Earth satellites
+  // ended up in orbit around Mars (D133). Named in `customLayers.ts` rather
+  // than here: written out at this call site, the list went stale the moment a
+  // custom layer was added elsewhere, and the lunar spacecraft followed the
+  // camera to Mars for it (D168).
   for (const [id, visibility] of Object.entries(
-    visibilityFor(body, style as never, [SHELL_LAYER, MODEL_LAYER]),
+    visibilityFor(body, style as never, CUSTOM_LAYER_IDS),
   )) {
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
   }
@@ -1125,7 +1129,13 @@ export function PlanetView() {
                     refreshLeader();
                   })
                 : null;
-            if (state.activeBody !== 'moon') useOrbitalStore.getState().setMoonCraft([]);
+            if (state.activeBody !== 'moon') {
+              useOrbitalStore.getState().setMoonCraft([]);
+              // The shell holds its own copy - `setCraft` builds meshes from
+              // it - so emptying the store leaves three spacecraft built and
+              // ready to draw the moment anything shows the layer again.
+              moonShell?.setCraft([]);
+            }
             // The terminator is a custom layer outside the style, so its
             // visibility is not in the plan `applyBody` applies. Night is an
             // Earth fact here - the texture is Earth's city lights.

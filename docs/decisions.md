@@ -9746,3 +9746,72 @@ six-hour identity TTL is what makes it work - a vessel gets sixty chances at a
 six-minute message instead of two.
 
 823 backend tests, 1,019 frontend.
+
+## D168 - The lunar spacecraft followed the camera to Mars
+
+Reported by Phone: visit the Moon, then go to another planet, and the yellow
+spacecraft markers come with you. Reproduced on the first attempt - three
+craft, drawn over Mars, above a status bar reading **"surface imagery - no
+live objects here"**.
+
+### The rule was right and could not be reached
+
+D133 replaced a hand-written list of Earth layers with a derivation: everything
+with the `orbital-` prefix belongs to Earth unless it is named as an exception.
+D134 added `LAYER_HOME_BODY` so the lunar layers could belong to the Moon, and
+put five entries in it, one of them `orbital-moon-shell`.
+
+That entry was correct and **unreachable**. `visibilityFor` derives its plan
+from the style, and MapLibre keeps custom layers out of `map.getStyle()` - so
+the caller has to pass their ids in, and the caller passed a **literal**:
+
+```ts
+visibilityFor(body, style as never, [SHELL_LAYER, MODEL_LAYER])
+```
+
+Two ids, written when there were two. The moon shell was added later, given its
+entry in the exception table, and never added here - so the plan contained no
+key for it, nothing ever wrote its visibility, and it kept the `visible` it was
+born with. **A rule the plan never mentions is not a rule, it is a comment.**
+
+`MOON_SHELL_LAYER` was exported and imported by nothing, which is the shape of
+the fault in one line: the constant existed, the entry existed, and the wire
+between them did not.
+
+The three MapLibre layers *are* in the style and were correctly hidden. So what
+survived was the 3D half alone - the tether and the craft - with the sub-point
+dot and the name gone. Yellow marks over Mars with nothing to explain them,
+which is why the report described a following indicator rather than lunar
+spacecraft.
+
+This is D133 for the third time. Twice the list drifted; the fix each time
+removed the list. Here the list that drifted is the argument.
+
+### The fix
+
+`planet/customLayers.ts` holds `CUSTOM_LAYER_IDS`, built from the layer
+modules' own exported ids, and `applyBody` passes that. It is still a list -
+nothing will enumerate custom layers for us - but there is one of it, it lives
+next to the layers rather than at a call site, and a test fails if an entry in
+`LAYER_HOME_BODY` can never reach the plan. The terminator is in it despite
+being exempt in `NOT_ABOUT_EARTH`: the list means *every* custom layer, and
+letting the exception table be the only thing that decides is the design. A
+list that pre-filters what it believes exempt is a second rule.
+
+Second, smaller: leaving the Moon called `setMoonCraft([])` on the store but
+never `moonShell.setCraft([])`, so the shell kept three built meshes ready to
+draw the moment anything showed the layer. Visibility alone would have hidden
+the symptom while leaving the state. Both are fixed.
+
+### Verified
+
+Three tests in `planet/bodyLayers.test.ts`, all of which fail against the
+shipped list - checked by putting it back. The style in that file is built from
+the **real** layer factories rather than written out by hand, because a
+hand-written style tests the rule against what the author remembered, which is
+the failure this entry is about.
+
+Then in the browser, which is where it was reported: Moon -> Mars is clean, and
+Mars -> Moon still draws all three with their tethers and panel.
+
+823 backend tests, 1,022 frontend.
