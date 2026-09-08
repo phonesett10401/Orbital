@@ -1186,7 +1186,23 @@ export function PlanetView() {
               // Ended by `JourneyScreen`, which owns the screen's lifetime
               // for both directions now (D174).
               useOrbitalStore.getState().setJourney('planet');
-              returning.easeTo({ zoom: RETURN_FROM_SYSTEM_ZOOM, duration: 500 });
+              /*
+               * **Jumped, not eased** (D176).
+               *
+               * `easeTo` is cancelled by any user interaction while it runs,
+               * and the 500 ms after clicking "back" is exactly when a hand is
+               * still on the mouse. An interrupted return left the camera at
+               * whatever zoom it had reached - measured at 0.41 and reported
+               * at -1.1 - where the globe is a 200-pixel disc in a full-screen
+               * frame. Phone read that as the Earth no longer being centred;
+               * it is centred to the pixel and simply too small to look it.
+               *
+               * There is nothing to animate anyway. The journey screen is over
+               * the top for the whole move, so an ease buys a smoothness
+               * nobody can see and adds a way to fail. Same reasoning as the
+               * outward snap in D174.
+               */
+              returning.jumpTo({ zoom: RETURN_FROM_SYSTEM_ZOOM });
             }
           }
 

@@ -10379,3 +10379,62 @@ Five tests, including the one that fails against the level version: a zoom of
 -1.99 while below must not count as a crossing.
 
 832 backend tests, 1,080 frontend.
+
+## D176 - The Earth was centred; the arrival zoom was not
+
+Phone, with a screenshot: "when i return to earth from solar map, the earth is
+not center anymore".
+
+### It was centred, to the pixel
+
+I went looking for an offset - padding, a stale canvas, a resize the map had
+missed - and found none. So I measured instead of eyeballing a lit crescent
+against a black background, which cannot be done: project a five-degree lat/lng
+grid, take the bounding box of the near-side points, and that is the drawn
+disc whatever the terminator is doing to what you can see.
+
+| | |
+|---|---|
+| Disc centre | **(435, 449)** |
+| Viewport centre | **(435, 449)** |
+
+Identical. What the grid also gave was the thing that matters: the disc was
+**201 pixels across** in a 870-pixel frame. A small ball in a large black
+rectangle, with its lit crescent off to one side, reads as off-centre. It is
+not; it is too small to look centred.
+
+### What was actually wrong
+
+The arrival zoom. `RETURN_FROM_SYSTEM_ZOOM` is 1.0 and the readout in Phone's
+screenshot said **z-1.1**; my own reproduction landed at **z0.41**.
+
+`easeTo` is cancelled by any user interaction while it runs, and the 500 ms
+after clicking "back to Earth" is precisely when a hand is still on the mouse.
+The ease aborted partway and left the camera wherever it had got to.
+
+**Jumped rather than eased.** There is nothing to animate: the journey screen
+is over the top for the whole move, so the ease bought a smoothness nobody
+could see and added a way to fail - the same reasoning D174 used for snapping
+the outward camera onto the Sun.
+
+Measured after, with the return interrupted as hard as I could manage - four
+wheel events 150 ms in: arrives at 1.0, disc **424 pixels** across, centre
+(435, 449) on a viewport centre of (435, 449). The z1.6 in the trace afterwards
+is the interrupting wheel doing what it was asked to.
+
+### Worth recording that I chased the wrong thing first
+
+The report said "not centred" and I spent the first half of this looking for an
+offset, because that is what the words describe and the picture supports.
+Nothing was offset. **A reader reports a symptom, not a cause**, and the
+picture agreed with the symptom - a small globe low in the frame looks exactly
+like a centred globe that has been pushed down.
+
+What broke the deadlock was refusing to keep reading the screenshot and
+measuring the disc instead. The two numbers came out equal on the first try.
+
+No test covers this: it is one line inside an imperative map callback, and the
+suite cannot run MapLibre. What it has instead is a reason written where the
+line is.
+
+832 backend tests, 1,080 frontend.
