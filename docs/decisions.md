@@ -10200,3 +10200,64 @@ Above about four degrees it stops being ambient and starts reading as a very
 sloppy drag; three was chosen by looking at both.
 
 Nine tests on the arithmetic, 1,070 frontend in total.
+
+## D173 - "On screen" and "in the system" are different questions
+
+Phone, with a screenshot of the page zoomed into Mercury: *"when I zoom into
+one area, the right and left arrow keys only works on the planets viewable in
+zoomed area"*. The masthead in the same picture read **"THE SUN AND ONE
+PLANET"**.
+
+One cause, two symptoms, and it is mine from D171.
+
+### The mistake
+
+`solarScene.markers()` returns what landed **inside the viewport** - it has
+always ended `if (!onScreen(point, width, height)) continue;`, because its job
+is placing labels and a label off screen is not a label. I built the stepper
+and the subject line on that list.
+
+So both answered the wrong question. Zoomed into the inner system, the arrows
+walked between the two bodies still in frame, and the masthead described the
+crop rather than the system.
+
+The Moon fix a commit earlier (D171) was right in spirit and wrong in the same
+way: the Moon genuinely is absent from the scene when the camera is not at
+home, so the sentence *should* be derived - but from what the scene **placed**,
+not from what the viewport happened to contain.
+
+`placedIds()` answers the other question. The component now keeps `present`
+alongside `markers`, and the two are named so the difference is visible at the
+call site: `markers` for hit-testing and labels, where on-screen is exactly
+right; `present` for the stepper, the index and the caption.
+
+Measured after, zoomed hard into Mercury: seven labels on screen, all ten
+bodies reachable with the arrow keys, and "the sun, eight planets and the
+Moon".
+
+### The focus ring was drawn inside the Sun
+
+Visible in the same screenshot. `sizePx` came from projecting one edge point
+offset along **x**, and that offset collapses to almost nothing whenever the
+camera happens to be looking down the x axis - so the Sun reported a width far
+under its own and the ring was drawn inside the disc.
+
+The widest of three axes instead. Three projections per body per frame, ten
+bodies; the cost is nothing and the answer no longer depends on which way the
+camera is pointing.
+
+### No test caught this, and none could have
+
+Worth saying plainly rather than adding one that pretends otherwise. The
+functions were right: `stepFocus` walks whatever ring it is given, and a test
+proves it. The defect was **which list the component handed it**, and the two
+lists are both `string[]` of body ids - indistinguishable to a type and to any
+test that does not run a GPU, which this suite cannot.
+
+What is left instead is naming and a single source: the scene now answers both
+questions separately and says in its own docstring that they are different.
+That is the same shape as D168, where an exception table was correct and
+unreachable - and the same lesson, which is that **the thing to check is not
+whether the rule is right but whether the right thing is reaching it.**
+
+Found by Phone using the page. 832 backend tests, 1,070 frontend.

@@ -142,12 +142,19 @@ export function SolarSystemPage() {
    */
   const homed = useRef(false);
   /**
-   * The ids currently drawn, for the stepper.
+   * Every body **in the system**, which is not the same as every body on screen.
    *
-   * A ref because the arrow keys must not re-bind their listener every time a
-   * planet moves a pixel, and `markers` is a new array on every commit.
+   * `markers` is filtered to the viewport, and using it here made the arrow
+   * keys skip everything the reader had zoomed away from - and the masthead
+   * announce "the sun and one planet" while looking closely at Mercury (D173).
+   * The scene answers the other question separately.
+   *
+   * State as well as a ref: state so the caption re-renders when the set
+   * changes, ref so the key handler can read it without re-binding on every
+   * frame.
    */
-  const drawnIds = useRef<string[]>([]);
+  const [present, setPresent] = useState<string[]>([]);
+  const presentRef = useRef<string[]>([]);
 
   // The Moon rides with the Earth and has no elements of its own, so anything
   // asking `planets.ts` a question must ask it about Earth instead (D140).
@@ -218,6 +225,14 @@ export function SolarSystemPage() {
         }
       }
 
+      // Cheap, and it changes only when the body underfoot does - the Moon
+      // comes and goes with Earth, nothing else moves in or out of the system.
+      const placed = built.placedIds();
+      if (placed.join() !== presentRef.current.join()) {
+        presentRef.current = placed;
+        setPresent(placed);
+      }
+
       const next = built.markers();
       // Committed only when something moved a whole pixel, so the camera moving
       // continuously does not mean React re-rendering continuously (D159).
@@ -256,7 +271,7 @@ export function SolarSystemPage() {
     if (!open) return undefined;
     const onArrow = (event: KeyboardEvent) => {
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-      const next = stepFocus(focused, event.key === 'ArrowRight' ? 1 : -1, drawnIds.current);
+      const next = stepFocus(focused, event.key === 'ArrowRight' ? 1 : -1, presentRef.current);
       if (!next) return;
       event.preventDefault();
       setFocused(next);
@@ -356,7 +371,7 @@ export function SolarSystemPage() {
     camera.current = zoom(camera.current, step);
   };
 
-  drawnIds.current = markers.map((m) => m.id);
+
 
   /*
    * The chosen body's distance from the Sun, when there is one to give.
@@ -373,13 +388,13 @@ export function SolarSystemPage() {
   const focusBody = focused ? bodyFor(focused) : null;
 
   const step = (direction: 1 | -1) => {
-    const next = stepFocus(focused, direction, drawnIds.current);
+    const next = stepFocus(focused, direction, presentRef.current);
     if (!next) return;
     setFocused(next);
     centreOn.current = next;
   };
 
-  const indexBodies = FOCUS_ORDER.filter((id) => drawnIds.current.includes(id));
+  const indexBodies = FOCUS_ORDER.filter((id) => present.includes(id));
 
   // Names go where they will not land on each other (D160).
   const ordered = [...markers].sort((a, b) => {
@@ -443,7 +458,7 @@ export function SolarSystemPage() {
             the break wherever the width happens to fall, which last time left
             the word "now" alone on a line of its own.
           */}
-          <span>{subjectOf(drawnIds.current)}</span>
+          <span>{subjectOf(present)}</span>
           <span>{viewInstant === null ? 'Computed for now' : formatInstant(viewInstant)}</span>
         </p>
       </header>

@@ -90,6 +90,16 @@ export interface SolarScene {
    * is the same space the body is in (D171).
    */
   positionOf(id: string): [number, number, number] | null;
+  /**
+   * Every body the scene placed this frame, on screen or not.
+   *
+   * **Not the same question as `markers()`**, which returns only what landed
+   * inside the viewport. Whether a body is *in the system* and whether it is
+   * *currently in frame* are different facts, and using the second where the
+   * first was meant made the stepper skip everything you had zoomed away from
+   * (D173).
+   */
+  placedIds(): string[];
   resize(width: number, height: number, pixelRatio: number): void;
   dispose(): void;
 }
@@ -257,6 +267,10 @@ export function createSolarScene(canvas: HTMLCanvasElement): SolarScene {
   let height = 1;
 
   return {
+    placedIds() {
+      return lastPlacements.map((p) => p.id);
+    },
+
     positionOf(id) {
       const found = lastPlacements.find((p) => p.id === id);
       return found ? [found.at[0], found.at[1], found.at[2]] : null;
@@ -339,17 +353,24 @@ export function createSolarScene(canvas: HTMLCanvasElement): SolarScene {
         const point = project(matrix, placement.at, width, height);
         if (!onScreen(point, width, height)) continue;
         const r = drawnBodyRadius(radiusKmOf(placement.id));
-        const edge = project(
-          matrix,
-          [placement.at[0] + r, placement.at[1], placement.at[2]],
-          width,
-          height,
-        );
+        // **The widest of three axes, not one.** A single edge offset along x
+        // collapses to nothing when the camera happens to be looking down x,
+        // so the Sun reported a width far under its own and the focus ring was
+        // drawn inside it (D173). The largest projected extent is stable
+        // whatever direction the camera is pointing.
+        let widest = 0;
+        for (const axis of [0, 1, 2]) {
+          const at: [number, number, number] = [placement.at[0], placement.at[1], placement.at[2]];
+          at[axis] += r;
+          const edge = project(matrix, at, width, height);
+          if (!edge.inFront) continue;
+          widest = Math.max(widest, Math.hypot(edge.x - point.x, edge.y - point.y));
+        }
         found.push({
           id: placement.id,
           x: point.x,
           y: point.y,
-          sizePx: edge.inFront ? Math.abs(edge.x - point.x) * 2 : 0,
+          sizePx: widest * 2,
         });
       }
       drawn = found;
