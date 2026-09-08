@@ -13,7 +13,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { chromeFor } from './layerChrome';
+import { chromeFor, sampleReason, sampleScope } from './layerChrome';
 import { bodyFor } from '../bodies';
 import { formatInstant } from '../timeTravel';
 import { useOrbitalStore } from '../state/store';
@@ -88,8 +88,9 @@ export function StatusBar() {
       </span>
 
       {thinned && (
-        <span className="status__item" title="The backend thinned the result to keep rendering fast">
-          showing a sample of {feed.total.toLocaleString()} in view
+        <span className="status__item" title={sampleReason(activeLayer.viewportScoped)}>
+          showing a sample of {feed.total.toLocaleString()}{' '}
+          {sampleScope(activeLayer.viewportScoped)}
         </span>
       )}
 

@@ -17,6 +17,18 @@ import type { IControl, Map as MapLibreMap } from 'maplibre-gl';
 export interface TerminatorControl extends IControl {
   /** Reflect state the button did not cause, e.g. the config's start value. */
   setEnabled(enabled: boolean): void;
+  /**
+   * Show or hide the control itself, for worlds it has nothing to say about.
+   *
+   * Night here is **Earth's** night: the texture is Earth's city lights and the
+   * terminator is computed from Earth's subsolar point. The button was offered
+   * on every world anyway, and pressing it over Mars drew Earth's night side
+   * and the lights of southeast Asia across the Martian surface (D169).
+   *
+   * Hidden rather than disabled, because a control that is present and does
+   * nothing is a claim that something should have happened.
+   */
+  setAvailable(available: boolean): void;
   /** The button itself, so tests can click it without a live map. */
   readonly button: HTMLButtonElement;
 }
@@ -67,6 +79,10 @@ export function createTerminatorControl(
     setEnabled(next: boolean) {
       enabled = next;
       label();
+    },
+
+    setAvailable(available: boolean) {
+      container.hidden = !available;
     },
   };
 }

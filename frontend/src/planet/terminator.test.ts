@@ -338,6 +338,21 @@ describe('the toggle', () => {
     expect(on.button.classList.contains('is-on')).toBe(true);
   });
 
+  it('can be taken away for a world it has nothing to say about', () => {
+    // Night is Earth's: the texture is Earth's city lights. The button was
+    // offered on every world, and pressing it over Mars drew Earth's night
+    // side across the Martian surface (D169). Hidden rather than disabled,
+    // because a control that is present and does nothing is a claim that
+    // something should have happened.
+    const control = createTerminatorControl(() => {}, false);
+    const container = control.onAdd?.(null as never) as HTMLElement;
+    expect(container.hidden).toBe(false);
+    control.setAvailable(false);
+    expect(container.hidden).toBe(true);
+    control.setAvailable(true);
+    expect(container.hidden).toBe(false);
+  });
+
   it('reports each change once', () => {
     const changes: boolean[] = [];
     const control = createTerminatorControl((enabled) => changes.push(enabled), false);

@@ -3,14 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { BODIES, EARTH, bodyFor, isLandable, showsEarthLayers } from './bodies';
 import {
   IMAGERY_NEAR,
-  globeLayerIds,
   NOT_ABOUT_EARTH,
   cartographyLayerIds,
+  homeBodyOf,
   maxZoomFor,
   ownLayerIds,
   surfaceTilesFor,
   visibilityFor,
 } from './planet/bodySurface';
+import { CUSTOM_LAYER_IDS } from './planet/customLayers';
 
 const style = {
   layers: [
@@ -33,11 +34,15 @@ const style = {
 };
 
 /** The layers MapLibre does not put in `getStyle()`, which the caller supplies. */
-const CUSTOM_LAYERS = [
-  'orbital-satellite-shell',
-  'orbital-aircraft-model',
-  'orbital-solar-system',
-];
+/**
+ * The real list, not a copy of it (D169).
+ *
+ * This was two ids written out by hand - the same two `applyBody` used to pass,
+ * and the same two that were still there when the moon shell arrived and was
+ * drawn over Mars (D168). A test standing on its own copy of the list under
+ * test cannot notice that list going stale.
+ */
+const CUSTOM_LAYERS = CUSTOM_LAYER_IDS;
 
 describe('which worlds can be entered', () => {
   it('lands only where there is a Web Mercator mosaic', () => {
@@ -158,10 +163,15 @@ describe('what is drawn when the camera leaves Earth', () => {
     expect(plan['orbital-satellite-shell']).toBe('none');
   });
 
-  it('keeps the solar system on, because it is how you see where you went', () => {
+  it('leaves the terminator to the control that knows about the body', () => {
+    // The one exemption left, and it is not "this layer is body-agnostic" - it
+    // is "somebody else owns this decision". `applyBodyChrome` settles night
+    // from the reader's setting *and* the world underneath; a `none` written
+    // here would fight it. Night over Mars was a real defect (D169), and the
+    // fix belongs there rather than in a second rule.
     const plan = visibilityFor(bodyFor('mars'), style, CUSTOM_LAYERS);
-    expect(plan['orbital-solar-system']).toBeUndefined();
-    expect(NOT_ABOUT_EARTH.has('orbital-solar-system')).toBe(true);
+    expect(plan['orbital-terminator']).toBeUndefined();
+    expect(NOT_ABOUT_EARTH.has('orbital-terminator')).toBe(true);
   });
 
   it('switches off the vector cartography, which describes only Earth', () => {
@@ -169,10 +179,21 @@ describe('what is drawn when the camera leaves Earth', () => {
     for (const id of ['water', 'road', 'place']) expect(plan[id], id).toBe('none');
   });
 
-  it('turns all of it back on for Earth', () => {
+  it("turns all of it back on for Earth - all of Earth's, that is", () => {
+    // Written as "everything with the prefix" until D169, which was true while
+    // every such layer was Earth's. The lunar ones are not, and the moment the
+    // real custom-layer list was used here instead of a copy of it the moon
+    // shell arrived and this said `visible` about a layer that belongs to the
+    // Moon. `homeBodyOf` is the rule; the test asks it rather than assuming.
     const plan = visibilityFor(EARTH, style, CUSTOM_LAYERS);
-    for (const id of [...ownLayerIds(style, CUSTOM_LAYERS), 'water', 'road', 'place']) {
+    const earths = ownLayerIds(style, CUSTOM_LAYERS).filter((id) => homeBodyOf(id) === 'earth');
+    for (const id of [...earths, 'water', 'road', 'place']) {
       expect(plan[id], id).toBe('visible');
+    }
+    // And the ones that are not Earth's stay off, so the filter above is not
+    // quietly excusing a layer that should have been on.
+    for (const id of ownLayerIds(style, CUSTOM_LAYERS).filter((id) => homeBodyOf(id) !== 'earth')) {
+      expect(plan[id], id).toBe('none');
     }
   });
 
@@ -237,30 +258,13 @@ describe('the tiles and how far in the camera may go', () => {
   });
 });
 
-describe('handing the view over to the solar system', () => {
-  it('hides everything that paints the globe', () => {
-    const ids = globeLayerIds(style, CUSTOM_LAYERS);
-    for (const id of ['orbital-imagery-far', 'orbital-imagery-near', 'water', 'road']) {
-      expect(ids, id).toContain(id);
-    }
-  });
-
-  it('includes the aircraft, which are what the globe looked like', () => {
-    // Two thousand icons at that zoom cluster into a speckled disc the size of
-    // the globe. Leaving them on leaves something that reads as a full-size
-    // planet however thoroughly the ground beneath it is switched off (D139).
-    expect(globeLayerIds(style, CUSTOM_LAYERS)).toContain('orbital-aircraft');
-    expect(globeLayerIds(style, CUSTOM_LAYERS)).toContain('orbital-satellite-shell');
-  });
-
-  it('hides the background, which belongs to neither category', () => {
-    // Found by painting it red at solar zoom and watching the leftover disc
-    // turn red. It has no source, so the cartography rule missed it, and no
-    // `orbital-` prefix, so Orbital's own rule missed it too (D143).
-    expect(globeLayerIds(style, CUSTOM_LAYERS)).toContain('background');
-  });
-
-  it('never hides the solar system, which is what the view hands over to', () => {
-    expect(globeLayerIds(style, CUSTOM_LAYERS)).not.toContain('orbital-solar-system');
-  });
-});
+/*
+ * **The handover's tests went with the handover** (D169).
+ *
+ * Four tests lived here exercising `globeLayerIds`, which gathered everything
+ * painting the globe so the solar-system handover could hide it. D164 deleted
+ * the handover and the function stayed, called by nothing - so these four went
+ * on passing, and the block read as coverage of a rule the app applies. It
+ * does not apply it. Both are gone; what the tests knew is written into
+ * `bodySurface.ts` where the next rule over a style will be written.
+ */

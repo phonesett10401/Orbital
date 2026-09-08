@@ -36,6 +36,7 @@ import {
   BASEMAP_IMAGERY,
   BASEMAP_STATE,
   IMAGERY_LAYERS,
+  type BasemapMode,
   basemapDimLayer,
   firstLabelLayerId,
   loadPlanetStyle,
@@ -120,7 +121,8 @@ import {
 } from './shipLayer';
 import { createShipIconCanvas, createShipUnknownIconCanvas } from './shipSprite';
 import { rebuildIntervalMs } from './refreshRate';
-import { createBasemapControl } from './basemapControl';
+import { type BasemapControl, createBasemapControl } from './basemapControl';
+import { bodyChromeFor } from './earthChrome';
 import {
   COVERAGE_FILL_LAYER,
   COVERAGE_HATCH_IMAGE,
@@ -136,7 +138,7 @@ import {
 } from './coverageLayer';
 import { createModelLayer, modelTarget } from './modelLayer';
 import { CUSTOM_LAYER_IDS } from './customLayers';
-import { createTerminatorControl } from './terminatorControl';
+import { type TerminatorControl, createTerminatorControl } from './terminatorControl';
 import { createTerminatorLayer } from './terminatorLayer';
 import {
   LEADER_CASING_LAYER,
@@ -439,6 +441,48 @@ export function PlanetView() {
     let terminator: ReturnType<typeof createTerminatorLayer> | null = null;
     let moonPoll: { stop: () => void } | null = null;
     let moonShell: MoonShellLayer | null = null;
+
+    /*
+     * **What the reader asked for, which is not always what is drawn** (D169).
+     *
+     * Both of these controls are Earth's. The plain and dark basemaps *are*
+     * Earth's vector cartography, switched off the moment the camera leaves;
+     * night is Earth's terminator over a texture of Earth's city lights. Each
+     * was written as one setting doing double duty as the reader's preference
+     * and as the state of the screen, and off Earth the two have to differ.
+     *
+     * Held here so the body can override the screen without overwriting the
+     * preference. That also fixes something nobody had reported: the old code
+     * restored `config.terminator` on returning to Earth, so a reader who
+     * turned night on, went to Mars and came back found it off again.
+     */
+    let readerBasemap: BasemapMode = config.basemap;
+    let readerNight = config.terminator;
+    let basemapControl: BasemapControl | null = null;
+    let nightControl: TerminatorControl | null = null;
+
+    /**
+     * Put the reader's settings on the world currently underneath them.
+     *
+     * The single writer for both. `applyBody` used to be a second one - it set
+     * the far imagery visible unconditionally, which quietly turned the layer
+     * back on for a reader who had chosen the plain map - and the night toggle
+     * was a third, writing the terminator with no idea which world it was over.
+     * One function, called from every place that can change the answer.
+     */
+    const applyBodyChrome = () => {
+      if (!map) return;
+      const chrome = bodyChromeFor(useOrbitalStore.getState().activeBody, {
+        basemap: readerBasemap,
+        night: readerNight,
+      });
+      map.setGlobalStateProperty(BASEMAP_STATE, chrome.basemap);
+      setImageryVisible(map, chrome.basemap);
+      terminator?.setEnabled(chrome.night);
+      basemapControl?.setAvailable(chrome.controlsAvailable);
+      nightControl?.setAvailable(chrome.controlsAvailable);
+      map.triggerRepaint();
+    };
     // Redrawn as the camera moves, because the callout is 45 degrees on screen.
     const refreshLeader = () => {
       if (!map) return;
@@ -577,26 +621,29 @@ export function PlanetView() {
 
           // Photograph, plain map or dark map. Above the night toggle in the
           // corner because it changes more of the screen than night does.
-          const basemapControl = createBasemapControl((mode) => {
-            if (!map) return;
-            map.setGlobalStateProperty(BASEMAP_STATE, mode);
-            setImageryVisible(map, mode);
-            map.triggerRepaint();
+          basemapControl = createBasemapControl((mode) => {
+            readerBasemap = mode;
+            applyBodyChrome();
           }, config.basemap);
           map.addControl(basemapControl, 'top-right');
 
-          const control = createTerminatorControl((enabled) => {
-            terminator?.setEnabled(enabled);
+          nightControl = createTerminatorControl((enabled) => {
+            readerNight = enabled;
             // A custom layer only draws when MapLibre repaints, and switching a
-            // uniform is not a reason it knows about.
-            map?.triggerRepaint();
+            // uniform is not a reason it knows about - `applyBodyChrome` does.
+            applyBodyChrome();
           }, config.terminator);
           // Top right. Bottom left was tried first and was wrong: the legend
           // occupies that corner and the status bar is painted over what is left
           // of it, so the button was in the DOM, invisible, and not clickable -
           // `elementFromPoint` returned the status bar. The dev readout moves
           // down to make room, because it is the thing that can afford to.
-          map.addControl(control, 'top-right');
+          map.addControl(nightControl, 'top-right');
+
+          // Both controls exist now, so the world underneath can have its
+          // say. Matters on the first frame too: the body can arrive from
+          // the URL, so Earth is the default rather than a guarantee.
+          applyBodyChrome();
 
           // The route goes in first, so the aircraft symbols draw over their own
           // track rather than under it.
@@ -1137,9 +1184,11 @@ export function PlanetView() {
               moonShell?.setCraft([]);
             }
             // The terminator is a custom layer outside the style, so its
-            // visibility is not in the plan `applyBody` applies. Night is an
-            // Earth fact here - the texture is Earth's city lights.
-            terminator?.setEnabled(state.activeBody === 'earth' && config.terminator);
+            // visibility is not in the plan `applyBody` applies - and neither
+            // is the basemap mode, which `applyBody` had just overwritten by
+            // making the far imagery visible whatever the reader had chosen.
+            // Both belong to Earth and both are settled in one place (D169).
+            applyBodyChrome();
             return;
           }
 

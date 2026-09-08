@@ -46,25 +46,12 @@ import { config } from '../config';
 export const IMAGERY_FAR_MAX_ZOOM = 8;
 export const IMAGERY_NEAR_MAX_ZOOM = config.imageryCloseMaxZoom;
 
-/** Where the close imagery fades in over the far one. */
-/**
- * Where the globe hands over to the solar system.
- *
- * Named here rather than imported, because `basemap.ts` imports nothing that
- * draws. They match `solarSystemLayer`'s `SOLAR_FULL_ZOOM` and `SOLAR_MAX_ZOOM`,
- * and a test holds the two files to the same numbers.
+/*
+ * **`SOLAR_HANDOVER_START` and `SOLAR_HANDOVER_FULL` are gone** (D169). They
+ * were the zooms at which the globe dissolved into the solar system, and one
+ * of them had carried `@deprecated ... kept only until the style tests move
+ * on` since D164. The style tests had moved on; nothing read either.
  */
-/** The handover itself: below this there is no globe. Matches `SOLAR_MAX_ZOOM`. */
-/** @deprecated The handover is gone (D164); kept only until the style tests move on. */
-export const SOLAR_HANDOVER_FULL = -1.0;
-
-/**
- * Where the globe starts dissolving on the way out.
- *
- * Only three tenths of a zoom above the handover, so the dissolve is a
- * transition rather than a long stretch of half-transparent Earth (D144).
- */
-export const SOLAR_HANDOVER_START = -0.7;
 
 /**
  * MapLibre's own atmosphere around the globe. **Off.**
@@ -348,7 +335,15 @@ export const REGION_LABEL_SIZE = [
   16,
 ] as unknown as ExpressionSpecification;
 
-export const KEPT_LAYER_TYPES = new Set(['line', 'symbol', 'fill-extrusion']);
+/*
+ * **`KEPT_LAYER_TYPES` is gone** (D169). It named the basemap layer types that
+ * survived into imagery mode - and nothing imported it, in this file or any
+ * other. D75 had already replaced "drop the layer" with "switch it off by
+ * expression", so the set stopped being the rule and stayed on as a
+ * description of one, which is the more expensive kind of wrong: it read like
+ * something the code obeyed. The one exclusion that is still real is written
+ * where it happens, in `withImagery`.
+ */
 
 /**
  * Restyle one cartographic layer to read over imagery.

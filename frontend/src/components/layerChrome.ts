@@ -65,6 +65,34 @@ export interface LayerChrome {
   freshness: 'age' | null;
 }
 
+/**
+ * What the footer says when the backend has thinned the result (D169).
+ *
+ * "in view" is true only of a layer whose request carries the viewport. An
+ * unscoped layer is thinned across the **whole planet**, so the same sentence
+ * describes a completely different picture - and this is not hypothetical: the
+ * ships layer was unscoped while the feed was 916 Baltic vessels, which fit
+ * under the cap whole. The global stream made it 29,000, the 2,000 that came
+ * back were spread worldwide, and over the North Sea the map drew **37 of
+ * 9,159**. Nothing failed and no test noticed. The footer said "showing a
+ * sample of 9,159 in view" the entire time, which is exactly what a healthy
+ * viewport-scoped layer says (D167).
+ *
+ * Satellites are still unscoped and still fit - 1,427 against a cap of 2,000 -
+ * and that is a fact about a number, not about the design. When the number
+ * moves this is the line that says so.
+ */
+export function sampleScope(viewportScoped: boolean): string {
+  return viewportScoped ? 'in view' : 'from across the whole planet';
+}
+
+/** Why the footer is showing a sample at all, for the tooltip. */
+export function sampleReason(viewportScoped: boolean): string {
+  return viewportScoped
+    ? 'The backend thinned the result to keep rendering fast'
+    : 'This layer is fetched unscoped, so the sample is spread over the whole planet rather than over what you are looking at';
+}
+
 const AIRCRAFT_TICKS = ['ground', '6 km', '12 km'];
 
 const REGIME_LABELS: Record<OrbitRegime, string> = {

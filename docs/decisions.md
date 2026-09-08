@@ -9815,3 +9815,117 @@ Then in the browser, which is where it was reported: Moon -> Mars is clean, and
 Mars -> Moon still draws all three with their tethers and panel.
 
 823 backend tests, 1,022 frontend.
+
+## D169 - Earth's chrome on other worlds, and four things that were not rules
+
+Phone asked whether anything else had D168's shape. The sweep found one defect
+worse than the one reported, two latent, and four pieces of code that read as
+rules and were not.
+
+### Earth's city lights, on Mars
+
+The night toggle wrote the terminator with no idea which world was underneath:
+
+```ts
+createTerminatorControl((enabled) => { terminator?.setEnabled(enabled); ... })
+```
+
+`applyBody` set it correctly on every body change, and then the button undid
+that. Pressing it over Mars drew **Earth's night side, Earth's terminator and
+the lights of southeast Asia and the Australian coast** across the Martian
+surface. Screenshotted before the fix.
+
+This is D120's fault - a layer drawn where its subject does not exist - and
+D168's shape: a rule that was right, and something else writing over it.
+
+### The plain and dark basemaps were blank off Earth
+
+Two of the three basemap modes *are* Earth's vector cartography, which is
+switched off when the camera leaves. Choosing one on the Moon replaced the
+lunar mosaic with a **blank grey disc** - the basemap's `background` layer and
+nothing else - and pressing again gave a darker blank disc. The control was
+offered on all ten bodies and meant something on one.
+
+Underneath it, a second writer: `visibilityFor` sets the far imagery visible
+unconditionally, so a body change turned the layer back on for a reader who had
+chosen the plain map, while `setImageryVisible` only ran at load and on a mode
+change. Invisible, because opacity is 0 in those modes - the cost was fetching
+a mosaic nobody sees.
+
+### The cause both share
+
+Each setting was **one variable doing double duty**: the reader's preference
+and the state of the screen. Overriding one for a world meant overwriting the
+other, so the night toggle did not try and the basemap was overwritten by
+accident.
+
+`planet/earthChrome.ts` separates them. The reader's settings go in,
+`bodyChromeFor` says what the screen should show, and `applyBodyChrome` is the
+only writer. A function rather than four lines in a callback, for the reason
+`visibilityFor` is one: **a rule that exists only inside an imperative callback
+is a rule nothing can check**, and this project has now twice shipped a body
+rule that was right and unreachable.
+
+Both controls are **hidden** off Earth rather than disabled. A control that is
+present and does nothing is a claim that something should have happened.
+
+It also fixed something nobody had reported: the old code restored
+`config.terminator` on returning to Earth, so a reader who turned night on,
+went to Mars and came back found it off again.
+
+### "in view" was true of one layer and not the other
+
+The footer said `showing a sample of 9,159 in view` for a whole session while
+the ships layer drew **37 vessels over the North Sea** (D167). The sentence was
+the disguise: it is exactly what a healthy viewport-scoped layer says.
+
+`sampleScope` reads the layer's own `viewportScoped` flag now, so an unscoped
+layer says **"from across the whole planet"** - which reads as wrong, because
+it is. Satellites are the unscoped one: **1,427 against a cap of 2,000**. Sound
+today, and it expires at 2,001 the way the ships reasoning expired. This is the
+line that will say so.
+
+### Four things that read as rules
+
+| Removed | Why it was worse than nothing |
+|---|---|
+| `globeLayerIds` | Gathered everything painting the globe for the D164 handover. Called by **nothing** for five sessions, and covered by **four passing tests** - so the block read as coverage of a live rule |
+| `BACKGROUND_LAYER`, `SOLAR_LAYER` | Only ever arguments to it |
+| `orbital-solar-system` in `NOT_ABOUT_EARTH` | Exempted a layer that has not existed since D163. Read as evidence that one did |
+| `SOLAR_HANDOVER_START` / `_FULL` | One had carried `@deprecated ... kept only until the style tests move on` since D164. They had moved on |
+| `KEPT_LAYER_TYPES` | Named the basemap layer types surviving into imagery mode. Imported by nothing, in any file. D75 had replaced "drop the layer" with "switch it off by expression", so the set stopped being the rule and stayed on as a description of one |
+
+What `globeLayerIds` knew is kept as a comment where the next rule over a style
+will be written: **the `background` layer belongs to neither half of the rule**
+- no source, so the cartography half misses it; no `orbital-` prefix, so the
+other half does too (D143).
+
+`bodies.test.ts` was also standing on its **own copy** of the custom-layer list
+- the same two ids `applyBody` passed, and still two when the moon shell
+arrived. It reads `CUSTOM_LAYER_IDS` now, which immediately caught a stale
+assumption: "turns all of it back on for Earth" expected every `orbital-` layer
+visible on Earth, which stopped being true when the lunar layers got a home of
+their own (D134). It asks `homeBodyOf` now.
+
+### Checked and clean
+
+All four custom layers are in `CUSTOM_LAYER_IDS`. The satellite shell and the
+aircraft model take a callback and pull each frame, so only the moon shell
+could hold a stale copy - and it was the one that did. `setActiveBody` clears
+everything held. Every three-way type split is written positively, so a fourth
+kind gets nothing rather than being mistaken for aircraft. The basemap style
+has a second source, `ne2_shaded`, that the cartography rule cannot see, but
+`withImagery` drops raster layers before it matters (defect #26). The moon
+poller does not leak: two requests in 74 s on the Moon, none in the 60 s after
+leaving.
+
+### Verified
+
+Six tests on `bodyChromeFor`, five of which fail against the shipped behaviour;
+two on the controls' availability; three on the footer's wording, two of which
+fail against the old sentence. Then in the browser: night on, Earth to Mars
+gives a clean Mars and no controls, and coming back restores night where it
+belongs. Plain map on Earth, then the Moon, gives the **lunar mosaic** where it
+gave a blank disc, and returning to Earth restores the plain map.
+
+823 backend tests, 1,029 frontend.

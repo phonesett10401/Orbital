@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { REGIME_RGB } from '../satelliteShell';
-import { chromeFor, countLabel, satelliteBands } from './layerChrome';
+import { chromeFor, countLabel, sampleReason, sampleScope, satelliteBands } from './layerChrome';
+import { LAYERS } from '../state/store';
 
 const GRADIENT = ['rgb(1,1,1) 0%', 'rgb(2,2,2) 100%'];
 
@@ -186,5 +187,35 @@ describe('the key draws the right shape for its layer', () => {
     const glyphs = chromeFor('aircraft', GRADIENT).shapes.map((s) => s.glyph);
     expect(glyphs).toContain('aircraft');
     expect(glyphs).not.toContain('ship');
+  });
+});
+
+describe('what the footer says about a thinned result', () => {
+  it('says "in view" only for a layer that asked for the view', () => {
+    // The sentence that hid D167 for a session. Ships were fetched unscoped
+    // and thinned across the planet - 37 drawn of 9,159 over the North Sea -
+    // and the footer said "showing a sample of 9,159 in view" throughout,
+    // which is what a healthy viewport-scoped layer says. Nothing failed, no
+    // test noticed, and the sea simply looked empty.
+    expect(sampleScope(true)).toBe('in view');
+    expect(sampleScope(false)).toBe('from across the whole planet');
+  });
+
+  it('matches every layer against the way it is actually fetched', () => {
+    // Read from the registry rather than restated, so a layer whose scoping
+    // changes cannot keep the old sentence. Satellites are the unscoped one:
+    // 1,427 against a cap of 2,000, correct until the number moves.
+    const byId = Object.fromEntries(LAYERS.map((l) => [l.id, l]));
+    expect(sampleScope(byId.aircraft.viewportScoped)).toBe('in view');
+    expect(sampleScope(byId.ship.viewportScoped)).toBe('in view');
+    expect(sampleScope(byId.satellite.viewportScoped)).toBe('from across the whole planet');
+  });
+
+  it('explains the unscoped case rather than blaming rendering speed', () => {
+    // "thinned to keep rendering fast" is true of a viewport-scoped layer and
+    // misleading of an unscoped one, where the reason the map looks empty is
+    // that the sample was taken from the whole planet.
+    expect(sampleReason(true)).toContain('rendering fast');
+    expect(sampleReason(false)).toContain('whole planet');
   });
 });

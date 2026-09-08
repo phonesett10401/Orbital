@@ -1088,6 +1088,20 @@ describe('the basemap control', () => {
     expect(onDark.button.title).toBe('Show satellite imagery');
   });
 
+  it('can be taken away for a world with only one basemap', () => {
+    // Two of the three modes are Earth's vector cartography, which is switched
+    // off the moment the camera leaves. Pressing this on the Moon replaced the
+    // mosaic with a blank grey disc, and pressing it again got a darker blank
+    // disc (D169). Off Earth the choice does not exist rather than failing.
+    const control = createBasemapControl(() => {}, 'imagery');
+    const container = control.onAdd?.(null as never) as HTMLElement;
+    expect(container.hidden).toBe(false);
+    control.setAvailable(false);
+    expect(container.hidden).toBe(true);
+    control.setAvailable(true);
+    expect(container.hidden).toBe(false);
+  });
+
   it('does not claim to be a toggle, because it is a cycle', () => {
     // `aria-pressed` has two values and this has three. Leaving it on would
     // tell a screen reader the button is a checkbox that is currently off,

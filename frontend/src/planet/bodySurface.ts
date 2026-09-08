@@ -74,12 +74,14 @@ export function homeBodyOf(layerId: string): string {
 export const NOT_ABOUT_EARTH = new Set<string>([
   'orbital-imagery-far',
   'orbital-imagery-near',
-  // The solar system is the one thing that means *more* off Earth, not less:
-  // it is how you see where you have gone.
-  'orbital-solar-system',
-  // The terminator is Earth-only, but it already has its own control that
-  // accounts for the body *and* the reader's setting. Listing it here as well
-  // would turn it back on for anyone who had switched it off.
+  // The terminator is Earth-only and it is left to `applyBodyChrome`, which
+  // settles the reader's night setting against the world underneath in one
+  // place. Hiding it here as well would fight that (D169).
+  //
+  // `orbital-solar-system` was listed here until D169. There has been no such
+  // layer since the solar system became a page with its own camera (D163,
+  // D164): the exemption protected nothing, and read as evidence that a layer
+  // by that name still existed.
   'orbital-terminator',
 ]);
 
@@ -171,50 +173,20 @@ export function maxZoomFor(body: Body): number {
   return isLandable(body) ? body.surface!.maxZoom : 5;
 }
 
-/**
- * Everything that belongs to the world you are standing on, for the handover
- * to the solar system (D139).
+/*
+ * **`globeLayerIds` is gone, and with it `BACKGROUND_LAYER` and `SOLAR_LAYER`**
+ * (D169). It gathered everything painting the globe so the handover could hide
+ * it while a custom layer drew the solar system in the space left behind. D164
+ * deleted the handover; the function outlived it by five sessions, called by
+ * nothing and covered by four passing tests, which is worse than untested code
+ * because it reads as a live rule.
  *
- * The same set `visibilityFor` hides when the camera leaves Earth, plus the two
- * imagery tiers - because here the globe itself is what has to go, and imagery
- * is what paints it. The solar system is the one thing kept: it is what the
- * view is handing over *to*.
- *
- * **The aircraft layers are in this set and that is not incidental.** At the
- * zoom where the solar system appears, two thousand aircraft icons cluster into
- * a speckled disc exactly the size of the globe - which is what a whole
- * afternoon of debugging mistook for the globe itself, while every ground layer
- * was already switched off.
+ * One thing it knew is worth keeping, because the next person to write a rule
+ * over a style will meet it. **The basemap's `background` layer belongs to
+ * neither half of the rule below**: `cartographyLayerIds` finds layers by their
+ * source and it has none, `ownLayerIds` finds them by the `orbital-` prefix and
+ * it has none. It went on painting the globe's disc after everything else was
+ * switched off - proved by painting it red and watching the leftover disc turn
+ * red (D143). `visibilityFor` leaves it alone deliberately: in globe projection
+ * it paints the globe itself, and off Earth the mosaic covers it.
  */
-export function globeLayerIds(
-  style: StyleLike,
-  customLayerIds: readonly string[] = [],
-): string[] {
-  return [
-    ...cartographyLayerIds(style),
-    ...ownLayerIds(style, customLayerIds),
-    IMAGERY_FAR,
-    IMAGERY_NEAR,
-    BACKGROUND_LAYER,
-  ].filter((id) => id !== SOLAR_LAYER);
-}
-
-/**
- * The basemap's background layer, which **both halves of the rule missed**.
- *
- * `cartographyLayerIds` finds layers by their source and this one has no
- * source; `ownLayerIds` finds them by the `orbital-` prefix and this one has no
- * prefix. So the one layer belonging to neither category went on painting the
- * globe's disc after everything else was switched off - a soft circle around
- * nothing, which is what "the overlapping at z-1.0 and z-1.1" was.
- *
- * Proved rather than reasoned: painting it red at that zoom turned the disc red
- * (D143).
- *
- * In globe projection this layer paints the globe itself rather than the whole
- * canvas, which is why hiding it leaves space black instead of leaving a hole.
- */
-export const BACKGROUND_LAYER = 'background';
-
-/** The solar system's own layer, which the handover must never hide. */
-export const SOLAR_LAYER = 'orbital-solar-system';

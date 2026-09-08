@@ -34,6 +34,19 @@ export const BASEMAP_NEXT: Record<BasemapMode, { next: BasemapMode; glyph: strin
 export interface BasemapControl extends IControl {
   /** Reflect state the button did not cause, e.g. the config's start value. */
   setMode(mode: BasemapMode): void;
+  /**
+   * Show or hide the control itself, for worlds where it has one mode.
+   *
+   * Two of the three basemaps are Earth's vector cartography, which describes
+   * nowhere else and is switched off the moment the camera leaves. Pressing the
+   * button on the Moon therefore replaced the lunar mosaic with **a blank grey
+   * disc** - the background layer, and nothing else - and pressing it again got
+   * a darker blank disc (D169).
+   *
+   * Off Earth the mosaic is the only basemap there is, so the choice is not
+   * disabled, it does not exist.
+   */
+  setAvailable(available: boolean): void;
   /** The button itself, so tests can click it without a live map. */
   readonly button: HTMLButtonElement;
 }
@@ -88,6 +101,10 @@ export function createBasemapControl(
     setMode(next: BasemapMode) {
       mode = next;
       label();
+    },
+
+    setAvailable(available: boolean) {
+      container.hidden = !available;
     },
   };
 }
