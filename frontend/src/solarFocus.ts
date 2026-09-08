@@ -185,3 +185,47 @@ export function isCentred(
 ): boolean {
   return Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]) < epsilon;
 }
+
+/** Spelled out to ten, because a numeral in a line of prose reads as data. */
+const WORDS = [
+  'no', 'one', 'two', 'three', 'four', 'five',
+  'six', 'seven', 'eight', 'nine', 'ten',
+];
+
+/**
+ * What the page is showing, derived from what it drew (D171).
+ *
+ * **This was a written sentence, and it was wrong half the time.** The masthead
+ * said "The sun, eight planets and the Moon" as a constant - true standing on
+ * Earth, and false everywhere else, because the Moon is drawn as Earth's
+ * *companion* and is simply absent when the camera is anywhere but home. Phone
+ * caught it: the page announced a body it was not drawing.
+ *
+ * Derived from the ids the scene actually rendered, so it cannot say that
+ * again. The same inversion D133 made for layer visibility, in a caption: state
+ * what is there rather than what is usually there.
+ */
+export function subjectOf(drawn: readonly string[]): string {
+  const has = (id: string) => drawn.includes(id);
+  const planets = FOCUS_ORDER.filter(
+    (id) => id !== 'sun' && id !== 'moon' && has(id),
+  ).length;
+
+  const parts: string[] = [];
+  if (has('sun')) parts.push('The sun');
+  if (planets > 0) {
+    const word = WORDS[planets] ?? String(planets);
+    parts.push(`${word} ${planets === 1 ? 'planet' : 'planets'}`);
+  }
+  if (has('moon')) parts.push('the Moon');
+
+  if (parts.length === 0) return 'Nothing in view';
+  const joined =
+    parts.length === 1
+      ? parts[0]
+      : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  // The sun leads when it is drawn and is capitalised already; without it the
+  // line starts on a planet count, and a sentence starting "one planet" reads
+  // as a fragment somebody forgot to finish.
+  return joined.charAt(0).toUpperCase() + joined.slice(1);
+}

@@ -10109,14 +10109,37 @@ that possible, since it had the placements and exposed only screen coordinates.
 
 A test flies from (-40, 12, 33) to (5, 0, -2) and asserts it arrives.
 
+### The masthead announced a body it was not drawing
+
+Phone, immediately: *"you forgot moon"*.
+
+The subject line under the title was written as a constant - **"The sun, eight
+planets and the Moon"** - and it was true standing on Earth and false
+everywhere else. The Moon is drawn as Earth's *companion* (`homeBodies`), so
+from Mars it is simply absent: nine bodies on screen and a caption naming ten.
+
+The fault is not the sentence, it is that there was a sentence. `subjectOf`
+derives it from the ids the scene actually rendered, so it counts what is there
+rather than what is usually there - the same inversion D133 made for layer
+visibility, one caption along. It also spells the number, because a numeral in
+a line of prose reads as data.
+
+Measured after: standing on Earth, ten bodies and "the sun, eight planets and
+the Moon"; on Mars, nine and "the sun and eight planets"; on the Moon, ten and
+the Moon named again.
+
+A written test caught a second thing on the way: with no sun in the scene the
+line began "one planet", uncapitalised, because the capital had been living
+inside the word "The" at the front of a fixed string.
+
 ### Also
 
 The corner controls broke the first time: `.system__back` kept `position:
 absolute` after moving into a flex column, escaped it, and wrapped itself over
 four lines. Found by looking at the page rather than at the diff.
 
-Twenty tests on the pure parts - the stepper's ring and its wrapping, the
+Twenty-five tests on the pure parts - the stepper's ring and its wrapping, the
 click tolerance that gives three-pixel Mercury a target bigger than itself
 (defect #5's lesson), what the caption does and does not say, and the ease.
 
-832 backend tests, 1,056 frontend.
+832 backend tests, 1,061 frontend.

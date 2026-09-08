@@ -47,6 +47,7 @@ import {
   isCentred,
   nearestMarker,
   stepFocus,
+  subjectOf,
 } from '../solarFocus';
 import type { BodyId } from '../bodies';
 
@@ -76,16 +77,12 @@ const CENTRE_DONE = 0.02;
 /** Characters in "you are here", the second line the current body carries. */
 const HERE_CHARS = 12;
 
-/**
- * What this page is actually showing, said once (D171).
- *
- * The Moon is named separately because it is drawn separately - as Earth's
- * companion, at an offset that is not its real distance (`COMPANION_OFFSET`),
- * because 0.0026 AU is below anything this compression can show. Saying "and
- * the Moon" is therefore honest about a body being present and says nothing
- * about where; `solarBodies.ts` carries the reasoning.
+/*
+ * The subject line used to be a constant here and it was **wrong half the
+ * time** - see `subjectOf` in `solarFocus.ts`. The Moon is drawn as Earth's
+ * companion, so it is absent whenever the camera is anywhere but home, and a
+ * fixed sentence announced it regardless (D171).
  */
-const SYSTEM_SUBJECT = 'The sun, eight planets and the Moon';
 
 export function SolarSystemPage() {
   const open = useOrbitalStore((s) => s.openPage) === 'system';
@@ -370,7 +367,7 @@ export function SolarSystemPage() {
             the break wherever the width happens to fall, which last time left
             the word "now" alone on a line of its own.
           */}
-          <span>{SYSTEM_SUBJECT}</span>
+          <span>{subjectOf(drawnIds.current)}</span>
           <span>{viewInstant === null ? 'Computed for now' : formatInstant(viewInstant)}</span>
         </p>
       </header>

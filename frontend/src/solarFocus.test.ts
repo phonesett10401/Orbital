@@ -12,6 +12,7 @@ import {
   isCentred,
   nearestMarker,
   stepFocus,
+  subjectOf,
 } from './solarFocus';
 
 const ALL = FOCUS_ORDER as readonly string[];
@@ -160,5 +161,38 @@ describe('flying the camera to a body', () => {
   it('knows when it has arrived', () => {
     expect(isCentred([0, 0, 0], [0.01, 0, 0], 0.02)).toBe(true);
     expect(isCentred([0, 0, 0], [1, 0, 0], 0.02)).toBe(false);
+  });
+});
+
+describe('what the page says it is showing', () => {
+  const EVERYTHING = FOCUS_ORDER as readonly string[];
+
+  it('names the Moon when the Moon is drawn', () => {
+    expect(subjectOf(EVERYTHING)).toBe('The sun, eight planets and the Moon');
+  });
+
+  it('does not name the Moon when the Moon is absent', () => {
+    // The defect Phone caught. The Moon is drawn as Earth's *companion*, so it
+    // is simply not there once the camera is anywhere but home - and the
+    // masthead announced it anyway, because the sentence was a constant.
+    const fromMars = EVERYTHING.filter((id) => id !== 'moon');
+    expect(subjectOf(fromMars)).toBe('The sun and eight planets');
+    expect(subjectOf(fromMars)).not.toMatch(/moon/i);
+  });
+
+  it('counts the planets it actually drew rather than assuming eight', () => {
+    expect(subjectOf(['sun', 'earth', 'mars'])).toBe('The sun and two planets');
+    expect(subjectOf(['sun', 'earth'])).toBe('The sun and one planet');
+  });
+
+  it('spells the number, because a numeral in prose reads as data', () => {
+    expect(subjectOf(EVERYTHING)).toContain('eight planets');
+    expect(subjectOf(EVERYTHING)).not.toMatch(/\b8\b/);
+  });
+
+  it('copes with a scene missing the sun, or missing everything', () => {
+    expect(subjectOf(['earth', 'moon'])).toBe('One planet and the Moon');
+    expect(subjectOf(['moon'])).toBe('The Moon');
+    expect(subjectOf([])).toBe('Nothing in view');
   });
 });
