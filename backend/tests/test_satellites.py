@@ -38,9 +38,25 @@ def fixture_now() -> datetime:
     return newest + timedelta(hours=1)
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def frozen_now(monkeypatch):
-    """Pin the clock the provider reads, so committed elements stay fresh."""
+    """Pin the clock the provider reads, so committed elements stay fresh.
+
+    **Autouse, because opting in was not enough.** The module docstring above
+    has always said every test pins "now" near the fixture's epochs - but four
+    tests in `TestNamesAreASecondUpstream` never asked for this fixture, and on
+    2026-09-08 they began failing: the newest element set in the fixture was
+    7.10 days old against the provider's seven-day freshness rule, so `fetch`
+    correctly returned nothing and `assert len(records) > 0` failed.
+
+    Nothing had changed in the code. The fixture simply expired, exactly as the
+    docstring predicted it would, and the rule that would have prevented it was
+    written down but not enforced. A test that requires a fixture to opt in is
+    a rule the next test can forget.
+
+    A test that wants a different clock still overrides this: its own
+    `monkeypatch.setattr` runs after the autouse fixture.
+    """
     moment = fixture_now()
     monkeypatch.setattr("app.providers.satellites.utcnow", lambda: moment)
     return moment
