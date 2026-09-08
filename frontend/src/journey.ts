@@ -84,3 +84,33 @@ export function journeyHoldDone(
   if (elapsedMs >= JOURNEY_MAX_MS) return true;
   return destinationReady && elapsedMs >= JOURNEY_MIN_MS;
 }
+
+/** Whether the camera has just crossed the departure threshold, and where it is now. */
+export interface LeaveCrossing {
+  crossed: boolean;
+  above: boolean;
+}
+
+/**
+ * Departure is an **edge**, not a level (D175).
+ *
+ * D174 moved the trigger from `zoomend` to `zoom` so that leaving begins when
+ * the threshold is crossed rather than when the wheel stops. That made a
+ * level test wrong in a way it had not been before: the return from the solar
+ * system eases the camera up from the floor, and for the first frames of that
+ * ease the zoom is **still below the threshold** while the page is already
+ * closed - so the handler fired again and sent the reader straight back. The
+ * first click on "back" appeared to do nothing and the second worked, because
+ * by then the ease had lifted the camera clear.
+ *
+ * Asking "is it below" every frame answers a question nobody meant. The
+ * question is "has it just gone below", and that needs one bit of memory.
+ */
+export function leaveCrossing(
+  wasAbove: boolean,
+  zoom: number,
+  threshold: number,
+): LeaveCrossing {
+  const above = zoom > threshold;
+  return { crossed: wasAbove && !above, above };
+}

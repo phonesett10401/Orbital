@@ -10325,3 +10325,57 @@ than one place is a thing whose duration nobody owns.** The fix each time has
 been to give it one owner and put the rule where it can be tested.
 
 Five tests on the hold rule. 832 backend, 1,075 frontend.
+
+## D175 - Leaving is an edge, not a level
+
+Phone: coming back from the solar system, the first click on "back to Earth"
+does nothing and the second one works.
+
+Mine, from D174, and one line of it.
+
+### What broke
+
+D174 moved the departure trigger from `zoomend` to `zoom` so that leaving
+begins when the threshold is crossed rather than when the wheel stops. The test
+inside it stayed a **level** test:
+
+```ts
+if (map.getZoom() > LEAVE_FOR_SYSTEM_ZOOM) return;
+```
+
+Correct on an event that fires once. Wrong on one that fires every frame, and
+wrong in a way the old code could not have been - because the threshold is also
+the **zoom floor**. A reader who has arrived is sitting at `-2.0`, which is
+below the line, forever.
+
+So the return did this: the page closes, `easeTo` starts lifting the camera
+from the floor, and on the ease's first frames the zoom is *still* below the
+line with `openPage` already null. The handler fired again and put them
+straight back. By the second click the ease had carried the camera clear, so it
+worked - which is exactly the symptom.
+
+### The fix
+
+`leaveCrossing(wasAbove, zoom, threshold)` carries the one bit of memory that
+turns "is it below" into "has it just gone below". `PlanetView` keeps
+`aboveLeaveZoom`, starting true because the view opens well above the line.
+
+Sitting at the floor no longer re-triggers; the camera has to climb back above
+the threshold and come down again, which is what leaving twice actually means.
+
+Measured, from a fresh load: zoom 2 -> wheel out -> arrives at -2.01 with the
+page open -> **one** click -> page null, camera eased to z1.0. Then the whole
+round trip again, to prove the edge re-arms: left again at -2.0, home again at
+z1.0.
+
+### The lesson is about the event, not the comparison
+
+The comparison was right in both versions. What changed underneath it was **how
+often it would be asked**, and a predicate that is fine once a gesture is a
+different predicate sixty times a second. Changing an event source is changing
+the question every handler on it is answering.
+
+Five tests, including the one that fails against the level version: a zoom of
+-1.99 while below must not count as a crossing.
+
+832 backend tests, 1,080 frontend.

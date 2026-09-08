@@ -5,6 +5,7 @@ import {
   JOURNEY_MIN_MS,
   JOURNEY_MS,
   journeyHoldDone,
+  leaveCrossing,
   journeyLabel,
   journeyMs,
 } from './journey';
@@ -78,5 +79,41 @@ describe('holding the screen until the destination is ready', () => {
   it('shortens the return for reduced motion, as it always did', () => {
     expect(journeyHoldDone('planet', 700, false, true)).toBe(true);
     expect(journeyHoldDone('planet', 700, false, false)).toBe(false);
+  });
+});
+
+describe('leaving is an edge, not a level', () => {
+  const T = -2.0;
+
+  it('fires when the camera crosses the threshold going out', () => {
+    expect(leaveCrossing(true, -2.0, T)).toEqual({ crossed: true, above: false });
+  });
+
+  it('does not fire again while it sits below', () => {
+    // The bug. The zoom floor *is* the threshold, so a reader who has arrived
+    // stays below it - and a level test answers "yes, leave" on every frame.
+    expect(leaveCrossing(false, -2.0, T)).toEqual({ crossed: false, above: false });
+    expect(leaveCrossing(false, -2.5, T)).toEqual({ crossed: false, above: false });
+  });
+
+  it('does not fire while the return ease is still below the line', () => {
+    // What actually broke: coming back eases the camera up from the floor, and
+    // for the first frames of that ease the zoom is still under the threshold
+    // while the page is already closed. Level-triggered, that sent the reader
+    // straight back and the first click on "back" appeared to do nothing.
+    expect(leaveCrossing(false, -1.99, T).crossed).toBe(false);
+    expect(leaveCrossing(false, -1.5, T)).toEqual({ crossed: false, above: true });
+  });
+
+  it('arms again once the camera is clear, so leaving twice works', () => {
+    const climbed = leaveCrossing(false, 1.0, T);
+    expect(climbed.above).toBe(true);
+    expect(leaveCrossing(climbed.above, -2.0, T).crossed).toBe(true);
+  });
+
+  it('treats the threshold itself as below, so the floor counts as leaving', () => {
+    // minZoom is the threshold: you leave at exactly the point there is no more
+    // zooming out to do, so -2.0 must not be "still above".
+    expect(leaveCrossing(true, T, T).above).toBe(false);
   });
 });

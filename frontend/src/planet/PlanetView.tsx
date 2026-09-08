@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { config } from '../config';
 import { useOrbitalStore } from '../state/store';
+import { leaveCrossing } from '../journey';
 import {
   AIRCRAFT_LABEL_LAYER,
   AIRCRAFT_LAYER,
@@ -439,6 +440,13 @@ export function PlanetView() {
     let terminator: ReturnType<typeof createTerminatorLayer> | null = null;
     let moonPoll: { stop: () => void } | null = null;
     let moonShell: MoonShellLayer | null = null;
+    /**
+     * Whether the camera is above the departure threshold (D175).
+     *
+     * Starts true because the view opens well above it, and is what makes
+     * leaving an edge rather than a level - see `leaveCrossing`.
+     */
+    let aboveLeaveZoom = true;
 
     /*
      * **What the reader asked for, which is not always what is drawn** (D169).
@@ -772,9 +780,17 @@ export function PlanetView() {
            */
           map.on('zoom', () => {
             if (!map) return;
+            // **An edge, not a level** (D175). Asking "is it below" every frame
+            // re-fired on the way home: the return ease starts at the floor and
+            // climbs, so for its first frames the page is closed and the zoom is
+            // still under the line. `leaveCrossing` carries the one bit of
+            // memory that turns the question into "has it just gone below".
+            const crossing = leaveCrossing(aboveLeaveZoom, map.getZoom(), LEAVE_FOR_SYSTEM_ZOOM);
+            aboveLeaveZoom = crossing.above;
+            if (!crossing.crossed) return;
+
             const store = useOrbitalStore.getState();
             if (store.flyingTo || store.openPage) return;
-            if (map.getZoom() > LEAVE_FOR_SYSTEM_ZOOM) return;
             // The screen ends itself when the destination is ready, so nothing
             // here sets a clock any more (D174).
             store.setJourney('system');
