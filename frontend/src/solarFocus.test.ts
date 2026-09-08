@@ -13,7 +13,11 @@ import {
   nearestMarker,
   stepFocus,
   subjectOf,
+  driftFrom,
+  withDrift,
+  easeDrift,
 } from './solarFocus';
+import { MAX_PITCH } from './solarCamera';
 
 const ALL = FOCUS_ORDER as readonly string[];
 
@@ -194,5 +198,60 @@ describe('what the page says it is showing', () => {
     expect(subjectOf(['earth', 'moon'])).toBe('One planet and the Moon');
     expect(subjectOf(['moon'])).toBe('The Moon');
     expect(subjectOf([])).toBe('Nothing in view');
+  });
+});
+
+describe('the pointer drift that keeps the system alive', () => {
+  const camera = { target: [0, 0, 0] as [number, number, number], distance: 20, yaw: 0.4, pitch: 0.5 };
+
+  it('reads the middle of the canvas as no drift at all', () => {
+    expect(driftFrom(400, 300, 800, 600)).toEqual({ x: 0, y: 0 });
+  });
+
+  it('reads the corners as full drift', () => {
+    expect(driftFrom(800, 600, 800, 600)).toEqual({ x: 1, y: 1 });
+    expect(driftFrom(0, 0, 800, 600)).toEqual({ x: -1, y: -1 });
+  });
+
+  it('clamps a pointer that left the element', () => {
+    // Pointer capture during a drag reports positions outside the canvas. An
+    // unclamped drift would swing further the further the pointer went, which
+    // is a drag by another name.
+    expect(driftFrom(3000, -900, 800, 600)).toEqual({ x: 1, y: -1 });
+  });
+
+  it('survives a canvas with no size, which is the first frame', () => {
+    expect(driftFrom(10, 10, 0, 0)).toEqual({ x: 0, y: 0 });
+  });
+
+  it('leans the view away from the pointer', () => {
+    // Toward would feel like dragging the scene; away reads as looking around
+    // something that is standing still.
+    const drifted = withDrift(camera, { x: 1, y: 0 }, 0.04, 0.02);
+    expect(drifted.yaw).toBeCloseTo(0.36, 6);
+  });
+
+  it('never writes the drift into the camera it was given', () => {
+    // The whole reason it is applied at render: folded in, every frame would
+    // drift from the drifted one and the camera would wander off on its own.
+    const before = { ...camera };
+    withDrift(camera, { x: 1, y: 1 }, 0.04, 0.02);
+    expect(camera).toEqual(before);
+  });
+
+  it('cannot tip the camera past straight down', () => {
+    const steep = { ...camera, pitch: MAX_PITCH };
+    expect(withDrift(steep, { x: 0, y: -1 }, 0.04, 0.5).pitch).toBeLessThanOrEqual(MAX_PITCH);
+    expect(withDrift(steep, { x: 0, y: 1 }, 0.04, 0.5).pitch).toBeGreaterThanOrEqual(-MAX_PITCH);
+  });
+
+  it('eases toward a new drift rather than snapping to it', () => {
+    expect(easeDrift({ x: 0, y: 0 }, { x: 1, y: -1 }, 0.5)).toEqual({ x: 0.5, y: -0.5 });
+  });
+
+  it('settles back to nothing when the pointer leaves', () => {
+    let at = { x: 1, y: 1 };
+    for (let i = 0; i < 200; i += 1) at = easeDrift(at, { x: 0, y: 0 }, 0.08);
+    expect(Math.hypot(at.x, at.y)).toBeLessThan(0.001);
   });
 });

@@ -10143,3 +10143,60 @@ click tolerance that gives three-pixel Mercury a target bigger than itself
 (defect #5's lesson), what the caption does and does not say, and the ease.
 
 832 backend tests, 1,061 frontend.
+
+## D172 - The Sun is the base, and the system leans with the pointer
+
+Phone: *"I want the sun to be the base and the system move slightly around with
+the mouse movement, make the system visually alive."*
+
+### The Sun was not at the middle, and there was a reason
+
+Measured before changing anything: opening the page put **Earth** at the exact
+centre of the canvas and the Sun off to one side at (328, 482). Not a bug -
+`scenePlacements` builds the scene around the world you are standing on, and
+`initialCamera` targets the origin, so the origin is wherever you came from.
+
+That is right for the scene and wrong for the page. The Sun is the one fixed
+thing here; everything else is in orbit around it, and a system that opens
+centred on Earth is a picture of Earth with a sun in it.
+
+The camera's target is now the Sun's own position, taken from the scene on the
+first frame that has one. **Snapped rather than eased** - an opening animation
+away from a framing nobody asked for is not an entrance, it is a correction
+played slowly. Deselecting returns there too, so "no particular body" has a
+place to be rather than meaning "wherever the last one left the view".
+
+This needed nothing new: `positionOf` was added in D171 for the fly-to and
+answers this as well.
+
+### The lean
+
+The pointer moves the view about **three degrees of yaw and one and a half of
+pitch**, eased at 5.5% a frame, leaning *away* from the pointer - toward would
+feel like dragging the scene, away reads as moving your head around something
+standing still.
+
+**Applied at render, never stored**, and that is the whole design rather than a
+detail. The lean is a response to where the mouse is, not a camera the reader
+has set. Folded into `camera.current` it would compound - every frame drifting
+from the drifted one - and flying to a body would fly to wherever the pointer
+had quietly pushed it. `withDrift` returns a copy; the stored camera stays the
+reader's, and a test asserts the input is not mutated.
+
+The parallax comes free and is the point of doing it in the camera rather than
+in CSS: measured across a full pointer sweep, **Neptune moves 18 px and Jupiter
+2**, because one is further from the pivot than the other. That is depth, and
+nothing had to be told about it.
+
+Two bounds worth keeping:
+
+- **The drift is clamped to the canvas.** Pointer capture during a drag reports
+  positions outside the element, and an unclamped lean would swing further the
+  further the pointer went - a drag by another name.
+- **Reduced motion switches it off entirely.** It is decoration, and it is the
+  kind that moves the whole screen.
+
+Above about four degrees it stops being ambient and starts reading as a very
+sloppy drag; three was chosen by looking at both.
+
+Nine tests on the arithmetic, 1,070 frontend in total.

@@ -43,12 +43,16 @@ import { heliocentricDistance } from '../planets';
 import {
   FOCUS_ORDER,
   captionForId,
+  driftFrom,
+  easeDrift,
   easeTarget,
   isCentred,
   nearestMarker,
   stepFocus,
   subjectOf,
+  withDrift,
 } from '../solarFocus';
+import { prefersReducedMotion } from '../motion';
 import type { BodyId } from '../bodies';
 
 /** One wheel notch, as a proportion of the remaining distance. */
@@ -65,6 +69,21 @@ const CLICK_SLOP_PX = 4;
 
 /** How much of the remaining offset the camera closes each frame when centring. */
 const CENTRE_EASE = 0.14;
+
+/**
+ * How far the view leans with the pointer, in radians (D172).
+ *
+ * About three degrees across the yaw and one and a half across the pitch. Deliberately
+ * under the threshold at which it reads as a control: the system should feel
+ * like it is standing in a room you are moving your head in, not like
+ * something being dragged. Above about four degrees it stops being ambient and
+ * starts being a very sloppy drag.
+ */
+const DRIFT_YAW = 0.055;
+const DRIFT_PITCH = 0.026;
+
+/** How much of the way toward the pointer's drift each frame closes. */
+const DRIFT_EASE = 0.055;
 
 /**
  * Near enough to centred to stop, in world units.
@@ -110,6 +129,18 @@ export function SolarSystemPage() {
    * times to move a camera that is not React's.
    */
   const centreOn = useRef<BodyId | null>(null);
+  /** Where the pointer wants the view to lean, and where it currently leans. */
+  const driftTo = useRef({ x: 0, y: 0 });
+  const drift = useRef({ x: 0, y: 0 });
+  /**
+   * Whether the camera has been put on the Sun yet.
+   *
+   * The scene is built around the world you are standing on, so it opens with
+   * *Earth* in the middle and the Sun off to one side. The Sun is the thing
+   * everything here goes round, so that is where the view starts and where it
+   * returns when nothing is chosen (D172).
+   */
+  const homed = useRef(false);
   /**
    * The ids currently drawn, for the stepper.
    *
@@ -128,6 +159,9 @@ export function SolarSystemPage() {
     const built = createSolarScene(element);
     scene.current = built;
     camera.current = initialCamera();
+    homed.current = false;
+    drift.current = { x: 0, y: 0 };
+    driftTo.current = { x: 0, y: 0 };
 
     let frame = 0;
     let shown: BodyMarker[] = [];
@@ -136,8 +170,32 @@ export function SolarSystemPage() {
       const width = element.clientWidth;
       const height = element.clientHeight;
       built.resize(width, height, window.devicePixelRatio || 1);
+      // The Sun is the base. The scene places bodies around whichever world
+      // you are standing on, so without this the page opens looking at Earth
+      // with the Sun off to the side (D172). Snapped rather than eased: an
+      // opening animation from a framing nobody asked for is not an entrance.
+      if (!homed.current) {
+        const sun = built.positionOf('sun');
+        if (sun) {
+          camera.current = { ...camera.current, target: sun };
+          homed.current = true;
+        }
+      }
+
+      drift.current = easeDrift(
+        drift.current,
+        // Reduced motion means no ambient movement at all - the drift is
+        // decoration, and it is the kind that moves the whole screen.
+        prefersReducedMotion() ? { x: 0, y: 0 } : driftTo.current,
+        DRIFT_EASE,
+      );
+
       built.render(
-        camera.current,
+        // The reader's camera, leaned by the pointer. `withDrift` returns a
+        // copy on purpose: folded into `camera.current` the lean would
+        // accumulate, and flying to a body would fly to wherever the mouse had
+        // quietly pushed it.
+        withDrift(camera.current, drift.current, DRIFT_YAW, DRIFT_PITCH),
         viewInstant ? new Date(viewInstant) : new Date(),
         origin,
         activeBody,
@@ -233,6 +291,14 @@ export function SolarSystemPage() {
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    driftTo.current = driftFrom(
+      event.clientX - box.left,
+      event.clientY - box.top,
+      box.width,
+      box.height,
+    );
+
     if (!drag.active) {
       // Not dragging, so this is the pointer looking around. Answering before
       // the click is most of what makes the scene feel alive rather than
@@ -273,10 +339,16 @@ export function SolarSystemPage() {
     choose(hit);
   };
 
-  /** Choose a body, or nothing, and send the camera after it. */
+  /**
+   * Choose a body, or nothing, and send the camera after it.
+   *
+   * Choosing nothing goes back to the Sun rather than staying wherever the last
+   * body left the view. It is the one fixed thing on this page - everything
+   * else is in orbit around it - so it is what "no particular body" looks like.
+   */
   const choose = (id: BodyId | null) => {
     setFocused(id);
-    centreOn.current = id;
+    centreOn.current = id ?? 'sun';
   };
 
   const onWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
@@ -344,6 +416,10 @@ export function SolarSystemPage() {
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onWheel={onWheel}
+        onPointerLeave={() => {
+          driftTo.current = { x: 0, y: 0 };
+          setHovered(null);
+        }}
         onContextMenu={(e) => e.preventDefault()}
       />
 

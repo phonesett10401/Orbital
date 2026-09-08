@@ -18,6 +18,7 @@
  */
 
 import { bodyFor, isLandable, type Body, type BodyId } from './bodies';
+import { MAX_PITCH, type SolarCamera } from './solarCamera';
 
 /**
  * The bodies in the order the stepper walks them: outward from the Sun.
@@ -228,4 +229,61 @@ export function subjectOf(drawn: readonly string[]): string {
   // line starts on a planet count, and a sentence starting "one planet" reads
   // as a fragment somebody forgot to finish.
   return joined.charAt(0).toUpperCase() + joined.slice(1);
+}
+
+/**
+ * The pointer's position as a drift, in -1..1 from the middle of the canvas.
+ *
+ * Clamped rather than left unbounded: a pointer captured during a drag reports
+ * positions outside the element, and an unclamped drift would swing the view
+ * further the further the pointer went, which is a drag by another name.
+ */
+export function driftFrom(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): { x: number; y: number } {
+  if (width <= 0 || height <= 0) return { x: 0, y: 0 };
+  const clamp = (v: number) => Math.min(1, Math.max(-1, v));
+  return {
+    x: clamp((x - width / 2) / (width / 2)),
+    y: clamp((y - height / 2) / (height / 2)),
+  };
+}
+
+/**
+ * The camera the frame is drawn with: the real one, nudged by the pointer.
+ *
+ * **Applied at render rather than stored**, which is the whole point. The drift
+ * is a response to where the mouse is, not a camera the reader has set, so
+ * folding it into the camera itself would make it accumulate - every frame
+ * would drift from the drifted one, and flying to a body would fly to a place
+ * the pointer had quietly moved. The stored camera stays the reader's; this is
+ * a lens in front of it (D172).
+ *
+ * The sign is a counter-drift: the scene leans *away* from the pointer, which
+ * is what reads as looking around something rather than dragging it.
+ */
+export function withDrift(
+  camera: SolarCamera,
+  drift: { x: number; y: number },
+  yawAmount: number,
+  pitchAmount: number,
+): SolarCamera {
+  return {
+    ...camera,
+    yaw: camera.yaw - drift.x * yawAmount,
+    pitch: Math.min(MAX_PITCH, Math.max(-MAX_PITCH, camera.pitch - drift.y * pitchAmount)),
+  };
+}
+
+/** Ease one drift value toward another, per frame. */
+export function easeDrift(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  fraction: number,
+): { x: number; y: number } {
+  const t = Math.min(1, Math.max(0, fraction));
+  return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
 }
