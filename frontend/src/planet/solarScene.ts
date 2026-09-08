@@ -80,6 +80,16 @@ export interface SolarScene {
   render(camera: SolarCamera, date: Date, origin: PlanetId, standingOn: string): void;
   /** Where each body landed on screen last frame, for the labels. */
   markers(): BodyMarker[];
+  /**
+   * Where a body is in the scene, in world units, or null if it is not drawn.
+   *
+   * Screen coordinates are no use for flying a camera to something: panning by
+   * a screen delta is not the inverse of the projection once the camera has any
+   * pitch, so the correction overshoots and runs away rather than converging.
+   * Moving the camera *target* to the body itself always converges, because it
+   * is the same space the body is in (D171).
+   */
+  positionOf(id: string): [number, number, number] | null;
   resize(width: number, height: number, pixelRatio: number): void;
   dispose(): void;
 }
@@ -206,6 +216,8 @@ export function createSolarScene(canvas: HTMLCanvasElement): SolarScene {
 
   // ---- Saturn's rings ----
   let ring: THREE.Mesh | null = null;
+  /** Last frame's placements, so `positionOf` can answer from what was drawn. */
+  let lastPlacements: ScenePlacement[] = [];
   const buildRing = () => {
     const saturnR = drawnBodyRadius(radiusKmOf('saturn'));
     const profile = new THREE.DataTexture(ringProfile(512), 512, 1, THREE.RGBAFormat);
@@ -245,6 +257,11 @@ export function createSolarScene(canvas: HTMLCanvasElement): SolarScene {
   let height = 1;
 
   return {
+    positionOf(id) {
+      const found = lastPlacements.find((p) => p.id === id);
+      return found ? [found.at[0], found.at[1], found.at[2]] : null;
+    },
+
     resize(w, h, pixelRatio) {
       width = Math.max(1, w);
       height = Math.max(1, h);
@@ -274,6 +291,8 @@ export function createSolarScene(canvas: HTMLCanvasElement): SolarScene {
         ...scenePlacements(date, origin),
         ...homeBodies(standingOn),
       ];
+
+      lastPlacements = placements;
 
       const sun = placements.find((p) => p.id === 'sun');
       if (sun) sunlight.position.set(sun.at[0], sun.at[1], sun.at[2]);

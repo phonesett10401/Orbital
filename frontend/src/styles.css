@@ -332,11 +332,37 @@ body {
  * and letting the globe show through would say otherwise.
  */
 
+/*
+ * ---- the solar system page (D171) ----
+ *
+ * Restyled after Phone pointed at a site whose look is worth having: a deep
+ * blue-black ground with real atmospheric depth rather than flat black, a
+ * large serif display line against very small letterspaced capitals, fine
+ * grain over everything, and a great deal of space.
+ *
+ * **Two things were taken and one was deliberately left.** The palette and the
+ * typographic contrast are a vocabulary and are borrowed happily. The scattered
+ * coloured lights that give that reference its atmosphere are not: on a page
+ * whose whole subject is points of light in the dark, a decorative one is
+ * indistinguishable from a star, and this project already refused exactly that
+ * trade once - `warp.ts` is a screen-space effect precisely so nobody mistakes
+ * it for the real sky (D155). Depth here comes from haze and grain, which
+ * cannot be read as an object.
+ *
+ * The fonts are the other constraint. That site sets its display line in a
+ * licensed serif; this app ships **no webfonts at all** and does not fetch from
+ * a CDN (D30), so the display face is a system serif stack. The idea being
+ * borrowed is the contrast between a serif at size and a sans at 10 px, which
+ * survives the substitution intact.
+ */
+
 .system {
   position: absolute;
   inset: 0;
   z-index: 25;
-  background: #05070d;
+  /* Navy rather than near-black. The old #05070d read as an absence; this
+     reads as night, which is the thing actually being drawn. */
+  background: #070b14;
 }
 
 .system__canvas {
@@ -351,23 +377,126 @@ body {
   cursor: grabbing;
 }
 
-.system__back {
+/*
+ * Atmosphere: a wash toward the centre and a vignette at the edges.
+ *
+ * Normal blending on purpose rather than `screen`. Composited over black a
+ * translucent blue simply *is* navy, and the stars beneath it are veiled by
+ * exactly the amount the haze is opaque - which is what haze does. `screen`
+ * would brighten the stars along with the ground and lose the depth.
+ */
+.system__depth {
   position: absolute;
-  left: 16px;
-  bottom: 16px;
-  padding: 7px 14px;
-  background: var(--surface);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      120% 88% at 50% 44%,
+      rgba(70, 116, 186, 0.17) 0%,
+      rgba(26, 44, 82, 0.09) 42%,
+      rgba(0, 0, 0, 0) 72%
+    ),
+    radial-gradient(
+      100% 100% at 50% 50%,
+      rgba(0, 0, 0, 0) 52%,
+      rgba(3, 5, 12, 0.62) 100%
+    );
 }
 
-.system__back:hover {
-  border-color: var(--text-dim);
+/*
+ * Grain, generated rather than fetched - an inline `feTurbulence`, so it costs
+ * no request and works offline like everything else here.
+ *
+ * At 5% it is not visible as texture; what it does is stop a screen of pure
+ * gradients looking like a screen of pure gradients. Turn it off and the page
+ * looks slightly cheaper without it being obvious why.
+ */
+.system__grain {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+
+.system__masthead {
+  position: absolute;
+  left: clamp(20px, 3.4vw, 48px);
+  top: clamp(18px, 3vw, 42px);
+  z-index: 4;
+  /* The page underneath is draggable and the title is not a control. */
+  pointer-events: none;
+}
+
+.system__title {
+  margin: 0;
+  /* A system serif: Iowan on a Mac, Palatino or Constantia on Windows,
+     Georgia everywhere. No webfont, because this app fetches none (D30). */
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Constantia,
+    'Book Antiqua', Georgia, serif;
+  font-weight: 500;
+  font-size: clamp(28px, 4vw, 46px);
+  /* Under one, which is what makes a stack of display lines read as a block
+     rather than as separate sentences. */
+  line-height: 0.94;
+  letter-spacing: -0.012em;
+  color: #e9ecee;
+  /* Measured in its own ems so the break survives the clamp: at every size in
+     the range this holds two words on the first line and one on the second,
+     which is the shape the display line is set for. */
+  max-width: 6.4em;
+}
+
+.system__standfirst {
+  margin: 14px 0 0;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1.9;
+  color: var(--text-dim);
+}
+
+.system__standfirst span {
+  display: block;
+}
+
+/* The second line is the weaker fact and is set back a step. */
+.system__standfirst span + span {
+  color: rgba(151, 163, 184, 0.72);
+}
+
+/*
+ * The way back, as a rule rather than a pill.
+ *
+ * A bordered capsule is chrome, and this page is trying not to have any. An
+ * underlined line of capitals in the opposite corner from the title is enough
+ * to be found and quiet enough to ignore.
+ */
+.system__back {
+  /* Positioned by `.system__corner`, which stacks it with the index toggle.
+     It was absolute here and stayed absolute after moving into that stack,
+     so it escaped the column and wrapped itself over four lines (D171). */
+  padding: 0 0 5px;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(233, 236, 238, 0.22);
+  border-radius: 0;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 220ms ease, border-color 220ms ease;
+}
+
+.system__back:hover,
+.system__back:focus-visible {
+  color: #e9ecee;
+  border-bottom-color: rgba(233, 236, 238, 0.55);
 }
 
 /*
@@ -479,10 +608,295 @@ body {
  * works wherever you grab it.
  */
 
+/*
+ * ---- choosing a body (D171) ----
+ *
+ * The interaction Phone asked for: hover a light and it answers, click it and
+ * the camera goes there and a caption names it, arrows step to the next one,
+ * an index lists the set. What follows is the chrome for that; `solarFocus.ts`
+ * is the part with rules in it.
+ *
+ * Everything here is a hairline and a line of capitals. The page is trying to
+ * be a sky rather than a control panel, and every filled surface added to it
+ * takes some of that away.
+ */
+
+/*
+ * The ring that says "this one".
+ *
+ * Sized from the marker's own screen width, handed in as `--size`, so it fits
+ * the body it belongs to instead of being one radius for a sun and a Mercury.
+ * A ring rather than a glow, because a glow on this page is indistinguishable
+ * from the object being brighter, and the object's brightness is data.
+ */
+.solarlabel::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--size, 8px) + 16px);
+  height: calc(var(--size, 8px) + 16px);
+  margin: calc((var(--size, 8px) + 16px) / -2) 0 0 calc((var(--size, 8px) + 16px) / -2);
+  border: 1px solid rgba(233, 236, 238, 0.55);
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(0.82);
+  transition: opacity 220ms ease, transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+
+.solarlabel.is-hovered::before {
+  opacity: 0.5;
+  transform: scale(1);
+}
+
+.solarlabel.is-focused::before {
+  opacity: 1;
+  transform: scale(1);
+  border-color: rgba(233, 236, 238, 0.85);
+}
+
+.solarlabel.is-hovered .solarlabel__name,
+.solarlabel.is-focused .solarlabel__name {
+  color: #e9ecee;
+}
+
+/*
+ * The caption for the chosen body.
+ *
+ * Bottom centre, which is where the eye goes after the camera stops, and the
+ * one place on this page where type is allowed to be large.
+ */
+.focus {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(18px, 3vw, 38px);
+  transform: translateX(-50%);
+  z-index: 5;
+  width: min(520px, calc(100% - 220px));
+  text-align: center;
+  pointer-events: none;
+}
+
+.focus__eyebrow {
+  margin: 0;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(151, 163, 184, 0.85);
+}
+
+.focus__name {
+  margin: 6px 0 0;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Constantia,
+    'Book Antiqua', Georgia, serif;
+  font-weight: 500;
+  font-size: clamp(26px, 3.4vw, 40px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  color: #e9ecee;
+}
+
+/*
+ * The way to the body, when there is one.
+ *
+ * A bordered rectangle rather than the hairline rules used elsewhere: this is
+ * the one thing on the page that takes you somewhere else, and it should not
+ * look like the controls that only move the camera.
+ */
+.focus__action {
+  margin-top: 14px;
+  padding: 10px 22px;
+  pointer-events: auto;
+  background: none;
+  border: 1px solid rgba(233, 236, 238, 0.35);
+  border-radius: 2px;
+  color: #e9ecee;
+  font: inherit;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+
+.focus__action:hover:not(:disabled),
+.focus__action:focus-visible:not(:disabled) {
+  border-color: rgba(233, 236, 238, 0.8);
+  background: rgba(233, 236, 238, 0.06);
+}
+
+.focus__action:disabled {
+  color: var(--text-dim);
+  border-color: rgba(233, 236, 238, 0.16);
+  cursor: default;
+}
+
+/*
+ * What is said when there is nowhere to land.
+ *
+ * The body's own sentence, in place of the button rather than beside it - an
+ * offer that cannot be taken is worse than no offer.
+ */
+.focus__refusal {
+  margin: 14px 0 0;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.stepper {
+  position: absolute;
+  right: clamp(20px, 3.4vw, 48px);
+  bottom: clamp(18px, 3vw, 38px);
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+}
+
+.stepper__arrow {
+  width: 38px;
+  height: 34px;
+  background: none;
+  border: 1px solid rgba(233, 236, 238, 0.28);
+  border-radius: 2px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 200ms ease, color 200ms ease;
+}
+
+.stepper__arrow:hover,
+.stepper__arrow:focus-visible {
+  border-color: rgba(233, 236, 238, 0.7);
+  color: #e9ecee;
+}
+
+.system__corner {
+  position: absolute;
+  left: clamp(20px, 3.4vw, 48px);
+  bottom: clamp(18px, 3vw, 38px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.system__index-toggle {
+  padding: 0 0 5px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(233, 236, 238, 0.22);
+  border-radius: 0;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 220ms ease, border-color 220ms ease;
+}
+
+.system__index-toggle:hover,
+.system__index-toggle:focus-visible {
+  color: #e9ecee;
+  border-bottom-color: rgba(233, 236, 238, 0.55);
+}
+
+/*
+ * The index.
+ *
+ * Ten rows is few enough to show at once, and a list answers what the scene
+ * cannot: what is here, in order, and how far out. Over the whole page rather
+ * than in a corner, because reading a list and reading a sky are two different
+ * activities and doing both at once does neither well.
+ */
+.sysindex {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(7, 11, 20, 0.94);
+  backdrop-filter: blur(6px);
+}
+
+.sysindex__list {
+  width: min(620px, calc(100% - 80px));
+  max-height: 74vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sysindex__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 20px;
+  width: 100%;
+  padding: 15px 4px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(233, 236, 238, 0.1);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 200ms ease;
+}
+
+.sysindex__row:hover,
+.sysindex__row:focus-visible {
+  border-bottom-color: rgba(233, 236, 238, 0.4);
+}
+
+.sysindex__name {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Constantia,
+    'Book Antiqua', Georgia, serif;
+  font-size: 21px;
+  color: #e9ecee;
+}
+
+.sysindex__row.is-focused .sysindex__name {
+  /* The one already chosen, marked without a highlight bar. */
+  font-style: italic;
+}
+
+.sysindex__au,
+.sysindex__note {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.sysindex__note {
+  min-width: 12ch;
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .solarlabel::before,
+  .focus__action,
+  .stepper__arrow,
+  .sysindex__row {
+    transition: none;
+  }
+}
+
 .solarlabels {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  /* Above the haze and the grain, both of which are between here and the
+     canvas now (D171). A name veiled by its own atmosphere is a name nobody
+     can read. */
+  z-index: 3;
   pointer-events: none;
 }
 
@@ -527,18 +941,19 @@ body {
   transform: translateX(-50%);
   white-space: nowrap;
   pointer-events: auto;
-  padding: 3px 9px;
-  background: rgba(14, 20, 33, 0.86);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(120, 190, 255, 0.45);
-  border-radius: 999px;
+  padding: 0 0 4px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(140, 196, 255, 0.5);
+  border-radius: 0;
   color: #cfe6ff;
   font: inherit;
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 160ms ease, background 160ms ease;
+  transition: opacity 200ms ease, border-color 200ms ease;
 }
 
 /*
@@ -552,7 +967,7 @@ body {
 }
 
 .solarlabel__visit:hover {
-  background: rgba(30, 60, 96, 0.92);
+  border-bottom-color: rgba(200, 228, 255, 0.95);
 }
 
 .solarlabel__visit:disabled {

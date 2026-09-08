@@ -10053,3 +10053,70 @@ when the layer changes, and the colour matching the regime key without either
 the line or the marker being told about the other.
 
 832 backend tests, 1,036 frontend.
+
+## D171 - The solar system page, rebuilt around choosing a body
+
+Phone pointed at a site and asked for this page to work like it: a dark scene
+with a few lights in it, where hovering one answers, clicking it flies the
+camera there and a caption names it, arrows step to the next, and an index
+lists the set. The planet pages were explicitly out of scope.
+
+### What was taken, and the one thing deliberately left
+
+Taken: the palette (navy with real atmospheric depth rather than flat black), a
+serif display line against very small letterspaced capitals, fine grain, a lot
+of space, and the interaction model above.
+
+**Left: the scattered coloured lights.** They are most of what gives that
+reference its atmosphere, and on a page whose entire subject is points of light
+in the dark, a decorative one is indistinguishable from a star. This project
+already refused that trade once - `warp.ts` is a screen-space effect precisely
+so nobody mistakes it for the real sky (D155). Depth here comes from haze and
+grain, neither of which can be read as an object.
+
+The fonts are the other substitution. That site sets its display line in a
+licensed serif; this app ships **no webfonts and fetches from no CDN** (D30), so
+the display face is a system serif stack. What is being borrowed is the
+contrast between a serif at size and a sans at ten pixels, which survives it.
+
+### What the page gained
+
+It had **no notion of a body being chosen.** The only interaction was hovering
+a nine-pixel label to reveal a Visit button, and there was no title.
+
+Now: hover rings a body, a click flies the camera to it, a caption gives its
+kind, its distance and its radius, and either a way to go there or **the body's
+own recorded reason** there is not one - Saturn says "No solid surface - cloud
+all the way down" where Mars offers a visit. Arrows and the arrow keys step
+outward and back, wrapping. An index lists all ten with their distances.
+
+Every line of that caption is a fact already in the repository. A caption that
+padded itself out would be the thing this project refuses, one page along.
+
+### Centring flew the camera into empty sky
+
+The obvious way to centre a body is to pan by how far off centre it *looks*,
+and `pan` already moves the camera in screen pixels. It ran away: two clicks
+and the system was gone.
+
+**Panning by a screen delta is not the inverse of the projection once the
+camera has any pitch.** A vertical screen offset moves the target partly
+through world *up*, out of the plane the planets are in, so the correction
+never lands and each frame asks for a bigger one. Interpolating the camera
+target toward the body's own position cannot do that - same space, fixed
+proportion, converges from anywhere. `solarScene` gained `positionOf` to make
+that possible, since it had the placements and exposed only screen coordinates.
+
+A test flies from (-40, 12, 33) to (5, 0, -2) and asserts it arrives.
+
+### Also
+
+The corner controls broke the first time: `.system__back` kept `position:
+absolute` after moving into a flex column, escaped it, and wrapped itself over
+four lines. Found by looking at the page rather than at the diff.
+
+Twenty tests on the pure parts - the stepper's ring and its wrapping, the
+click tolerance that gives three-pixel Mercury a target bigger than itself
+(defect #5's lesson), what the caption does and does not say, and the ease.
+
+832 backend tests, 1,056 frontend.
