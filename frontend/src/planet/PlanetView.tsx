@@ -51,8 +51,6 @@ import {
 } from './airportLayer';
 import { createSatelliteIconCanvases } from './satelliteSprite';
 import { setVisibility } from './layerSync';
-import { prefersReducedMotion } from '../motion';
-import { journeyMs } from '../journey';
 import { SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
 import {
   MOON_LABEL_LAYER,
@@ -236,7 +234,7 @@ function lonLatCenter(at: readonly [number, number, number]): [number, number] {
  * learned - but it opens a page rather than swapping layers underneath a
  * camera that had to serve both.
  */
-const LEAVE_FOR_SYSTEM_ZOOM = -1.0;
+const LEAVE_FOR_SYSTEM_ZOOM = -2.0;
 
 /**
  * Where the camera lands on the way back, comfortably clear of leaving again.
@@ -759,16 +757,27 @@ export function PlanetView() {
            * Not while a trip between worlds is running: that pulls the camera
            * out past this on purpose and has its own plan (D126).
            */
-          map.on('zoomend', () => {
+          /*
+           * **`zoom`, not `zoomend`** (D174).
+           *
+           * `zoomend` fires when the wheel *stops*, so a reader spinning
+           * outwards hit the floor of the zoom range and sat there with
+           * nothing happening until they gave up and let go - which is exactly
+           * what Phone reported as being stuck. The threshold is a line the
+           * camera crosses, and crossing it is the event.
+           *
+           * Guarded by `openPage` rather than by a flag of its own: the page
+           * opening is what stops this firing again, and it is set in the same
+           * tick.
+           */
+          map.on('zoom', () => {
             if (!map) return;
             const store = useOrbitalStore.getState();
             if (store.flyingTo || store.openPage) return;
             if (map.getZoom() > LEAVE_FOR_SYSTEM_ZOOM) return;
+            // The screen ends itself when the destination is ready, so nothing
+            // here sets a clock any more (D174).
             store.setJourney('system');
-            window.setTimeout(
-              () => useOrbitalStore.getState().setJourney(null),
-              journeyMs(prefersReducedMotion()),
-            );
             store.setOpenPage('system');
           });
 
@@ -1158,11 +1167,9 @@ export function PlanetView() {
             // Not when a trip between worlds is what closed the page: that has
             // its own plan and its own arrival (D126).
             if (!state.flyingTo) {
+              // Ended by `JourneyScreen`, which owns the screen's lifetime
+              // for both directions now (D174).
               useOrbitalStore.getState().setJourney('planet');
-              window.setTimeout(
-                () => useOrbitalStore.getState().setJourney(null),
-                journeyMs(prefersReducedMotion()),
-              );
               returning.easeTo({ zoom: RETURN_FROM_SYSTEM_ZOOM, duration: 500 });
             }
           }

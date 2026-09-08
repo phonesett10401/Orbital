@@ -105,6 +105,15 @@ const HERE_CHARS = 12;
 
 export function SolarSystemPage() {
   const open = useOrbitalStore((s) => s.openPage) === 'system';
+  /*
+   * Held back until the journey screen lifts (D174).
+   *
+   * The page mounts and renders *underneath* the screen so that it is ready the
+   * moment the screen goes - but a half-built scene appearing through it would
+   * be exactly the seam the screen exists to cover, and Phone asked for Earth
+   * to fade rather than for the system to arrive early.
+   */
+  const arriving = useOrbitalStore((s) => s.journey) === 'system';
   const setPage = useOrbitalStore((s) => s.setOpenPage);
   const activeBody = useOrbitalStore((s) => s.activeBody);
   const viewInstant = useOrbitalStore((s) => s.viewInstant);
@@ -129,6 +138,8 @@ export function SolarSystemPage() {
    * times to move a camera that is not React's.
    */
   const centreOn = useRef<BodyId | null>(null);
+  /** Whether this mount has told the store it has drawn a frame. */
+  const announced = useRef(false);
   /** Where the pointer wants the view to lean, and where it currently leans. */
   const driftTo = useRef({ x: 0, y: 0 });
   const drift = useRef({ x: 0, y: 0 });
@@ -166,6 +177,7 @@ export function SolarSystemPage() {
     const built = createSolarScene(element);
     scene.current = built;
     camera.current = initialCamera();
+    announced.current = false;
     homed.current = false;
     drift.current = { x: 0, y: 0 };
     driftTo.current = { x: 0, y: 0 };
@@ -231,6 +243,18 @@ export function SolarSystemPage() {
       if (placed.join() !== presentRef.current.join()) {
         presentRef.current = placed;
         setPresent(placed);
+      }
+
+      // **The page says when it can be looked at** (D174). The journey screen
+      // waits on this rather than on a clock, so the words stay up for as long
+      // as the scene actually takes to build - which is a different number on
+      // every machine, and was the whole of the flash Phone reported.
+      //
+      // After the first render rather than on mount: a mounted canvas that has
+      // not drawn is not something to reveal.
+      if (!announced.current) {
+        announced.current = true;
+        useOrbitalStore.getState().setSystemReady(true);
       }
 
       const next = built.markers();
@@ -422,7 +446,11 @@ export function SolarSystemPage() {
   );
 
   return (
-    <div className="system" role="region" aria-label="The solar system">
+    <div
+      className={`system ${arriving ? 'is-arriving' : ''}`}
+      role="region"
+      aria-label="The solar system"
+    >
       <canvas
         ref={canvas}
         className="system__canvas"

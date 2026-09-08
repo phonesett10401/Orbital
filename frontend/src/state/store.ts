@@ -246,6 +246,19 @@ export interface OrbitalState {
    * underneath it. `null` almost always.
    */
   journey: Destination | null;
+  /**
+   * Whether the solar system page has drawn a frame and can be looked at.
+   *
+   * The journey screen waits on this rather than on a clock (D174). It was a
+   * fixed 1,100 ms while the page opened in the same tick, so the words showed
+   * for a moment and the stall happened in the open behind them.
+   *
+   * Set by the page itself after its first render, cleared when it unmounts -
+   * so "ready" always means the thing that is about to be revealed, not the
+   * thing that was revealed last time.
+   */
+  systemReady: boolean;
+  setSystemReady(ready: boolean): void;
   setJourney(to: Destination | null): void;
 
   /**
@@ -445,6 +458,10 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
     set({ account, accountChecked: true });
   },
   journey: null,
+  systemReady: false,
+  setSystemReady(ready) {
+    if (useOrbitalStore.getState().systemReady !== ready) set({ systemReady: ready });
+  },
   setJourney(to) {
     if (useOrbitalStore.getState().journey !== to) set({ journey: to });
   },

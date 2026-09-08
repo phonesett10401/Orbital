@@ -29,13 +29,23 @@
 import { useEffect, useRef } from 'react';
 
 import { IN_MS, OUT_MS } from '../bodyFlight';
-import { journeyMs } from '../journey';
 import { prefersReducedMotion } from '../motion';
 import { useOrbitalStore } from '../state/store';
 import { drawStreaks, makeField } from '../warp';
 
 /** Enough for a field with depth; few enough to cost nothing on a laptop. */
 const STAR_COUNT = 260;
+
+/**
+ * One full pass of the field while sustaining, in milliseconds (D174).
+ *
+ * Only sets the speed: the run has no end of its own any more, so this is how
+ * long a star takes to cross rather than how long the effect lasts.
+ */
+const SUSTAIN_CYCLE_MS = 1_400;
+
+/** How long the sustained run takes to reach full strength. */
+const SUSTAIN_RAMP_MS = 420;
 
 export function WarpField() {
   const flyingTo = useOrbitalStore((s) => s.flyingTo);
@@ -54,7 +64,12 @@ export function WarpField() {
     // A trip between worlds and a change of view are different lengths, and
     // running the shorter one on the longer one's clock would leave the streaks
     // barely started when it ends (D161).
-    const total = flyingTo ? OUT_MS + IN_MS : journeyMs(false);
+    // A trip between worlds has a known length. A journey to the solar system
+    // does **not** - it lasts until the page is ready, which is a different
+    // number on every machine - so that run ramps in and then holds, and it is
+    // the journey clearing that ends it (D174).
+    const sustained = !flyingTo;
+    const total = flyingTo ? OUT_MS + IN_MS : SUSTAIN_CYCLE_MS;
     // Where the thing being covered actually happens, as a fraction of the run.
     // Read from the constants each is built from rather than restated, so the
     // loudest frame cannot drift away from the one with something to hide: the
@@ -66,7 +81,13 @@ export function WarpField() {
 
     const draw = () => {
       const now = performance.now();
-      const progress = Math.min(1, (now - started) / total);
+      const elapsed = now - started;
+      // Unclamped while sustaining: `distanceAt` takes the fractional part, so
+      // a progress that keeps climbing is what keeps the streaks flowing.
+      const progress = sustained ? elapsed / total : Math.min(1, elapsed / total);
+      // Ramp in, then hold at full. Nothing fades it out: the screen lifting is
+      // the loudest frame, and it is the one with the swap to cover.
+      const power = sustained ? Math.min(1, elapsed / SUSTAIN_RAMP_MS) : undefined;
 
       // Sized here rather than on mount: a window resized mid-trip would
       // otherwise stretch the field, and this costs two property writes.
@@ -81,9 +102,9 @@ export function WarpField() {
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       context.clearRect(0, 0, width, height);
 
-      drawStreaks(context, field, progress, apex, width, height);
+      drawStreaks(context, field, progress, apex, width, height, power);
 
-      if (progress < 1) frame = requestAnimationFrame(draw);
+      if (sustained || progress < 1) frame = requestAnimationFrame(draw);
     };
 
     frame = requestAnimationFrame(draw);

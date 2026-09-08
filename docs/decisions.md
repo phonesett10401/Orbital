@@ -10261,3 +10261,67 @@ unreachable - and the same lesson, which is that **the thing to check is not
 whether the rule is right but whether the right thing is reaching it.**
 
 Found by Phone using the page. 832 backend tests, 1,070 frontend.
+
+## D174 - The transition waits for the destination, not for a clock
+
+Phone: the trip to the solar system stalls at the bottom of the zoom range for
+"some mins", and then the words flash for a tenth of a second before arriving.
+Both were real and both were measurable.
+
+### The stall was `zoomend`
+
+The trigger listened for **`zoomend`**, which fires when the wheel *stops*. A
+reader spinning outwards reaches the floor of the zoom range - `minZoom` is
+-2, so there is no more globe to give - and then sits there with nothing
+happening until they give up and let go. Nothing was slow; nothing had been
+asked to start.
+
+Measured on a continuous wheel: the journey began at **t = 3,073 ms**, which
+was the moment the wheel stopped rather than the moment the threshold was
+crossed. On `zoom` it begins at **t = 1,367 ms**, mid-spin.
+
+The threshold moved to **z-2.0** at Phone's request, which is the zoom floor:
+you leave at exactly the point there is no more zooming out to do.
+
+### The flash was two writers and a clock
+
+`setJourney('system')` and `setOpenPage('system')` fired in the same tick, and
+the screen was ended by a `setTimeout` at each of the two places that started
+one. So the fixed 1,100 ms ran **while the solar page was mounting inside it**,
+and on a slower machine most of it was spent on a mount the reader could not
+see. Neither writer could have known when the destination was ready, because
+neither was the destination.
+
+The page says so itself now. `SolarSystemPage` sets `systemReady` after its
+**first rendered frame** - not on mount, because a canvas that has not drawn is
+not something to reveal - and `JourneyScreen` owns its own lifetime for both
+directions, ending on a rule in `journey.ts` rather than on a clock at the call
+site. Floor 750 ms so a fast machine cannot flash it; ceiling 6 s, because a
+transition that can hang forever is worse than a seam.
+
+Measured after: journey at 1,367, page mounted at 1,367, **ready at 1,467**,
+screen lifts at 2,126 - held 759 ms, the floor, and it would hold longer on a
+machine that needed longer.
+
+### What the reader sees now
+
+The streaks **sustain** instead of running a length. A trip between worlds has a
+known duration and its own rise and fall; this one lasts until the page is
+ready, which is a different number on every machine - so it ramps in over 420 ms
+and then holds, and the screen lifting is what ends it. That needed the caller
+to be able to supply the envelope, so `drawStreaks` takes an optional `power`
+and the existing behaviour is its default.
+
+Earth **fades** under it over 900 ms rather than being cut away, and the solar
+page - mounted and rendering the whole time, which is the point - is held at
+`opacity: 0` until the screen lifts. A half-built scene showing through the
+transition is exactly the seam the screen exists to cover.
+
+### The shape, again
+
+This is the two-writer fault for the third time in three sessions (D154, D169,
+here). The tell each time is the same: **a thing that can be ended from more
+than one place is a thing whose duration nobody owns.** The fix each time has
+been to give it one owner and put the rule where it can be tested.
+
+Five tests on the hold rule. 832 backend, 1,075 frontend.

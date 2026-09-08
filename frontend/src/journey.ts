@@ -45,3 +45,42 @@ export const JOURNEY_MS = 1_100;
 export function journeyMs(reducedMotion: boolean): number {
   return reducedMotion ? 700 : JOURNEY_MS;
 }
+
+/**
+ * The floor on a journey to the solar system, in milliseconds (D174).
+ *
+ * The screen used to run on a fixed 1,100 ms clock while the page opened in the
+ * same tick, so on a slower machine the reader saw the words for a tenth of a
+ * second with a stall around them. The hold is tied to the destination being
+ * **ready** now, and this is only the floor: a page ready in 40 ms must still
+ * not flash four words and vanish.
+ */
+export const JOURNEY_MIN_MS = 750;
+
+/**
+ * The ceiling, after which the screen lifts whether or not anything said it was
+ * ready.
+ *
+ * A transition that can hang forever is worse than a seam. If the solar page
+ * has not drawn a frame in six seconds then something is wrong, and the reader
+ * is better off looking at it than at a word and a dot.
+ */
+export const JOURNEY_MAX_MS = 6_000;
+
+/**
+ * Whether the journey screen may lift.
+ *
+ * The trip *back* to a planet needs no readiness signal - that view is already
+ * mounted and never went away - so it keeps the fixed clock it always had.
+ * Only the outward trip waits for something.
+ */
+export function journeyHoldDone(
+  to: Destination,
+  elapsedMs: number,
+  destinationReady: boolean,
+  reducedMotion: boolean,
+): boolean {
+  if (to === 'planet') return elapsedMs >= journeyMs(reducedMotion);
+  if (elapsedMs >= JOURNEY_MAX_MS) return true;
+  return destinationReady && elapsedMs >= JOURNEY_MIN_MS;
+}

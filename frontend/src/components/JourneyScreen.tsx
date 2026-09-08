@@ -20,15 +20,56 @@
  * the streaks and the drift go.
  */
 
+import { useEffect, useRef } from 'react';
+
 import { useOrbitalStore } from '../state/store';
 import { bodyFor } from '../bodies';
-import { journeyLabel } from '../journey';
+import { journeyHoldDone, journeyLabel } from '../journey';
 import { prefersReducedMotion } from '../motion';
 
 export function JourneyScreen() {
   const journey = useOrbitalStore((s) => s.journey);
   const activeBody = useOrbitalStore((s) => s.activeBody);
+  const systemReady = useOrbitalStore((s) => s.systemReady);
   const still = prefersReducedMotion();
+  const startedAt = useRef(0);
+
+  /*
+   * **This screen now owns its own lifetime** (D174).
+   *
+   * It was ended by a `setTimeout` at each of the two places that started one,
+   * which is the two-writer shape this project keeps finding: the outward trip
+   * ran a fixed 1,100 ms clock that began at the same instant the solar page
+   * mounted, so the clock spent itself on the mount and the reader saw four
+   * words flash. Neither writer could have known when the destination was
+   * actually ready, because neither was the destination.
+   *
+   * One owner, one rule, and the rule is in `journey.ts` where it can be
+   * checked without a browser.
+   */
+  useEffect(() => {
+    if (!journey) return undefined;
+    if (startedAt.current === 0) startedAt.current = performance.now();
+
+    let frame = 0;
+    const check = () => {
+      const elapsed = performance.now() - startedAt.current;
+      if (journeyHoldDone(journey, elapsed, systemReady, still)) {
+        useOrbitalStore.getState().setJourney(null);
+        return;
+      }
+      frame = window.setTimeout(check, 80);
+    };
+    check();
+
+    return () => {
+      window.clearTimeout(frame);
+    };
+  }, [journey, systemReady, still]);
+
+  useEffect(() => {
+    if (!journey) startedAt.current = 0;
+  }, [journey]);
 
   if (!journey) return null;
 

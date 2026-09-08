@@ -85,8 +85,14 @@ export function App() {
   // the bottom of the screen is genuinely free.
   const scrubberShown = onEarth && activeLayer.id === 'satellite';
 
+  // Earth fades out under the streaks on the way to the solar system, and the
+  // system is held back until the screen lifts (D174). The class is here
+  // rather than inside `PlanetView` because the fade is a fact about the whole
+  // view changing, not about the map.
+  const leavingForSystem = useOrbitalStore((s) => s.journey) === 'system';
+
   return (
-    <div className="app">
+    <div className={`app ${leavingForSystem ? 'app--leaving' : ''}`}>
       <PlanetView />
 
       {/* Directly over the map and under every control: the trip is something

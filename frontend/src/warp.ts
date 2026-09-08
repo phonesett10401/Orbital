@@ -124,8 +124,12 @@ export function distanceAt(star: WarpStar, progress: number): number {
  * The caller scales it to the screen, which keeps this function free of pixels
  * and therefore testable.
  */
-export function streakFor(star: WarpStar, progress: number, apex: number): Streak {
-  const power = intensity(progress, apex);
+export function streakFor(
+  star: WarpStar,
+  progress: number,
+  apex: number,
+  power = intensity(progress, apex),
+): Streak {
   const far = INNER + distanceAt(star, progress) * (1 - INNER);
   const near = Math.max(INNER, far - TAIL * far * power);
   const cos = Math.cos(star.angle);
@@ -183,6 +187,17 @@ export function drawStreaks(
   apex: number,
   width: number,
   height: number,
+  /**
+   * How hard to run, overriding the envelope derived from `progress` (D174).
+   *
+   * A trip between worlds has a known length and its own rise and fall, which
+   * is what `intensity` describes. A journey to the solar system does not: it
+   * lasts until the page is ready, which is a different number on every
+   * machine. That run ramps in and then **holds** while `progress` keeps
+   * climbing to carry the motion, so the caller supplies the power instead of
+   * having it inferred from a length nobody knows.
+   */
+  power = intensity(progress, apex),
 ): number {
   const cx = width / 2;
   const cy = height / 2;
@@ -193,7 +208,7 @@ export function drawStreaks(
 
   context.lineCap = 'round';
   for (const star of field) {
-    const s = streakFor(star, progress, apex);
+    const s = streakFor(star, progress, apex, power);
     if (s.alpha < MIN_ALPHA) continue;
     context.strokeStyle = `rgba(${STREAK_RGB}, ${s.alpha.toFixed(3)})`;
     // Thicker further out, which is what gives a flat field depth.
