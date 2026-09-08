@@ -21,7 +21,7 @@ from tests.conftest import offline_routes
 from app.config import Settings
 from app.main import create_app
 from app.orbits import tle_epoch
-from app.providers.satellites import SatelliteProvider, elements_from_file
+from app.providers.satellites import ORBIT_POINTS, SatelliteProvider, elements_from_file
 
 FIXTURE = Path(__file__).parent / "fixtures" / "satellites_sample.json"
 
@@ -325,3 +325,97 @@ class TestTheWindowATierBuys:
         # requirement by accident.
         self._accounts(client, tmp_path)
         assert client.get("/api/satellites").status_code == 200
+
+
+class TestTheOrbitPath:
+    """One revolution, drawn (D170).
+
+    The detail endpoint has returned an empty ``track`` since D95, with a note
+    saying a satellite's path is computable in both directions and belongs in
+    its own shape. This is that shape, and these are its terms.
+    """
+
+    def _first(self, client):
+        return client.get("/api/satellites").json()["objects"][0]["id"]
+
+    def test_a_selected_satellite_has_a_path(self, client):
+        body = client.get(f"/api/satellites/{self._first(client)}/orbit").json()
+        assert len(body["points"]) == ORBIT_POINTS + 1
+        assert body["periodMinutes"] > 0
+        assert set(body["points"][0]) == {"lat", "lon", "altitude"}
+
+    def test_the_satellite_sits_in_the_middle_of_its_own_path(self, client):
+        # Half a period back and half forward. Drawn from *now* forwards the
+        # marker would sit at one end of the line, which reads as the start of
+        # the orbit rather than as a position on it.
+        satellite = client.get("/api/satellites").json()["objects"][0]
+        body = client.get(f"/api/satellites/{satellite['id']}/orbit").json()
+
+        middle = body["points"][len(body["points"]) // 2]
+        assert middle["lat"] == pytest.approx(satellite["lat"], abs=0.05)
+        assert middle["lon"] == pytest.approx(satellite["lon"], abs=0.05)
+
+    def test_the_path_comes_back_beside_where_it_started_not_onto_it(self, client):
+        # The Earth turns under the orbit - about 22.5 degrees of longitude per
+        # low revolution - so in the Earth-fixed frame the map draws, one
+        # revolution ends *beside* its start. A closed ellipse would be the
+        # truth about a frame this view does not use.
+        body = client.get(f"/api/satellites/{self._first(client)}/orbit").json()
+        start, end = body["points"][0], body["points"][-1]
+        drift = abs(end["lon"] - start["lon"])
+        drift = min(drift, 360 - drift)
+        assert drift > 1.0, "a closed path would mean the Earth had not turned"
+        assert abs(end["lat"] - start["lat"]) < 5.0, "same point in the orbit, though"
+
+    def test_altitude_varies_the_way_an_orbit_does(self, client):
+        # Not a constant. Even a near-circular orbit is an ellipse, and the
+        # shell the frontend draws this on is altitude-driven - a path of
+        # identical altitudes would be a ring at one height rather than an
+        # orbit.
+        body = client.get(f"/api/satellites/{self._first(client)}/orbit").json()
+        altitudes = [p["altitude"] for p in body["points"]]
+        assert min(altitudes) > 0
+        assert max(altitudes) != min(altitudes)
+
+    def test_every_point_is_somewhere_real(self, client):
+        body = client.get(f"/api/satellites/{self._first(client)}/orbit").json()
+        for point in body["points"]:
+            assert -90 <= point["lat"] <= 90
+            assert -180 <= point["lon"] <= 180
+
+    def test_an_unknown_satellite_is_a_404(self, client):
+        assert client.get("/api/satellites/not-a-catalogue-number/orbit").status_code == 404
+
+    def test_the_path_is_centred_on_the_instant_asked_for(self, client):
+        satellite = client.get("/api/satellites").json()["objects"][0]
+        earlier = (fixture_now() - timedelta(minutes=30)).isoformat()
+        body = client.get(
+            f"/api/satellites/{satellite['id']}/orbit", params={"at": earlier}
+        ).json()
+        assert body["computedAt"].startswith(earlier[:16])
+
+        # And it is a different path, because the satellite has moved.
+        now_body = client.get(f"/api/satellites/{satellite['id']}/orbit").json()
+        middles = (
+            body["points"][len(body["points"]) // 2],
+            now_body["points"][len(now_body["points"]) // 2],
+        )
+        assert middles[0] != middles[1]
+
+    def test_time_travel_is_gated_the_way_the_listing_is(self, client):
+        # The same capability, so the same rule. A path of 181 positions in the
+        # past is time travel exactly as one position is, and the entitlement
+        # check living on only one of the two endpoints is how a limit becomes
+        # a suggestion (D149).
+        satellite = client.get("/api/satellites").json()["objects"][0]
+        long_ago = (fixture_now() - timedelta(days=30)).isoformat()
+        response = client.get(
+            f"/api/satellites/{satellite['id']}/orbit", params={"at": long_ago}
+        )
+        assert response.status_code == 403
+
+    def test_the_payload_stays_small_enough_to_fetch_on_a_click(self, client):
+        # Measured rather than assumed: this is fetched every time a satellite
+        # is selected, so it sits in the interaction path.
+        response = client.get(f"/api/satellites/{self._first(client)}/orbit")
+        assert len(response.content) < 20_000, len(response.content)

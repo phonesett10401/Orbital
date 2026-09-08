@@ -27,6 +27,7 @@ import type {
   BoundingBox,
   LayerDescriptor,
   ObjectListResponse,
+  OrbitPath,
   RenderableObject,
   TrackedObject,
   TrackedObjectDetail,
@@ -105,6 +106,22 @@ export interface OrbitalState {
   selectedDetail: TrackedObjectDetail | null;
   select(id: string | null): void;
   setSelectedDetail(detail: TrackedObjectDetail | null): void;
+
+  /**
+   * The orbit the selected satellite is on, once fetched (D170).
+   *
+   * Separate from `selectedDetail` even though both arrive on selection, for
+   * the reason the backend keeps them separate too: a `track` is where
+   * something **has been**, an orbit is where something **goes**, and only one
+   * of the two is an observation. Folding a computed path into a field meaning
+   * "observed" is the D94 mistake - a field whose meaning depends on which
+   * layer you are in.
+   *
+   * `null` for every layer but satellites, and for a satellite whose elements
+   * cannot carry a whole revolution.
+   */
+  selectedOrbit: OrbitPath | null;
+  setSelectedOrbit(orbit: OrbitPath | null): void;
 
   searchQuery: string;
   searchResults: TrackedObject[];
@@ -280,6 +297,7 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
       objectsVersion: get().objectsVersion + 1,
       selectedId: null,
       selectedDetail: null,
+      selectedOrbit: null,
       searchResults: [],
       searchAirports: [],
       searchSatellites: [],
@@ -290,6 +308,14 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
 
   selectedId: null,
   selectedDetail: null,
+  selectedOrbit: null,
+  setSelectedOrbit(orbit) {
+    // The same guard `setSelectedDetail` uses: a response arriving after the
+    // reader has moved on would draw the previous satellite's orbit around the
+    // new one, which is a picture of neither.
+    if (orbit && orbit.id !== get().selectedId) return;
+    set({ selectedOrbit: orbit });
+  },
   select(id) {
     if (id === get().selectedId) return;
     // Clear the old detail immediately so the panel never shows one aircraft's
@@ -298,7 +324,7 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
     // The focused airport goes with it. An aircraft and an airport are two
     // answers to two different questions, and leaving both marked would say
     // the map is showing you both when the camera can only be at one.
-    set({ selectedId: id, selectedDetail: null, focusedAirport: null });
+    set({ selectedId: id, selectedDetail: null, selectedOrbit: null, focusedAirport: null });
   },
   setSelectedDetail(detail) {
     // Ignore a response that arrived after the user moved on.
@@ -452,6 +478,7 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
       objectsVersion: get().objectsVersion + 1,
       selectedId: null,
       selectedDetail: null,
+      selectedOrbit: null,
       viewInstant: null,
       // The lunar craft and any panel open on one go the same way, and for the
       // same reason: they name something that is not on the world being

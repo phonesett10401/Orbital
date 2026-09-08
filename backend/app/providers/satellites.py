@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Awaitable, Callable, Iterable, Sequence
@@ -127,6 +128,35 @@ DEFAULT_SOURCES: tuple[tuple[str, str], ...] = (
 
 ElementFetcher = Callable[[], Awaitable[list[ElementSet]]]
 DirectoryFetcher = Callable[[], Awaitable[dict[str, DirectoryEntry]]]
+
+
+#: How many points make one drawn revolution.
+#:
+#: Two degrees of true anomaly apart. On a circular low orbit that is a chord
+#: whose greatest departure from the true curve is 1.05 km - against a globe
+#: drawn 6,371 km in radius across roughly eight hundred pixels, six hundredths
+#: of a pixel. Doubling it would be invisible and would double the payload.
+ORBIT_POINTS = 180
+
+
+@dataclass(frozen=True)
+class OrbitPoint:
+    """One position on a drawn orbit. Degrees and metres, as the wire uses."""
+
+    lat: float
+    lon: float
+    altitude: float
+
+
+@dataclass(frozen=True)
+class OrbitTrack:
+    """A whole revolution, and enough about it to label the drawing."""
+
+    catalog_id: str
+    name: str
+    period_minutes: float
+    computed_at: datetime
+    points: list[OrbitPoint]
 
 
 class SatelliteProvider(Provider):
@@ -482,6 +512,83 @@ class SatelliteProvider(Provider):
             if len(found) >= limit:
                 break
         return found[:limit]
+
+    def orbit(self, object_id: str, at: datetime | None = None) -> OrbitTrack:
+        """One full revolution of this satellite, centred on ``at``.
+
+        The detail endpoint has left ``track`` empty since D95 with a note
+        saying why: for an aircraft a track is *observed* and accumulates as we
+        watch, while for a satellite it is **computable in either direction**,
+        which is a different thing and belongs in its own shape rather than
+        smuggled into a field that means "where it has been". This is that
+        shape (D170).
+
+        Half a period back and half forward, so the satellite sits in the
+        middle of its own path rather than at one end of it.
+
+        **The path does not close, and that is not a bug.** These are ground
+        positions in an Earth-fixed frame, and the Earth turns underneath the
+        orbit - about 22.5 degrees of longitude per low-orbit revolution. The
+        curve therefore comes back beside where it started rather than onto it.
+        Drawing a closed ellipse would be the truth about a frame the map does
+        not use.
+
+        Raises:
+            KeyError: no satellite with that catalogue number.
+            OrbitError: the elements cannot cover the whole revolution. The
+                whole path is refused rather than the offending points being
+                dropped, because a path with a hole in it is a claim about an
+                orbit that has one. See the note in ``_orbit_points``.
+        """
+        when = (at or utcnow()).astimezone(timezone.utc)
+        element = next((e for e in self._elements if e.catalog_id == object_id), None)
+        if element is None:
+            raise KeyError(object_id)
+
+        # Propagating the centre first buys the period, which is what the
+        # window is measured in - and fails early, before 180 propagations, if
+        # these elements are unusable at all.
+        here = propagate(element.line1, element.line2, when, epoch=element.epoch)
+        period = timedelta(minutes=here.period_minutes)
+
+        return OrbitTrack(
+            catalog_id=element.catalog_id,
+            name=element.name,
+            period_minutes=here.period_minutes,
+            computed_at=when,
+            points=self._orbit_points(element, when, period),
+        )
+
+    @staticmethod
+    def _orbit_points(
+        element: ElementSet, when: datetime, period: timedelta
+    ) -> list[OrbitPoint]:
+        """``ORBIT_POINTS`` positions spanning one period around ``when``.
+
+        Every point is propagated, and **any refusal refuses the whole path.**
+        The seven-day freshness rule bites at the ends rather than the middle:
+        a geostationary satellite's period is nearly a day, so half of it is
+        twelve hours, and elements already six and a half days old will carry
+        the centre and refuse an end. A path that stops halfway round would
+        look like an orbit that does, so there is nothing honest to draw.
+
+        Low orbit is nowhere near this - half of ninety minutes is 0.03 days.
+        """
+        points: list[OrbitPoint] = []
+        for step in range(ORBIT_POINTS + 1):
+            moment = when - period / 2 + period * (step / ORBIT_POINTS)
+            position = propagate(element.line1, element.line2, moment, epoch=element.epoch)
+            points.append(
+                OrbitPoint(
+                    # Four decimals is eleven metres of latitude, three orders
+                    # of magnitude finer than SGP4's own kilometre-a-day drift
+                    # and half the bytes of the full float.
+                    lat=round(position.lat, 4),
+                    lon=round(position.lon, 4),
+                    altitude=round(position.altitude_m),
+                )
+            )
+        return points
 
     @property
     def element_count(self) -> int:

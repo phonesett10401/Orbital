@@ -9929,3 +9929,127 @@ belongs. Plain map on Earth, then the Moon, gives the **lunar mosaic** where it
 gave a blank disc, and returning to Earth restores the plain map.
 
 823 backend tests, 1,029 frontend.
+
+## D170 - Orbit paths, and the three.js question answered by measuring
+
+Phone asked for two things: orbit paths for satellites, and to move anything
+written in another language to three.js **if three.js would make it better**.
+The first is built. The second turned out to be a question with a measured
+answer rather than a task, and the answer is no.
+
+### The path the detail endpoint has been asking for since D95
+
+`get_satellite` has returned an empty `track` for five months with a note on
+it:
+
+> for a satellite it is computable in either direction, which is a different
+> thing to build and belongs with the panel that displays it rather than
+> smuggled in now
+
+`GET /api/satellites/{id}/orbit` is that thing. **Half a period back and half
+forward**, so the satellite sits in the middle of its own path rather than at
+one end of it, and 181 points across it.
+
+Kept out of `track` deliberately. That field means *where this has been*, which
+for an aircraft is an observation accumulated while we watched; every point
+here is computed, forwards as readily as backwards. Giving the two the same
+name would make a field's meaning depend on which layer you were in, which is
+the D94 mistake.
+
+**The path does not close.** These are Earth-fixed positions and the Earth
+turns underneath the orbit - about 22.5 degrees of longitude per low
+revolution - so one lap ends *beside* where it started, not on it. Measured on
+IMAGE: 146 degrees of longitude between the ends, at the same latitude. A
+closed ellipse would be the truth about a frame this view does not use.
+
+### What is refused, and why the whole path rather than the point
+
+Every point is propagated and **any refusal refuses the whole path.** The
+seven-day freshness rule bites at the ends rather than the middle: a
+geostationary period is nearly a day, so half of it is twelve hours, and
+elements already six and a half days old will carry the centre and refuse an
+end. A path that stops halfway round would look like an orbit that does.
+
+So a satellite can list, draw and refuse to have an orbit, and the 404 says
+which. That is the same shape as "an aircraft with no heading gets no model"
+(D18, D40, D42): a principled hole rather than a plausible fabrication.
+
+### The line has to lie the same way the shell does
+
+The shell is **logarithmic** (D96) because the true range runs 420 km to
+105,466 km. So an orbit drawn at true scale would **not pass through the
+satellite it belongs to** - it would be a ring floating near it, with no way
+for a reader to tell which of the two was wrong.
+
+Every point therefore goes through `shellPosition`, the same function the
+marker uses rather than a copy of it, so the line passes through the marker by
+construction. A test asserts it to `Math.fround` rather than to a tolerance:
+both go to the GPU as float32, so they agree *exactly* at the precision they
+are drawn at, and a tolerance would also pass if they were merely near.
+
+The cost is worth stating: **an eccentric orbit is not drawn as its true
+shape.** A logarithm on a radius is not a similarity transform, so IMAGE - 1,497
+km at perigee, 45,416 at apogee - is compressed far more at its high end. The
+claim is the shell's and no more: *higher on screen means higher in orbit*.
+
+### Occlusion, which decided the primitive
+
+`LineSegments`, not `Line`, and that is an occlusion decision. The shell hides
+satellites one at a time against MapLibre's clipping plane; a single line strip
+cannot be hidden in pieces, so half an orbit would draw straight through the
+Earth - the error this file already says would look broken. Each adjacent pair
+is emitted only when **both** ends are on the near side, so the curve breaks
+itself at the horizon in one draw call.
+
+Measured on the ISS at zoom 0.6: **89 of 180 segments drawn**, which is the
+half of a low orbit that faces you.
+
+### Cost
+
+| | |
+|---|---|
+| Payload | 9.1 kB, **2.6 kB gzipped** |
+| Server time | 6 ms |
+| Per-frame work | 181 near-side tests, one draw call, no allocation |
+
+The vertices are rebuilt only when the path changes; only the near-side filter
+runs per frame, because that depends on the camera and the vertices do not.
+
+### The three.js question
+
+**Nothing qualified.** three.js is already `three@0.185.1` across eight
+production files and about 2,500 lines - the aircraft model, the satellite
+shell, the moon shell, the terminator, the solar scene, and the procedural
+geometry behind them - and it is not beside MapLibre but *inside* it, as custom
+layers sharing MapLibre's own GL context and matrices. Measured share of the
+bundle: **522 kB raw, 131.5 kB gzipped**, 53% of the application chunk.
+
+What is left in another language is left there on purpose:
+
+| | | |
+|---|---|---|
+| **SGP4, in Python** | Could have been `satellite.js` in the browser - this feature is exactly where that choice presented itself | **No.** Two implementations of the same physics that can disagree, in a project whose satellite layer is one long argument about not fabricating positions. The client does not hold the elements either, and the backend propagates the whole catalogue in 21 ms |
+| **MapLibre's style expressions** | The markers, labels and ground symbols | **No.** MapLibre does label collision and hit-testing; the shell already paid for leaving that - a custom layer gets no picking, which is why `pick()` exists |
+| **Canvas 2D sprite atlases** | `aircraftSprite`, `satelliteSprite`, `shipSprite`, the coverage hatch | **No.** These generate *textures* for the GL layers. Canvas is the right tool and three.js consumes the output |
+| **The warp streaks** | `WarpField.tsx`, canvas 2D | **No, emphatically.** D155 makes them a screen-space effect precisely so nobody mistakes them for a sky. Rebuilding them in 3D would make them look like the real star field, which is the thing that file refuses |
+
+And the version of this question that was already asked and answered: the
+three.js globe **was** the renderer, and D104 deleted it. Not for performance
+and not for geometry - *"the geometry was never the obstacle"* - but because it
+lost the place names, the imagery and the airports. Phone's summary at the
+time: *"with globe, we cant see any info of our planet locations."*
+
+The criterion this leaves is the one the shell already follows: **3D earns its
+place when it shows an axis the map cannot.** Altitude does, which is why the
+orbit path is drawn in three.js and on the shell rather than as a MapLibre line
+on the ground.
+
+### Verified
+
+Nine backend tests, seven on the geometry. Then in the browser: IMAGE's
+elliptical path arcing out to apogee with the spacecraft sitting on the line,
+the ISS's low orbit crossing the globe at 89 of 180 segments, the path clearing
+when the layer changes, and the colour matching the regime key without either
+the line or the marker being told about the other.
+
+832 backend tests, 1,036 frontend.

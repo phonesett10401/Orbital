@@ -8,7 +8,13 @@
 
 import { useEffect, useRef } from 'react';
 
-import { fetchObjectDetail, fetchObjects, search, ApiError } from '../api/client';
+import {
+  fetchObjectDetail,
+  fetchObjects,
+  fetchSatelliteOrbit,
+  search,
+  ApiError,
+} from '../api/client';
 import { config } from '../config';
 import { useOrbitalStore } from '../state/store';
 import type { BoundingBox, LayerDescriptor } from '../types';
@@ -181,6 +187,48 @@ export function useSelectedDetail(): void {
 
     return () => controller.abort();
   }, [selectedId, layer.resource]);
+}
+
+/**
+ * Fetch the orbit for a selected satellite (D170).
+ *
+ * A hook of its own rather than a second `.then` on the detail fetch, because
+ * the two are not the same request and only one of them exists for every
+ * layer: there is no orbit endpoint for aircraft or ships, and there could not
+ * be. An orbit is computable from elements; a flight is computable from
+ * nothing.
+ *
+ * `viewInstant` is a dependency because a rewound map wants the orbit the
+ * satellite was on *then*. The backend refuses an instant outside the reader's
+ * entitlement window on the same terms as the listing, so a refusal here is a
+ * 403 and the path simply does not draw.
+ */
+export function useSelectedOrbit(): void {
+  const selectedId = useOrbitalStore((s) => s.selectedId);
+  const layer = useOrbitalStore((s) => s.activeLayer);
+  const viewInstant = useOrbitalStore((s) => s.viewInstant);
+
+  useEffect(() => {
+    if (!selectedId || layer.id !== 'satellite') {
+      useOrbitalStore.getState().setSelectedOrbit(null);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    void fetchSatelliteOrbit(selectedId, viewInstant, controller.signal)
+      .then((orbit) => useOrbitalStore.getState().setSelectedOrbit(orbit))
+      .catch((error) => {
+        if ((error as Error).name === 'AbortError') return;
+        // A 404 here is a real answer rather than a failure: elements too old
+        // to carry a whole revolution have no drawable orbit, and the backend
+        // refuses the path rather than returning one with a hole in it. Either
+        // way the satellite is still selected and still drawn - it just has no
+        // line through it.
+        useOrbitalStore.getState().setSelectedOrbit(null);
+      });
+
+    return () => controller.abort();
+  }, [selectedId, layer.id, viewInstant]);
 }
 
 /** Debounced server-side search. */

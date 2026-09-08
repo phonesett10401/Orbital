@@ -30,9 +30,10 @@ from app.accounts.entitlements import travel_refusal, within_travel_window
 from app.accounts.store import Account
 from app.api.auth import current_account
 from app.api.deps import get_settings_dep
-from app.api.schemas import ObjectListResponse
+from app.api.schemas import ObjectListResponse, OrbitPathResponse, OrbitPointResponse
 from app.config import Settings
 from app.models import BBox, ObjectType, TrackedObject, TrackedObjectDetail, TrackSource, utcnow
+from app.orbits import OrbitError
 from app.providers.satellites import SatelliteProvider
 from app.thinning import thin
 
@@ -214,3 +215,64 @@ async def get_satellite(
                 route=None,
             )
     raise HTTPException(status_code=404, detail=f"no satellite with id {object_id!r}")
+
+
+@router.get(
+    "/{object_id}/orbit",
+    response_model=OrbitPathResponse,
+    summary="One revolution of one satellite, computed both ways from now",
+)
+async def get_satellite_orbit(
+    object_id: str,
+    at: str | None = Query(
+        default=None,
+        description="ISO 8601 instant to centre the revolution on. Defaults to now.",
+    ),
+    provider: SatelliteProvider | None = Depends(get_satellites),
+    account: Account | None = Depends(current_account),
+) -> OrbitPathResponse:
+    """The orbit a satellite is on, as a path to draw (D170).
+
+    The one endpoint here that is a *shape* rather than a filter of the
+    catalogue, and it exists because the detail endpoint said it should: the
+    note left on its empty ``track`` field in D95 asked for exactly this, in
+    its own shape rather than smuggled into a field that means "observed".
+
+    Entitlement is checked on the same terms as the list endpoint, because it
+    is the same capability: ``at`` in the past is time travel whether it
+    returns one position or a hundred and eighty of them.
+    """
+    catalogue = _catalogue(provider)
+    instant = _parse_instant(at)
+
+    # The same door the listing uses, not a second one written to match it.
+    _check_window(instant, account)
+
+    try:
+        track = catalogue.orbit(object_id, instant)
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"no satellite with id {object_id!r}"
+        ) from None
+    except OrbitError as error:
+        # 404 rather than 500: the *path* does not exist at this instant, which
+        # is a fact about these elements and not a fault. It happens at the
+        # ends rather than the middle - a satellite whose position is still
+        # served can have elements too old to carry half a period either way -
+        # so the message says which, rather than leaving the caller to guess
+        # from a satellite that lists fine and will not draw.
+        raise HTTPException(
+            status_code=404,
+            detail=f"no drawable orbit for {object_id!r}: {error}",
+        ) from None
+
+    return OrbitPathResponse(
+        id=track.catalog_id,
+        label=track.name,
+        period_minutes=track.period_minutes,
+        computed_at=track.computed_at,
+        points=tuple(
+            OrbitPointResponse(lat=p.lat, lon=p.lon, altitude=p.altitude)
+            for p in track.points
+        ),
+    )

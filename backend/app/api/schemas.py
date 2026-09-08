@@ -45,6 +45,36 @@ class ObjectListResponse(OrbitalModel):
         return self.returned < self.total
 
 
+class OrbitPointResponse(OrbitalModel):
+    """One position on a drawn orbit."""
+
+    lat: float
+    lon: float
+    altitude: float = Field(description="Metres above the surface, as elsewhere.")
+
+
+class OrbitPathResponse(OrbitalModel):
+    """One full revolution of one satellite, for drawing.
+
+    Deliberately not a ``TrackedObjectDetail.track``. That field means "where
+    this has been", which is an observation; every point here is computed, in
+    both directions from now, and calling the two the same thing would be the
+    D94 mistake - a field whose meaning depends on which layer you are in.
+    """
+
+    id: str
+    label: str
+    period_minutes: float = Field(description="One revolution, from the elements.")
+    computed_at: datetime = Field(description="The instant the path is centred on.")
+    points: tuple[OrbitPointResponse, ...] = Field(
+        description=(
+            "Half a period back and half forward. Open rather than closed: the "
+            "Earth turns under the orbit, so a revolution ends beside where it "
+            "started, not on it."
+        )
+    )
+
+
 class JobHealth(OrbitalModel):
     """Per-job ingestion status."""
 

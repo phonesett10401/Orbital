@@ -783,8 +783,17 @@ export function PlanetView() {
           shell = createShellLayer(() => {
             const state = useOrbitalStore.getState();
             return state.activeLayer.id === 'satellite'
-              ? { objects: Array.from(state.objects.values()), selectedId: state.selectedId }
-              : { objects: [], selectedId: null };
+              ? {
+                  objects: Array.from(state.objects.values()),
+                  selectedId: state.selectedId,
+                  // The revolution the selection is on, when it has arrived
+                  // (D170). Pulled here rather than pushed in, so the layer
+                  // reads one consistent state per frame and a path that
+                  // belongs to a satellite nobody has selected any more cannot
+                  // outlive the selection that asked for it.
+                  orbit: state.selectedOrbit,
+                }
+              : { objects: [], selectedId: null, orbit: null };
           });
           map.addLayer(shell);
 

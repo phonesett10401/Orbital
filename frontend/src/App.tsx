@@ -32,12 +32,19 @@ import { StatusBar } from './components/StatusBar';
 import { chromeFor } from './components/layerChrome';
 import { useOrbitalStore } from './state/store';
 import { PlanetView } from './planet/PlanetView';
-import { useObjectPolling, useSearch, useSelectedDetail } from './hooks/usePolling';
+import {
+  useObjectPolling,
+  useSearch,
+  useSelectedDetail,
+  useSelectedOrbit,
+} from './hooks/usePolling';
 import { usePageRoute } from './hooks/usePageRoute';
 
 export function App() {
   useObjectPolling();
   useSelectedDetail();
+  // Satellites only, and the hook says so rather than the caller (D170).
+  useSelectedOrbit();
   useSearch();
   // Gives every full-screen page an address and makes Back close it (D153).
   usePageRoute();

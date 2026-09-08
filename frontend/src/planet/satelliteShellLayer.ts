@@ -36,9 +36,10 @@ import * as THREE from 'three';
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 
 import { regimeRgb, shellFor } from '../satelliteShell';
-import type { RenderableObject } from '../types';
+import type { OrbitPath, RenderableObject } from '../types';
 import { globeAxes, isOnNearSide, usesGlobeFrame } from './modelFrame';
 import { ATLAS_CELLS, atlasCellFor, createSatelliteAtlasCanvas } from './satelliteSprite';
+import { isDrawablePath, orbitVertices } from './orbitPath';
 
 export const SHELL_LAYER = 'orbital-satellite-shell';
 
@@ -180,7 +181,12 @@ function createAtlasTexture(): THREE.CanvasTexture {
 }
 
 export function createShellLayer(
-  getSatellites: () => { objects: RenderableObject[]; selectedId: string | null },
+  getSatellites: () => {
+    objects: RenderableObject[];
+    selectedId: string | null;
+    /** The selected satellite's revolution, or null. See `drawOrbit` (D170). */
+    orbit?: OrbitPath | null;
+  },
   createRenderer: (canvas: HTMLCanvasElement, gl: WebGL2RenderingContext) => ShellRenderer = (
     canvas,
     gl,
@@ -225,6 +231,46 @@ export function createShellLayer(
   points.frustumCulled = false;
   scene.add(points);
 
+  /*
+   * **The selected satellite's orbit** (D170).
+   *
+   * `THREE.LineSegments` rather than a `Line`, and that is an occlusion
+   * decision rather than a stylistic one. The points above are hidden behind
+   * the planet one at a time, by testing each against MapLibre's clipping
+   * plane; a single line strip cannot be hidden in pieces, so half an orbit
+   * would draw straight through the Earth - the one error this file already
+   * says would look broken.
+   *
+   * Segments can. Each adjacent pair is emitted only when **both** ends are on
+   * the near side, so the curve breaks itself at the horizon and comes back on
+   * the other limb, in one draw call and with no per-frame allocation.
+   *
+   * `depthTest` is off to match the points: MapLibre's depth buffer belongs to
+   * the map, and the shell arbitrates its own visibility against the clipping
+   * plane instead.
+   */
+  const orbitGeometry = new THREE.BufferGeometry();
+  const orbitMaterial = new THREE.LineBasicMaterial({
+    transparent: true,
+    // Dimmer than the marker on purpose. The line is context for the object,
+    // and an orbit at full strength competes with the thing it belongs to.
+    opacity: 0.5,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const orbitLine = new THREE.LineSegments(orbitGeometry, orbitMaterial);
+  orbitLine.matrixAutoUpdate = false;
+  orbitLine.frustumCulled = false;
+  orbitLine.visible = false;
+  scene.add(orbitLine);
+
+  /** The path as given, in shell space. Rebuilt only when the orbit changes. */
+  let orbitShellPoints = new Float32Array(0);
+  /** Which path that was, by identity, so a frame is not a rebuild. */
+  let orbitSource: OrbitPath | null = null;
+  /** Near-side segment endpoints, refilled every frame as the camera turns. */
+  let orbitSegments = new Float32Array(0);
+
   let renderer: ShellRenderer | null = null;
   let map: MapLibreMap | null = null;
   let drawn = 0;
@@ -232,6 +278,68 @@ export function createShellLayer(
   let hideSelected = false;
   /** Last frame's clip-space positions, kept so `pick` can answer from them. */
   let projected: Array<{ id: string; x: number; y: number; size: number }> = [];
+
+  /**
+   * Put the selected satellite's revolution on the shell, minus the far half.
+   *
+   * Two stages with different lifetimes, which is the whole shape of it: the
+   * shell-space vertices depend only on the path and are rebuilt when the path
+   * changes, while which of them are *visible* depends on where the camera is
+   * and has to be redone every frame.
+   */
+  function drawOrbit(orbit: OrbitPath | null, plane: CustomRenderMethodInput['defaultProjectionData']['clippingPlane']): void {
+    if (!orbit || !isDrawablePath(orbit.points)) {
+      orbitLine.visible = false;
+      orbitSource = null;
+      return;
+    }
+
+    if (orbit !== orbitSource) {
+      orbitShellPoints = orbitVertices(orbit.points);
+      orbitSource = orbit;
+      // Coloured by the regime the satellite is actually in, taken from the
+      // middle of its own path - which is where the satellite is, because the
+      // backend centres the revolution on it. The line and the marker are then
+      // the same colour without either having to be told about the other.
+      const middle = orbit.points[Math.floor(orbit.points.length / 2)];
+      const [r, g, b] = regimeRgb(middle.altitude);
+      orbitMaterial.color.setRGB(r / 255, g / 255, b / 255);
+      const needed = (orbit.points.length - 1) * 6;
+      if (orbitSegments.length < needed) {
+        orbitSegments = new Float32Array(needed);
+        orbitGeometry.setAttribute('position', new THREE.BufferAttribute(orbitSegments, 3));
+      }
+    }
+
+    const count = orbitShellPoints.length / 3;
+    let vertices = 0;
+    let previousVisible = false;
+    for (let i = 0; i < count; i += 1) {
+      const at: [number, number, number] = [
+        orbitShellPoints[i * 3],
+        orbitShellPoints[i * 3 + 1],
+        orbitShellPoints[i * 3 + 2],
+      ];
+      const visible = isOnNearSide(at, plane);
+      if (visible && previousVisible) {
+        // The segment from the previous point to this one, both ends of which
+        // are in front of the planet.
+        orbitSegments[vertices * 3] = orbitShellPoints[(i - 1) * 3];
+        orbitSegments[vertices * 3 + 1] = orbitShellPoints[(i - 1) * 3 + 1];
+        orbitSegments[vertices * 3 + 2] = orbitShellPoints[(i - 1) * 3 + 2];
+        orbitSegments[(vertices + 1) * 3] = at[0];
+        orbitSegments[(vertices + 1) * 3 + 1] = at[1];
+        orbitSegments[(vertices + 1) * 3 + 2] = at[2];
+        vertices += 2;
+      }
+      previousVisible = visible;
+    }
+
+    orbitGeometry.setDrawRange(0, vertices);
+    const attribute = orbitGeometry.getAttribute('position');
+    if (attribute) attribute.needsUpdate = true;
+    orbitLine.visible = vertices > 0;
+  }
 
   function grow(needed: number): void {
     allocated = Math.max(needed, allocated * 2);
@@ -318,6 +426,8 @@ export function createShellLayer(
         drawn += 1;
       }
 
+      drawOrbit(getSatellites().orbit ?? null, projection.clippingPlane);
+
       geometry.setDrawRange(0, drawn);
       geometry.getAttribute('position').needsUpdate = true;
       geometry.getAttribute('tint').needsUpdate = true;
@@ -330,7 +440,13 @@ export function createShellLayer(
 
       renderer.resetState();
       renderer.render(scene, camera);
-      status = `drawing - ${drawn} on the shell, ${behind} behind the planet`;
+      status =
+        `drawing - ${drawn} on the shell, ${behind} behind the planet` +
+        (orbitLine.visible
+          ? `, orbit ${orbitGeometry.drawRange.count / 2} segments`
+          : orbitSource
+            ? ', orbit entirely behind the planet'
+            : '');
     },
 
     onRemove() {

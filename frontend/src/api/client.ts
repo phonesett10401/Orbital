@@ -15,6 +15,7 @@ import type {
   BoundingBox,
   HealthResponse,
   ObjectListResponse,
+  OrbitPath,
   SearchResponse,
   TrackedObjectDetail,
 } from '../types';
@@ -184,6 +185,26 @@ export function fetchObjectDetail(
     `/api/${resource}/${encodeURIComponent(id)}`,
     signal,
   );
+}
+
+/**
+ * The orbit a satellite is on, as a path to draw (D170).
+ *
+ * Satellites only - there is no such endpoint for aircraft or ships, and there
+ * could not be: an orbit is computable from elements, and a flight is not
+ * computable from anything. The caller checks the layer; this just asks.
+ */
+export function fetchSatelliteOrbit(
+  id: string,
+  at: number | null,
+  signal?: AbortSignal,
+): Promise<OrbitPath> {
+  // Epoch milliseconds in, ISO out, exactly as `fetchObjects` does it - the
+  // store holds one instant and every request that carries it should convert
+  // it the same way. `toISOString` always ends in `Z`, so nothing here has a
+  // `+` for the query string to eat.
+  const query = at != null ? `?at=${encodeURIComponent(new Date(at).toISOString())}` : '';
+  return request<OrbitPath>(`/api/satellites/${encodeURIComponent(id)}/orbit${query}`, signal);
 }
 
 /**

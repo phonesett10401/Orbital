@@ -144,6 +144,30 @@ export interface TrackedObjectDetail extends TrackedObject {
   meta: Record<string, string>;
 }
 
+/** One position on a drawn orbit. Degrees and metres, as everything else. */
+export interface OrbitPoint {
+  lat: number;
+  lon: number;
+  altitude: number;
+}
+
+/**
+ * One revolution of one satellite, computed in both directions from an instant.
+ *
+ * **Not a `track`.** That field means "where this has been", which for an
+ * aircraft is an observation accumulated while we watched. Every point here is
+ * computed, forwards as readily as backwards, and giving the two the same name
+ * would make the meaning of a field depend on which layer you were in - the
+ * D94 mistake. The backend keeps them apart for the same reason (D170).
+ */
+export interface OrbitPath {
+  id: string;
+  label: string;
+  periodMinutes: number;
+  computedAt: string;
+  points: OrbitPoint[];
+}
+
 /** List responses carry freshness metadata, not a bare array. */
 export interface ObjectListResponse {
   objects: TrackedObject[];
