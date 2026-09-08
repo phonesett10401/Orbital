@@ -53,8 +53,8 @@ O5 exists to test whether the abstraction in O4 is real or accidental.
 | Area | Included |
 |---|---|
 | Aircraft | Live positions from two sources, merged; flight track; airline and type; airport search; receiver coverage |
-| Satellites | ~1,400 satellites computed from orbital elements; orbit class |
-| Ships | ~23,000 vessels from two sources, merged; type, dimensions, destination, status |
+| Satellites | ~1,400 satellites computed from orbital elements; orbit class; the orbit each one is on |
+| Ships | ~26,000 vessels from two sources, merged; type, dimensions, destination, status |
 | Solar system | Eight planets and the Moon, navigable |
 | Accounts | Registration, sign-in, sessions, three tiers |
 | Time travel | Historical satellite positions, limited by tier |
@@ -113,9 +113,13 @@ new layer cost one provider module and one registry entry.
 
 | Measure | Value |
 |---|---|
-| Backend | ~19,100 lines, 85 files |
-| Frontend | ~28,500 lines, 159 files |
-| Automated tests | 1,842 (823 backend, 1,019 frontend) |
-| HTTP endpoints | 16 |
-| Recorded decisions | 166 |
-| Objects served | 13,829 aircraft, 23,297 ships, 1,431 satellites |
+| Backend | ~19,400 lines, 85 files |
+| Frontend | ~31,900 lines, 167 files |
+| Automated tests | 1,868 (832 backend, 1,036 frontend) |
+| HTTP endpoints | 17 |
+| Recorded decisions | 169 |
+| Objects served | 14,804 aircraft, 26,262 ships, 1,427 satellites |
+
+Measured on 8 September 2026 against the commit this report was built from.
+The three object counts move continuously; the rest move whenever the code
+does, which is why this table carries a date.

@@ -53,15 +53,16 @@ Two things the build had to correct, because both fail silently:
 ## Where the facts come from
 
 Every figure in these chapters was taken from the repository or measured against
-the running system on 7 September 2026, not recalled:
+the running system, not recalled. **Re-measured on 8 September 2026** after
+D168-D170 moved several of them:
 
 | Claim | Source |
 |---|---|
-| 1,842 tests (823 backend, 1,019 frontend) | Both suites run |
-| 16 HTTP endpoints | The live `openapi.json`, counted |
-| ~19,100 backend / ~28,500 frontend lines | `git ls-files | wc -l` |
-| 166 recorded decisions | `docs/decisions.md`, counted |
-| 13,829 aircraft · 23,297 ships · 1,431 satellites | The live API |
+| 1,868 tests (832 backend, 1,036 frontend) | Both suites run |
+| 17 HTTP endpoints | The live `openapi.json`, counted |
+| ~19,400 backend / ~31,900 frontend lines | `git ls-files`, then `wc -l` over the tracked sources |
+| 169 recorded decisions | `docs/decisions.md`, counted |
+| 14,804 aircraft · 26,262 ships · 1,427 satellites | The live API |
 | Team names, IDs and roles | `Orbital_Team_Roles.pdf` |
 | Entitlement windows (24 h / 7 d) | `accounts/entitlements.py` |
 | Performance figures | `docs/test-plan.md` §4 and the D167 measurements |
@@ -86,6 +87,17 @@ the running system on 7 September 2026, not recalled:
 5. **`docs/test-plan.md` §2 is stale** — its requirements table still refers to
    `globe/`, deleted in D104. Chapter 3 was written from the current system
    instead. That table should be refreshed before Chapter 7 is written from it.
+
+## One figure was wrong when it was written
+
+The frontend line count said **~28,500 lines in 159 files**. Measured against
+the tree at `fb3f202`, the commit that added these chapters, it was **31,087
+lines in 161 files** - understated by about 2,600 lines. The backend figure
+beside it was correct to the rounding.
+
+Recorded rather than quietly corrected, because the two failures are different
+and only one of them is anybody's fault. Everything else in this table went
+stale, which is what happens to a number copied out of a moving system.
 
 ## A note on numbers that move
 

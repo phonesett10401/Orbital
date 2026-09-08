@@ -167,7 +167,7 @@ becomes untrustworthy. No tier can exceed it.
 | NFR-25 | One shared data shape across all layers and both languages | Kept in step by type checks |
 | NFR-26 | A new data source must not require frontend changes | Demonstrated twice |
 | NFR-27 | A new object class requires a written decision | Enforced by a test on each side |
-| NFR-28 | Every significant decision recorded | 166 entries |
+| NFR-28 | Every significant decision recorded | 169 entries |
 | NFR-29 | Both suites runnable offline | No test makes an external call |
 
 ### Usability
@@ -435,7 +435,7 @@ and third layers cost one module each.
 
 | Class | Method |
 |---|---|
-| Functional | 1,842 automated tests; live runs against every real source |
+| Functional | 1,868 automated tests; live runs against every real source |
 | Performance | Instrumented measurement in the browser and a backend benchmark |
 | Reliability | Injected outages, plus real ones that occurred unprompted |
 | Accuracy | Unit tests on each conversion, plus inspection of the running system |
