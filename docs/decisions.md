@@ -11205,3 +11205,40 @@ measured, the key pill, the layer bar and the basemap button now share a centre
 at exactly **146** - where with the menu in the line it was 146, 146 and 143.
 
 836 backend tests, 1,109 frontend.
+
+## D190 - The links were hung off the subtitle
+
+Phone noticed that Sign in and About slide sideways when the layer changes, and
+asked for them in the top right like the phone has them, with a larger mark.
+
+The cause is exact. Those three lived inside `.app__brandText`, under the name -
+so their left edge was set by the widest thing in that block, which is the
+**subtitle**, and the subtitle names the layer. Measured across the three:
+
+| Layer | Subtitle | Brand block's right edge |
+|---|---|---|
+| Aircraft | LIVE AIRCRAFT | 162 |
+| Satellites | SATELLITES ON ORBIT | 203 |
+| Ships | SHIPS IN COASTAL WATERS | 234 |
+
+Seventy-two pixels of travel, on controls that have nothing to do with the
+layer. They are a child of the header now, which does not change, and `order`
+puts them at its right-hand end on a desktop and beside the name on a phone -
+one element, two placements, no second copy in the markup. **About measured at
+x 993 in all three layers afterwards.**
+
+The mark goes 34 to 46 now it is the whole of the brand beside the name. On the
+phone it stays 28, because there it sets the header's height and 119px was hard
+won (D180); the links joining that row cost 12 anyway, taken back off the
+scrim's bottom padding for a final 123.
+
+### A vacuous test, caught
+
+The first check said "About is stable across layers" and proved nothing: it
+tried to switch layers through the store and the subtitle read LIVE AIRCRAFT in
+all three samples. A stable measurement of a thing that never changed. Redone by
+clicking the actual buttons, the subtitles differ, the brand's right edge moves
+162 -> 203 -> 234, and About holds still. The standing rule about breaking a test
+before trusting it applies to measurements too.
+
+836 backend tests, 1,109 frontend.

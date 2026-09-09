@@ -1115,16 +1115,24 @@ body {
 }
 
 /*
- * The body picker, the account and the About link, grouped without becoming a
- * box.
+ * The body picker, the account and the About link.
  *
- * `display: contents` removes this element from layout entirely, so its three
- * children lay out as direct children of `.app__brandText` exactly as they did
- * before the wrapper existed - the desktop header is unchanged to the pixel.
- * The wrapper is here for the phone, where it becomes a real row (D180).
+ * A real row at the right-hand end of the header (D190). They were under the
+ * wordmark, which meant their left edge was set by the width of the *subtitle*
+ * - and the subtitle names the layer, so changing layer slid them sideways
+ * under a wordmark that had not moved.
+ *
+ * `order` rather than a different place in the markup: they are one element in
+ * both layouts, and only where the header puts them differs. Last on a desktop,
+ * beside the name on a phone.
  */
 .app__brandLinks {
-  display: contents;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+  order: 5;
+  pointer-events: auto;
 }
 
 /*
@@ -1133,8 +1141,10 @@ body {
  * orbit stroke on any browser where that size is overridden.
  */
 .app__mark {
-  width: 34px;
-  height: 34px;
+  /* Larger now it is the whole of the brand beside the name, and now that the
+     three links have stopped stacking under it (D190). */
+  width: 46px;
+  height: 46px;
   flex: none;
   display: block;
 }
@@ -3399,7 +3409,9 @@ body {
       rgba(5, 7, 13, 0.82) 55%,
       rgba(5, 7, 13, 0) 100%
     );
-    padding-bottom: 22px;
+    /* 14, not 22: the links moved into this row (D190) and took the header
+       from 119 to 131. The scrim still fades below the search at 14. */
+    padding-bottom: 14px;
   }
 
   /*
@@ -3434,8 +3446,9 @@ body {
   }
 
   .app__brand {
-    /* Full width so the row below it is the search, not a 105px stub of one. */
-    flex: 1 0 100%;
+    /* Shares row one with the links; the search takes row two on its own. */
+    flex: 1 1 auto;
+    min-width: 0;
     padding: 0;
     gap: 8px;
   }
@@ -3476,6 +3489,10 @@ body {
     gap: 4px;
     margin-left: auto;
     flex: none;
+    /* Beside the name rather than at the end of the header: on a phone the
+       header's rows are the name and the search, and these belong on the
+       first (D190). */
+    order: 0;
   }
 
   /*
@@ -3488,6 +3505,8 @@ body {
   }
 
   .app__mark {
+    /* The desktop mark grew to 46 (D190); the phone's stays at 28, because
+       there it sets the header's height and 119px was hard won (D180). */
     width: 28px;
     height: 28px;
   }

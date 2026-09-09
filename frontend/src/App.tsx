@@ -130,23 +130,38 @@ export function App() {
               their own three lines without the header eating a quarter of the
               screen (D180).
             */}
-            <div className="app__brandLinks">
-              <BodyPicker />
-              {/* Signing in is available on every world, unlike the layers
-                  around it: an account is about the reader, not the body under
-                  the camera (D148). */}
-              <AccountMenu />
-              {/* Beside the account rather than in the layer bar: the layers are
-                  about what is on the map, and this is about the map (D177). */}
-              <button
-                type="button"
-                className="app__about"
-                onClick={() => useOrbitalStore.getState().setOpenPage('about')}
-              >
-                About
-              </button>
-            </div>
           </div>
+        </div>
+
+        {/*
+          **A child of the header, not of the wordmark (D190).**
+
+          These three used to sit under the name, inside `.app__brandText`,
+          which made their left edge depend on how wide the *subtitle* was -
+          and the subtitle changes with the layer. "Live aircraft", "Satellites
+          on orbit" and "Ships in coastal waters" are three different widths, so
+          switching layers slid About and Sign in sideways underneath a wordmark
+          that had not moved.
+
+          Out here they belong to the header, which does not change, and the
+          stylesheet puts them at its right-hand end on a desktop and beside the
+          name on a phone.
+        */}
+        <div className="app__brandLinks">
+          <BodyPicker />
+          {/* Signing in is available on every world, unlike the layers around
+              it: an account is about the reader, not the body under the camera
+              (D148). */}
+          <AccountMenu />
+          {/* Beside the account rather than in the layer bar: the layers are
+              about what is on the map, and this is about the map (D177). */}
+          <button
+            type="button"
+            className="app__about"
+            onClick={() => useOrbitalStore.getState().setOpenPage('about')}
+          >
+            About
+          </button>
         </div>
         {onEarth && <SearchBar />}
         {onEarth && <LayerToggle />}
