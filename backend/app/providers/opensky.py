@@ -58,6 +58,18 @@ HEADER_REMAINING = "X-Rate-Limit-Remaining"
 HEADER_RETRY_AFTER = "X-Rate-Limit-Retry-After-Seconds"
 
 
+#: How long to stop asking after a round of attempts has failed.
+#:
+#: **A retry without one of these makes an outage worse.** Three attempts per
+#: caller, a poll every two minutes and a request per aircraft selected, all
+#: against a host that is already not answering - if the reason it is not
+#: answering has anything to do with how often we knock, knocking three times as
+#: hard is the opposite of a fix (D198).
+#:
+#: Five minutes: long enough to be a real pause against a two-minute poll cycle,
+#: short enough that a blip costs one round of tracks rather than an evening.
+TOKEN_COOLDOWN_SECONDS = 300.0
+
 #: How many times to ask for a token before giving up.
 #:
 #: Three, because the failure being covered is a connection that does not come
@@ -117,6 +129,8 @@ class OpenSkyProvider(Provider):
 
         self._token: str | None = None
         self._token_expires_at: float = 0.0
+        #: Loop time before which no further token request will be made.
+        self._token_cooldown_until: float = 0.0
         self._token_lock = asyncio.Lock()
 
         #: Last observed X-Rate-Limit-Remaining, or None before the first poll.
@@ -154,7 +168,25 @@ class OpenSkyProvider(Provider):
             loop_time = asyncio.get_running_loop().time()
             if not force and self._token and loop_time < self._token_expires_at:
                 return self._token
-            return await self._request_token()
+
+            # **Cooling down: fail without touching the network.**
+            #
+            # Checked inside the lock so every caller shares one cooldown rather
+            # than each keeping its own, and raised rather than returned as None
+            # - None means "running anonymously", which is a different and
+            # supported thing (D198).
+            if loop_time < self._token_cooldown_until:
+                raise ProviderUnavailable(
+                    "token requests are cooling down after repeated failures"
+                )
+
+            try:
+                return await self._request_token()
+            except ProviderUnavailable:
+                self._token_cooldown_until = (
+                    asyncio.get_running_loop().time() + TOKEN_COOLDOWN_SECONDS
+                )
+                raise
 
     async def _request_token(self) -> str:
         """Ask for a token, retrying a connection that does not come up.
@@ -214,6 +246,7 @@ class OpenSkyProvider(Provider):
             raise ProviderBadResponse(f"malformed token response: {describe(exc)}") from exc
 
         self._token = token
+        self._token_cooldown_until = 0.0
         self._token_expires_at = asyncio.get_running_loop().time() + max(
             0.0, expires_in - TOKEN_REFRESH_MARGIN_SECONDS
         )

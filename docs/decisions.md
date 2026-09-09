@@ -11554,3 +11554,44 @@ mutation run - and the standing rule earns its keep again: **a test that has not
 been seen to fail is not yet evidence.**
 
 **860 backend tests**, 1,114 frontend.
+
+## D198 - A retry without a cooldown makes an outage worse
+
+D197's retry deployed, and the log shows it doing exactly what it was told:
+
+```
+18:23:41  token request failed (ConnectTimeout), 2 attempt(s) left
+18:24:01  token request failed (ConnectTimeout), 1 attempt(s) left
+18:24:23  opensky failed this poll: token request failed: ConnectTimeout
+```
+
+**Three attempts across forty-two seconds, all failing.** Which settles
+something the retry was built on: this is not a transient blip. The container
+cannot reach OpenSky for minutes at a stretch.
+
+And that makes the retry actively dangerous. Three attempts per caller, a poll
+every two minutes, one per aircraft selected - against a host that is already
+refusing. **If the reason it is refusing has anything to do with how often we
+knock, knocking three times as hard is the opposite of a fix.** I added that
+risk in D197 and should have added this in the same change.
+
+So a failed round now buys five minutes of silence. Raised as a failure rather
+than returned as `None`, because `None` from `_get_token` means "running without
+credentials" - a supported mode - and a cooldown quietly becoming anonymous
+requests is a different bug wearing the same clothes.
+
+### A test deleted rather than fixed
+
+`test_a_success_clears_the_cooldown` set the field to zero, called, and asserted
+it was zero. It passed against a build with the clearing removed.
+
+Thinking about why exposed something better: **clearing it has no observable
+behaviour at all.** A cooldown whose deadline has passed blocks nothing, so the
+assignment is tidiness and no test can catch its absence. The test was deleted
+and a comment left in its place, because the alternative - contorting it until
+it went red - would have produced a test that looked like evidence and was not.
+
+Three tests remain, and the one that names the property fails when the cooldown
+is ignored.
+
+**863 backend tests**, 1,114 frontend.

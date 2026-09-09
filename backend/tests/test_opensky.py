@@ -641,3 +641,104 @@ class TestTokenRetry:
         with pytest.raises(ProviderUnavailable):
             await self._provider(broken)._request_token()
         assert calls["n"] == 1, "a non-transport failure was retried"
+
+
+class TestTokenCooldown:
+    """After a failed round, stop asking for a while (D198).
+
+    The retry added in D197 makes three connection attempts where there was one.
+    Against a host that is not answering *because* of how often it is asked,
+    that is the opposite of a fix - so a failed round buys a pause.
+    """
+
+    def _provider(self, handler):
+        import httpx
+
+        from app.providers.opensky import OpenSkyProvider
+
+        return OpenSkyProvider(
+            client_id="id",
+            client_secret="secret",
+            client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        )
+
+    @pytest.mark.anyio
+    async def test_the_network_is_left_alone_while_cooling_down(self, monkeypatch):
+        import httpx
+
+        from app.providers import opensky as module
+        from app.providers.base import ProviderUnavailable
+
+        monkeypatch.setattr(module.asyncio, "sleep", _no_wait)
+        calls = {"n": 0}
+
+        def always_times_out(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            raise httpx.ConnectTimeout("")
+
+        provider = self._provider(always_times_out)
+
+        with pytest.raises(ProviderUnavailable):
+            await provider._get_token()
+        after_first = calls["n"]
+        assert after_first == module.TOKEN_ATTEMPTS
+
+        # The next few callers must not add a single connection.
+        for _ in range(5):
+            with pytest.raises(ProviderUnavailable):
+                await provider._get_token()
+        assert calls["n"] == after_first, "kept knocking while cooling down"
+
+    @pytest.mark.anyio
+    async def test_it_tries_again_once_the_cooldown_passes(self, monkeypatch):
+        import httpx
+
+        from app.providers import opensky as module
+        from app.providers.base import ProviderUnavailable
+
+        monkeypatch.setattr(module.asyncio, "sleep", _no_wait)
+        calls = {"n": 0}
+
+        def fails_then_works(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] <= module.TOKEN_ATTEMPTS:
+                raise httpx.ConnectTimeout("")
+            return httpx.Response(200, json={"access_token": "t", "expires_in": 1800})
+
+        provider = self._provider(fails_then_works)
+        with pytest.raises(ProviderUnavailable):
+            await provider._get_token()
+
+        # A pause is a pause, not a shutdown: wind the clock past it.
+        provider._token_cooldown_until = 0.0
+        assert await provider._get_token() == "t"
+
+    # **No test for "a success clears the cooldown", deliberately.**
+    #
+    # The line that does it is tidiness: a cooldown whose deadline has passed
+    # blocks nothing, so clearing it changes no behaviour any test could
+    # observe. The test written for it set the field to zero and then asserted
+    # it was zero, and passed against a build with the clearing removed - a
+    # test of an assignment, not of an effect. Deleted rather than contorted,
+    # and recorded here so nobody adds it back (D198).
+
+    @pytest.mark.anyio
+    async def test_cooling_down_is_not_the_same_as_anonymous(self, monkeypatch):
+        # `None` from `_get_token` means "running without credentials", which is
+        # a supported mode. A cooldown is a failure and has to read as one, or
+        # the caller would quietly make unauthenticated requests instead.
+        import httpx
+
+        from app.providers import opensky as module
+        from app.providers.base import ProviderUnavailable
+
+        monkeypatch.setattr(module.asyncio, "sleep", _no_wait)
+
+        def always_times_out(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectTimeout("")
+
+        provider = self._provider(always_times_out)
+        with pytest.raises(ProviderUnavailable):
+            await provider._get_token()
+        with pytest.raises(ProviderUnavailable):
+            await provider._get_token()
