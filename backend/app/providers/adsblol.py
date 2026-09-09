@@ -55,14 +55,24 @@ logger = logging.getLogger(__name__)
 
 FEET_TO_METRES = 0.3048
 
-#: A silence longer than this ends a flight, when no ground contact says so.
+#: A silence at least this long is worth asking about.
 #:
-#: Coverage holes are ordinary - SIA23 crossed the Bay of Bengal for 86 minutes
-#: unheard - so the threshold has to sit above a plausible gap in listening and
-#: below a turnaround. Three hours is longer than any ocean crossing goes
-#: unheard on this network and shorter than any aircraft sits on a stand
-#: between long-haul legs (D201).
-FLIGHT_BREAK_SECONDS = 3 * 3600.0
+#: Only a floor: what decides is whether the aircraft *moved* across it (D205).
+FLIGHT_BREAK_SECONDS = 30 * 60.0
+
+#: Below this, the aircraft did not fly across the silence - so it ended a
+#: flight rather than interrupting one.
+#:
+#: **Duration cannot separate the two and displacement can.** Measured on two
+#: real traces: RLH5046's turnarounds were 224 and 671 minutes covering 16 and
+#: 64 km - 4 and 6 km/h, an aircraft on a stand. SIA23's ocean crossings were
+#: 195 and 223 minutes covering 3,533 and 3,529 km - 1,088 and 949 km/h, an
+#: aircraft in the cruise. The same trace also holds a 199-minute gap covering
+#: **0 km**, which is where it sat at JFK before this flight began (D205).
+#:
+#: 100 km/h leaves room for taxiing and repositioning without coming close to
+#: any speed an airliner crosses an ocean at.
+FLIGHT_BREAK_MAX_KMH = 100.0
 KNOTS_TO_MS = 0.514444
 NAUTICAL_MILE_KM = 1.852
 EARTH_RADIUS_KM = 6371.0088
@@ -138,6 +148,14 @@ FEET_TO_METRES = 0.3048
 VIEWPORT_MAX_RADIUS_NM = 3000
 
 
+def _distance_km(a: "TrackPoint", b: "TrackPoint") -> float:
+    """Great-circle distance, near enough for telling a stand from a cruise."""
+    mean = math.radians((a.lat + b.lat) / 2.0)
+    dy = (b.lat - a.lat) * 111.0
+    dx = (b.lon - a.lon) * 111.0 * math.cos(mean)
+    return math.hypot(dx, dy)
+
+
 def current_flight(points: "tuple[TrackPoint, ...]") -> "tuple[TrackPoint, ...]":
     """The tail of a day-long trace that belongs to the flight now in progress.
 
@@ -161,22 +179,43 @@ def current_flight(points: "tuple[TrackPoint, ...]") -> "tuple[TrackPoint, ...]"
     if len(points) < 2:
         return points
 
+    # **The latest boundary of either kind, not the first one found (D204).**
+    #
+    # Taking ground contact alone was wrong for an aircraft whose only ground
+    # points are at the start of the file. RLH5046's trace held 19 of them - all
+    # from Cat Bi, sixteen hours and several flights earlier - because adsb.lol
+    # heard it depart there and never heard it on a stand again. Everything
+    # after that is four legs drawn as one, which is what put a triangle over
+    # Vietnam.
+    #
+    # A flight begins at whichever happened last: the wheels leaving a runway,
+    # or the aircraft reappearing after a silence too long to be a gap in
+    # listening.
+    boundary = -1
+
     for index in range(len(points) - 1, -1, -1):
         if points[index].altitude == 0.0:
-            tail = points[index + 1 :]
-            # An aircraft on the ground *now* leaves no tail at all; keep what
-            # there is rather than erasing the path on final approach.
-            return tail if len(tail) >= 2 else points
+            boundary = index
+            break
 
-    longest, cut = 0.0, None
-    for index in range(len(points) - 1):
+    for index in range(len(points) - 2, boundary, -1):
         silence = (points[index + 1].timestamp - points[index].timestamp).total_seconds()
-        if silence > FLIGHT_BREAK_SECONDS and silence > longest:
-            longest, cut = silence, index + 1
+        if silence <= FLIGHT_BREAK_SECONDS:
+            continue
+        # **Did the aircraft fly across it?** A long silence over an ocean is
+        # one flight nobody could hear; the same silence spent on a stand is
+        # two. Duration is identical between them and displacement is not.
+        travelled = _distance_km(points[index], points[index + 1])
+        if travelled / (silence / 3600.0) < FLIGHT_BREAK_MAX_KMH:
+            boundary = index
+            break
 
-    if cut is None:
+    if boundary < 0:
         return points
-    tail = points[cut:]
+
+    tail = points[boundary + 1 :]
+    # An aircraft on the ground *now* leaves no tail at all; keep what there is
+    # rather than erasing the path on final approach.
     return tail if len(tail) >= 2 else points
 
 

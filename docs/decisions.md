@@ -11835,3 +11835,62 @@ Four tests, checked both ways: reverting to correct-only fails four, and
 supplying over a good reported heading fails three.
 
 **885 backend tests**, 1,118 frontend.
+
+## D204/D205 - A turnaround is a gap the aircraft did not fly across
+
+Phone put RLH5046 side by side with Flightradar. Flightradar drew one path from
+Phu Quoc north into Vietnam. Orbital drew a **triangle** and said *"Departed Cat
+Bi International Airport, 574 positions, spanning 16h 33m"* - four legs stitched
+into one.
+
+### First fault: the boundary was the wrong one (D204)
+
+D201 trimmed to the last ground contact. RLH5046's trace held 19 ground points
+and **all of them were at the start** - adsb.lol heard it leave Cat Bi sixteen
+hours earlier and never heard it on a stand again, because it landed at airports
+with no receiver nearby. Everything after that is four flights.
+
+A flight begins at whichever came last: wheels leaving a runway, **or** the
+aircraft reappearing after a silence. Not the first boundary found.
+
+### Second fault: duration cannot recognise a turnaround (D205)
+
+With the latest-boundary rule, RLH5046 came right and **SIA23 broke** - 1,445
+points from JFK became 333 from somewhere over India, because a fourteen-hour
+flight contains ocean crossings longer than the three-hour threshold.
+
+The two are indistinguishable by duration and obvious by displacement:
+
+| | Gap | Distance | Speed |
+|---|---|---|---|
+| RLH5046 turnaround | 224 min | 16 km | **4 km/h** |
+| RLH5046 turnaround | 671 min | 64 km | **6 km/h** |
+| SIA23 ocean crossing | 195 min | 3,533 km | **1,088 km/h** |
+| SIA23 ocean crossing | 223 min | 3,529 km | **949 km/h** |
+| SIA23 **at JFK** | 199 min | **0 km** | **0 km/h** |
+
+**A turnaround is a gap the aircraft did not fly across.** The last row is the
+proof of the rule: the same trace holds a three-hour gap of zero kilometres,
+which is exactly where this flight began.
+
+This is D202's insight one level down, and I did not carry it across when I
+wrote D201 - three hours later, on the same night, having just used displacement
+to solve the same shape of problem.
+
+### Where it lands
+
+| | Points | Origin |
+|---|---|---|
+| SIA23 | 1,445, 14.8 h | **KJFK** |
+| THA662 | 535, 1.8 h | VTBS |
+| RLH5046 | 90, 0.4 h | *(in flight)* - honest: adsb.lol heard no more |
+| CCA868 | 426, 11.1 h | *(in flight)* |
+
+RLH5046 keeps only what was actually heard and refuses to name a departure
+airport for a track beginning at 9,449 m, which is the right answer even though
+Flightradar - with more receivers - can draw more.
+
+Two tests, checked both ways: splitting on duration alone breaks the ocean
+crossing, and never splitting on a gap breaks the turnaround.
+
+**887 backend tests**, 1,118 frontend.

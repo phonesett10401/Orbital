@@ -542,9 +542,15 @@ class TestFlightTrace:
         assert await p.fetch_track("76cce2") is None
 
 
-def _pt(minutes: float, alt: float | None) -> TrackPoint:
+def _pt(minutes: float, alt: float | None, lat: float | None = None) -> TrackPoint:
+    """A point at a time, and optionally at a place.
+
+    `lat` matters because a gap is now judged by whether the aircraft *moved*
+    across it (D205), so a fixture that leaves every point in one spot is
+    describing an aircraft parked on a stand.
+    """
     return TrackPoint(
-        lat=1.0 + minutes / 1000,
+        lat=1.0 + minutes / 1000 if lat is None else lat,
         lon=2.0,
         altitude=alt,
         timestamp=datetime(2026, 9, 10, tzinfo=timezone.utc) + timedelta(minutes=minutes),
@@ -584,14 +590,27 @@ class TestCurrentFlight:
     def test_a_long_silence_is_the_fallback_when_nothing_touched_the_ground(self):
         # A trace that begins mid-ocean, or a long-haul still airborne. Four
         # hours of silence is a turnaround, not a coverage hole.
-        track = (_pt(0, 11000.0), _pt(30, 11000.0), _pt(300, 11000.0), _pt(330, 11000.0))
+        # Four and a half hours and 44 km: 10 km/h, an aircraft on a stand.
+        track = (
+            _pt(0, 11000.0, lat=0.0),
+            _pt(30, 11000.0, lat=0.4),
+            _pt(300, 11000.0, lat=0.8),
+            _pt(330, 11000.0, lat=1.2),
+        )
         assert current_flight(track) == track[2:]
 
     def test_a_coverage_hole_is_not_a_new_flight(self):
         # **The distinction that matters.** SIA23 crossed the Bay of Bengal for
         # 86 minutes unheard; that is one flight with a gap in it, and cutting
         # there would throw away most of a real path.
-        track = (_pt(0, 11000.0), _pt(20, 11000.0), _pt(106, 11000.0), _pt(126, 11000.0))
+        # 86 minutes and 1,270 km of latitude: 886 km/h, a cruise. The aircraft
+        # flew the gap, so it is one flight with a hole in the listening.
+        track = (
+            _pt(0, 11000.0, lat=0.0),
+            _pt(20, 11000.0, lat=3.0),
+            _pt(106, 11000.0, lat=14.44),
+            _pt(126, 11000.0, lat=17.0),
+        )
         assert current_flight(track) == track
 
     def test_a_trace_with_no_break_is_kept_whole(self):
@@ -601,3 +620,33 @@ class TestCurrentFlight:
     def test_too_short_to_trim_is_returned_as_is(self):
         for track in ((), (_pt(0, 0.0),)):
             assert current_flight(track) == track
+
+    def test_a_silence_after_the_last_ground_contact_still_ends_the_flight(self):
+        """RLH5046, and why ground contact alone was not enough (D204).
+
+        Its trace held 19 ground points, all from Cat Bi sixteen hours and four
+        legs earlier - adsb.lol heard it depart there and never heard it on a
+        stand again. Trimming to the last ground contact kept every one of those
+        legs and drew them as a single triangle over Vietnam.
+        """
+        track = (
+            _pt(0, 0.0),            # departs Cat Bi
+            _pt(30, 9000.0),
+            _pt(90, 9000.0),        # first leg
+            _pt(400, 9000.0),       # five hours later: a different flight
+            _pt(430, 9000.0),
+        )
+        assert current_flight(track) == track[3:]
+
+    def test_ground_contact_after_a_silence_wins_in_turn(self):
+        # The rule is "whichever happened last", not "prefer gaps". An aircraft
+        # that goes quiet, reappears, lands and departs again begins its flight
+        # at the runway, not at the silence.
+        track = (
+            _pt(0, 9000.0),
+            _pt(400, 9000.0),       # long silence
+            _pt(430, 0.0),          # then lands
+            _pt(460, 5000.0),       # and departs: this is the flight
+            _pt(490, 9000.0),
+        )
+        assert current_flight(track) == track[3:]
