@@ -3497,6 +3497,26 @@ body {
   .planet-view .maplibregl-ctrl-attrib {
     font-size: 10px;
   }
+
+  /*
+   * The detail panel has to clear the bottom stack this layout created.
+   *
+   * The 720px rule puts it at `bottom: 44px` with `max-height: 45%`, which on
+   * an 812 screen is y 403-768 - and the layer bar (634-688), the status bar
+   * (696-756) and the attribution (758-802) all sit inside that. The bar is at
+   * `z-index: 3` and draws straight over it.
+   *
+   * **The route is what this hides.** `panel__route` is the last section in
+   * `DetailPanel`, so the bottom 178 pixels being covered means the scheduled
+   * and observed route are the two things a reader never gets to - which is
+   * exactly how it was reported: no aircraft route on mobile.
+   *
+   * 188 is the measured top of that stack plus a gap, not a guess. The panel
+   * then runs 259-624, clear of the key pill at 128-172 (D180).
+   */
+  .panel {
+    bottom: 188px;
+  }
 }
 
 /*
