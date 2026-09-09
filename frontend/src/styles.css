@@ -1105,6 +1105,19 @@ body {
 }
 
 /*
+ * The body picker, the account and the About link, grouped without becoming a
+ * box.
+ *
+ * `display: contents` removes this element from layout entirely, so its three
+ * children lay out as direct children of `.app__brandText` exactly as they did
+ * before the wrapper existed - the desktop header is unchanged to the pixel.
+ * The wrapper is here for the phone, where it becomes a real row (D180).
+ */
+.app__brandLinks {
+  display: contents;
+}
+
+/*
  * Sized in a fixed unit rather than an em: the mark is a drawing with its own
  * internal weights, and letting it track the title's font size would thin the
  * orbit stroke on any browser where that size is overridden.
@@ -3293,6 +3306,176 @@ body {
  * The status bar moves up. The credit keeps the corner.
  */
 @media (max-width: 560px) {
+  /*
+   * ---- the phone layout (D180) ----
+   *
+   * D178 made every target finger-sized and left the header 185px tall on an
+   * 812px screen, which is where this went wrong: nothing checked what a
+   * header that tall was landing *on*. Measured on the deployment, it covered
+   * the map's own night and basemap controls at 321,0 54x108, the sign-in hit
+   * box reached across the wordmark, and the key collided with both the status
+   * bar and the attribution. Chrome came to 440 of 812 pixels - 54% of the
+   * screen - to show a map.
+   *
+   * So the phone stops being a narrow desktop. The header keeps only what has
+   * to be at the top (identity, and the search that needs a keyboard), the
+   * layer switcher moves to the bottom where a thumb is, and the key starts as
+   * a pill.
+   */
+
+  /* ---- the header: two rows, not four ---- */
+
+  .app__header {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .app__brand {
+    /* Full width so the row below it is the search, not a 105px stub of one. */
+    flex: 1 0 100%;
+    padding: 0;
+    gap: 8px;
+  }
+
+  .app__brandText {
+    /*
+     * **`row`, and this is the whole fix.** The base rule is
+     * `flex-direction: column`; setting `display: flex` alone overrode nothing,
+     * which is how three attempts in D178 each made the header *taller*. Read
+     * the rule being overridden.
+     */
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    column-gap: 10px;
+  }
+
+  /*
+   * The name and the three controls share one line, rather than the name
+   * taking a line of its own. `flex: 0 0 100%` in D178 is what forced the
+   * wrap that made the header 185.
+   */
+  .app__title {
+    font-size: 16px;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  /*
+   * A real row now, where the base rule leaves it out of layout altogether.
+   * `margin-left: auto` pushes the three controls to the right edge, so the
+   * name has the left and neither has to wrap.
+   */
+  .app__brandLinks {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    flex: none;
+  }
+
+  /*
+   * The subtitle goes. It says "live aircraft" directly above a control
+   * reading Aircraft / Satellites / Ships, and on a phone the duplicate costs
+   * a line the map wants back.
+   */
+  .app__subtitle {
+    display: none;
+  }
+
+  .app__mark {
+    width: 28px;
+    height: 28px;
+  }
+
+  /*
+   * The hit areas stop reaching sideways.
+   *
+   * D178 gave these `margin: -12px -10px` so padding would not grow the
+   * header. On one line that negative margin pulled each control's box over
+   * its neighbour and over the wordmark - measured, sign-in spanned x131-192
+   * across a title occupying x56-306. Vertical only: the height is what the
+   * finger needs, and the row is already 44 tall.
+   */
+  .account__button,
+  .app__about {
+    padding: 12px 8px;
+    margin: -12px 0;
+  }
+
+  .search {
+    /* Its own row, full width. A field is the one control that cannot be
+       traded down: at 105px it stops being a field at all. */
+    flex: 1 0 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  /* ---- the map's own controls, out from under the header ---- */
+
+  /*
+   * These sit at 321,0 - underneath a 185px header, which is why the night and
+   * basemap toggles could not be tapped. They move below it. The offset is the
+   * header's measured height on this layout plus a gap, not a guess.
+   */
+  .planet-view .maplibregl-ctrl-top-right {
+    top: 128px;
+  }
+
+  /* ---- the layer switcher, at the bottom where the thumb is ---- */
+
+  /*
+   * Fixed rather than absolute: this is a child of the header, and an absolute
+   * box inside a header that is itself `position: absolute; top: 0` with auto
+   * height cannot reach the bottom of the screen. Nothing between here and the
+   * viewport establishes a containing block - `.app` is `position: relative`
+   * with no transform or filter - so `fixed` resolves against the viewport.
+   *
+   * Above the status bar, which is above the attribution. That order is not
+   * arbitrary: the credit is a licence obligation and keeps the corner (D120).
+   */
+  .layers {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 124px;
+    z-index: 3;
+  }
+
+  .layers__button {
+    padding: 11px 18px;
+  }
+
+  /* ---- the key, as a pill until it is asked for ---- */
+
+  /*
+   * 232 x 191 is a quarter of a 375 x 812 map covered by something read once
+   * and then known. It opens collapsed on a touch screen (see `Legend.tsx`)
+   * and sits under the header rather than in the bottom corner it used to
+   * share with the status bar and the attribution.
+   */
+  .legend {
+    font-size: 11px;
+    left: 12px;
+    right: 12px;
+    bottom: auto;
+    /* Below the header's measured 119, not level with it. */
+    top: 128px;
+    width: auto;
+    max-height: 52vh;
+    overflow-y: auto;
+  }
+
+  .legend--collapsed {
+    right: auto;
+    width: auto;
+    /* 13, not 11: at 11 the pill measured 40 tall against a 44 floor. */
+    padding: 13px 16px;
+  }
+
+  /* ---- the bottom stack ---- */
+
   .status {
     /*
      * Clear of the attribution's *measured* height, not a guess at it. At 375
@@ -3301,7 +3484,7 @@ body {
      * first attempt.
      */
     bottom: 56px;
-    gap: 10px 14px;
+    gap: 6px 14px;
     padding: 8px 14px;
     font-size: 11.5px;
     /* The gradient has to reach the bottom of the screen even though the bar
@@ -3314,90 +3497,44 @@ body {
   .planet-view .maplibregl-ctrl-attrib {
     font-size: 10px;
   }
+}
 
+/*
+ * Targets that are text rather than buttons, and were measured too small.
+ *
+ * Keyed on the pointer for the reason D178 gives: what needs 44 pixels is a
+ * finger, not a narrow window.
+ */
+@media (pointer: coarse) {
   /*
-   * The header was 188px on a 812-tall screen - a quarter of it - and squeezed
-   * the search field to 191px starting at x=168. Less padding, a smaller
-   * wordmark, and the search gets the room instead.
+   * The one control on the map's failure path. It was measured at 120 x 35 -
+   * a button offered to someone whose map has not appeared is the last one
+   * that should be hard to hit.
    */
-  .app__header {
-    gap: 10px;
-    padding: 10px 12px;
+  .planet-notice button {
+    min-height: 44px;
+    padding-left: 18px;
+    padding-right: 18px;
   }
 
-  /*
-   * A floor on the search, because the brand row will take everything it is
-   * given. With the controls on one line the field measured **105px**, which
-   * is not a field. Below this it wraps to its own row instead - a row is
-   * cheaper than an unusable input.
-   */
-  .search {
-    flex: 1 1 190px;
-    min-width: 190px;
-  }
-
-  .app__title {
-    font-size: 16px;
-  }
-
-  .app__subtitle {
-    font-size: 10px;
-  }
-
-  .app__brand {
-    padding: 2px;
-    gap: 8px;
-  }
-
-  /*
-   * The body picker, the account and the About link go on **one row**.
-   *
-   * Stacked, they cost three times 44 pixels once the hit areas were made
-   * finger-sized, and the header went from 165 to 200 - worse than before the
-   * pass began. Side by side they cost 44 once. The name and the subtitle keep
-   * their own lines by taking the full width of the wrap.
-   */
-  .app__brand {
-    /*
-     * Full width, so the three controls below the name fit on one line. In a
-     * row beside the search the brand was 123px and they wrapped to three
-     * lines of 44 - which is how making the hit areas finger-sized took the
-     * header from 165 to 200, worse than it started.
-     */
-    flex: 1 0 100%;
-  }
-
-  .app__brandText {
-    display: flex;
-    /*
-     * **`row`, and this is the whole fix.** The base rule is
-     * `flex-direction: column`; setting `display: flex` here overrode nothing,
-     * so the controls kept stacking through two attempts that each made the
-     * header taller instead of shorter. Read the rule being overridden.
-     */
-    flex-direction: row;
-    flex-wrap: wrap;
+  .bodies__current {
+    min-height: 44px;
+    display: inline-flex;
     align-items: center;
-    column-gap: 14px;
-    row-gap: 0;
   }
 
-  /*
-   * The subtitle goes. It says "live aircraft" directly above a control that
-   * says Aircraft, Satellites, Ships - and on a phone the duplicate costs a
-   * line the map wants back.
-   */
-  .app__subtitle {
-    display: none;
+  /* Measured at 13 x 16 - the smallest control in the application. */
+  .legend__close {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: -12px -12px -12px 0;
   }
 
-  .app__title {
-    flex: 0 0 100%;
-  }
-
-  .legend {
-    /* It was 232x198 over a 375-wide map. Still readable, less of the view. */
-    font-size: 11px;
+  .search__input {
+    min-height: 44px;
   }
 }
 

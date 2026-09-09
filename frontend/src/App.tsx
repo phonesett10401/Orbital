@@ -117,20 +117,31 @@ export function App() {
             <span className="app__subtitle">
               {onEarth ? chromeFor(activeLayer.id, []).subtitle : 'surface imagery'}
             </span>
-            <BodyPicker />
-            {/* Signing in is available on every world, unlike the layers
-                around it: an account is about the reader, not the body under
-                the camera (D148). */}
-            <AccountMenu />
-            {/* Beside the account rather than in the layer bar: the layers are
-                about what is on the map, and this is about the map (D177). */}
-            <button
-              type="button"
-              className="app__about"
-              onClick={() => useOrbitalStore.getState().setOpenPage('about')}
-            >
-              About
-            </button>
+            {/*
+              A wrapper that is not a box on the desktop.
+              `.app__brandLinks` is `display: contents` in the base rule, so
+              these three lay out exactly as they did when they were siblings -
+              the grouping costs the existing layout nothing at all. On a phone
+              it becomes a real flex row, which is the only way to get them off
+              their own three lines without the header eating a quarter of the
+              screen (D180).
+            */}
+            <div className="app__brandLinks">
+              <BodyPicker />
+              {/* Signing in is available on every world, unlike the layers
+                  around it: an account is about the reader, not the body under
+                  the camera (D148). */}
+              <AccountMenu />
+              {/* Beside the account rather than in the layer bar: the layers are
+                  about what is on the map, and this is about the map (D177). */}
+              <button
+                type="button"
+                className="app__about"
+                onClick={() => useOrbitalStore.getState().setOpenPage('about')}
+              >
+                About
+              </button>
+            </div>
           </div>
         </div>
         {onEarth && <SearchBar />}

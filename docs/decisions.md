@@ -10652,3 +10652,69 @@ file that Rollup declined to emit. The instrument that finally answered it was
 `curl -D -` against a static asset.
 
 832 backend tests, 1,093 frontend.
+
+## D180 - The phone stops being a narrow desktop
+
+Phone looked at the deployment on a real screen: "mobile ui/ux is a messed up,
+we need to fix a lot". Measured at 375 x 812, and the measurements agreed.
+
+### What D178 left behind
+
+D178 made every target finger-sized and reported success. It was measuring the
+wrong things. Making the controls tappable pushed the header to **185px on an
+812px screen**, and nothing checked what a header that tall was landing *on*:
+
+| Collision | Measured |
+|---|---|
+| Header over the map's own controls | header `0,0 375x185` over night/basemap at `321,0 54x108` |
+| Sign-in hit box across the wordmark | signin `131,25 - 192,69` over a title at `56,12 - 306,31` |
+| Key over the status bar | legend `577-768`, status `692-756` |
+| Key over the attribution | legend bottom 768, credit from 758 |
+
+The night and basemap toggles could not be tapped at all. Total chrome came to
+**440 of 812 pixels - 54% of the screen** - to show a map.
+
+Two of those were caused by the D178 fix itself. `margin: -12px -10px` kept the
+header from growing by the padding it had just gained, and pulled each
+control's box sideways over its neighbour.
+
+### The shape of the fix
+
+The phone gets its own layout rather than a squeezed desktop one.
+
+- **The header keeps only what belongs at the top.** Name and controls share
+  one row; the search, which needs a keyboard, gets the next. The subtitle goes
+  - it reads "live aircraft" directly above a control saying Aircraft,
+  Satellites, Ships. **185 -> 119.**
+- **The layer switcher moves to the bottom**, where a thumb is.
+- **The key opens as a pill**, one tap from the whole thing. 232 x 191 is a
+  quarter of the map covered by something read once and then known.
+- The map's own controls move down clear of the header.
+
+`.app__brandLinks` is the piece worth noting: a wrapper that is
+`display: contents` in the base rule, so on the desktop its three children lay
+out exactly as they did as siblings - **verified: computed `contents`, controls
+still at y61/76/96 at their original sizes**. It becomes a real flex row only on
+the phone. The grouping costs the existing layout nothing.
+
+### The globe was cropped, and the fix agreed with the old constant
+
+`zoom: 2` is a statement about how big the window is, and it was written on a
+desktop. On a phone the first thing shown was a piece of Asia.
+
+MapLibre's globe draws the sphere `512 * 2^zoom / PI` pixels across. Solving
+that to fit the 800-pixel-tall window this was built in returns **2.06**, and
+the zoom chosen there by eye was **2**. That agreement is the reason to trust
+the formula on a screen nobody tested; it is capped at 2 so no desktop view
+moves.
+
+Six tests, and two of them fail when the constant is wrong - checked by
+breaking it, per the standing rule about vacuous tests.
+
+### Measured after
+
+Every control 44 or more, `tooSmall` **empty**. No overlaps of any pair. No
+horizontal overflow. Header **119**. Chrome **297 of 812 - 37%**, from 54%.
+Desktop unchanged.
+
+832 backend tests, 1,099 frontend.

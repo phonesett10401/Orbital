@@ -33,8 +33,26 @@ const GRADIENT = [0, 0.25, 0.5, 0.75, 1]
   .map((t) => `${css(t * 12000)} ${t * 100}%`)
   .join(', ');
 
+/**
+ * Whether this is a screen the key should stay out of the way on.
+ *
+ * The key is 232 x 191, which on a phone is a quarter of the map covered by
+ * something that is read once and then known. It stays open on a pointer -
+ * where it costs a corner of a large window and nothing else - and starts as a
+ * pill on a touch screen, one tap from the whole thing (D180).
+ *
+ * `matchMedia` is guarded because jsdom does not implement it, and a legend
+ * that throws in a test is worse than a legend that guesses (D30).
+ */
+function opensCollapsed(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(pointer: coarse), (max-width: 560px)').matches;
+}
+
 export function Legend() {
-  const [open, setOpen] = useState(true);
+  // Read once, on the first render. Re-deciding on every resize would fold a
+  // key the reader had deliberately opened.
+  const [open, setOpen] = useState(() => !opensCollapsed());
   // The key describes the encoding, and the encoding changes with the layer:
   // an altitude ramp reaching 12 km says nothing about objects 35,786 km up.
   const activeLayer = useOrbitalStore((s) => s.activeLayer);

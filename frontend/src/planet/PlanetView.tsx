@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { config } from '../config';
 import { useOrbitalStore } from '../state/store';
 import { leaveCrossing } from '../journey';
+import { initialZoom } from '../initialZoom';
 import {
   AIRCRAFT_LABEL_LAYER,
   AIRCRAFT_LAYER,
@@ -520,7 +521,10 @@ export function PlanetView() {
           container,
           style,
           center: [100.5, 13.75],
-          zoom: 2,
+          // Fitted to the container rather than fixed, so a phone opens on a
+          // planet instead of on a cropped piece of one (D180). Capped at the
+          // zoom this has always used, so no desktop view changes.
+          zoom: initialZoom(container.clientWidth, container.clientHeight),
           // **Below zero on purpose.** The default floor is 0, where the globe
           // fills the frame - and an orbital shell standing 1.35 radii off the
           // surface needs the planet to shrink so there is room around it
