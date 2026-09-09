@@ -14,7 +14,17 @@
   --border: rgba(255, 255, 255, 0.12);
   --text: #e8ecf4;
   --text-dim: #97a3b8;
-  --accent: #58b6ff;
+  /*
+   * Amber rather than the blue this carried until now (D188).
+   *
+   * The blue was a screen colour on a screen already full of blue: ocean, night
+   * wash, the basemap's own water. An accent has one job, which is to be the
+   * thing that is not everything else, and it was competing with the map for
+   * the same hue. Amber is already in the application - the Moon's spacecraft
+   * dots, the low end of the altitude ramp - so it reads as lit rather than as
+   * interface.
+   */
+  --accent: #ffd166;
   --warn: #f2b544;
   --error: #ff6b6b;
   --radius: 10px;
@@ -1129,17 +1139,31 @@ body {
   display: block;
 }
 
+/*
+ * The wordmark in the same serif the solar system page uses (D188).
+ *
+ * That page sets its title in a system serif and its standfirst in small
+ * letterspaced capitals, and the result reads as a masthead rather than as a
+ * toolbar. The planet view was a sans-serif label of the kind every dashboard
+ * has. Same family, same restraint, and no webfont is fetched for it - it is
+ * the stack already in the stylesheet (D30).
+ */
 .app__title {
-  font-size: 19px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Constantia,
+    'Book Antiqua', Georgia, serif;
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: -0.008em;
+  color: #e9ecee;
 }
 
+/* The solar page's standfirst treatment, to the letter. */
 .app__subtitle {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.16em;
+  line-height: 1.9;
 }
 
 /* ---- search ---- */
@@ -1158,7 +1182,9 @@ body {
   background: var(--surface);
   backdrop-filter: blur(12px);
   color: var(--text);
-  font-size: 14px;
+  /* 14 was wide enough to truncate its own example mid-word on a desktop
+     ("...VIKING GRACE or 23") (D188). */
+  font-size: 13px;
   box-shadow: var(--shadow);
 }
 
@@ -1263,6 +1289,108 @@ body {
   background: var(--accent);
   color: #04131f;
   font-weight: 600;
+}
+
+/*
+ * ---- the view options, behind one button (D188) ----
+ *
+ * The basemap cycle and the night toggle both live in the map's top-right
+ * corner. Both are useful, neither is used often, and together they were two
+ * buttons standing over the view all the time - most of the chrome down the
+ * right-hand edge of a phone.
+ *
+ * `viewMenuControl.ts` adds a third button and toggles a class; everything
+ * about what that means is here. The class lands on `.planet-map` - MapLibre's
+ * own container, which is the element `map.getContainer()` returns - and not on
+ * `.planet-view`, which is the wrapper around it. The two controls are not moved, reparented or
+ * told anything - MapLibre still owns them and their order - so a fourth one
+ * added later needs no change to either file.
+ */
+
+/* Closed: only the menu button is on the map. */
+.planet-view .maplibregl-ctrl-top-right .maplibregl-ctrl-group:not(.orbital-view-menu) {
+  display: none;
+}
+
+.planet-map.is-view-open .maplibregl-ctrl-top-right .maplibregl-ctrl-group:not(.orbital-view-menu) {
+  display: block;
+}
+
+/*
+ * Open: a panel, not two loose buttons.
+ *
+ * The group is laid out in reverse so the options rise *from* the button that
+ * opened them rather than appearing above it in an order nobody chose - the
+ * menu control is added last, so in reverse it comes first.
+ */
+.planet-map.is-view-open .maplibregl-ctrl-top-right {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.planet-map.is-view-open .maplibregl-ctrl-top-right .maplibregl-ctrl-group {
+  margin: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+/*
+ * **The labels come from the buttons' own `title` attributes.**
+ *
+ * Both already carry one, and both say what pressing will *do* rather than
+ * what is currently on (D68) - which is exactly what a menu row should read.
+ * Taking the text from there means the label cannot drift from the tooltip,
+ * and neither control had to learn it has a menu.
+ */
+/*
+ * `.app` is on the front only to win a specificity tie.
+ *
+ * The touch rule that squares these buttons off at 44 x 44 (D178) has the same
+ * weight as this one and comes later in the file, so it took the width and the
+ * label was clipped at 44 against the 133 it needed. One more class settles it
+ * without either rule needing `!important`.
+ */
+.app .planet-map.is-view-open .maplibregl-ctrl-top-right button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Sized by the label, with the touch floor kept as a minimum. */
+  width: auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px 0 0;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.app .planet-map.is-view-open .maplibregl-ctrl-top-right .maplibregl-ctrl-group {
+  width: auto;
+}
+
+.planet-map.is-view-open .maplibregl-ctrl-top-right button::after {
+  content: attr(title);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  color: var(--text-dim);
+}
+
+.planet-map.is-view-open .maplibregl-ctrl-top-right button:hover::after {
+  color: var(--text);
+}
+
+/* The menu button keeps its glyph alone - its own title would label it twice. */
+.planet-map.is-view-open .maplibregl-ctrl-top-right .orbital-view-toggle::after {
+  content: none;
 }
 
 /* ---- detail panel ---- */
@@ -3060,8 +3188,21 @@ body {
 
 .about__layers li {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 2.2fr;
-  gap: 6px 28px;
+  /*
+   * **Capped, not a fraction (D188).**
+   *
+   * `minmax(120px, 1fr)` gave the figure a column that grew with the window,
+   * so on a wide screen "15,687" sat at the far left of 490 empty pixels with
+   * its own label stranded across the gap. A number and its name are one
+   * statement; the column holds the widest figure and stops.
+   *
+   * Right-aligned, with the tabular figures already set below, so the three
+   * stack into a column that reads down - which is the whole reason to set
+   * numbers in a table at all, and impossible while "1,427" started at the
+   * same left edge as "32,254".
+   */
+  grid-template-columns: minmax(96px, 168px) minmax(0, 1fr);
+  gap: 6px 32px;
   align-items: baseline;
   padding-bottom: 26px;
   border-bottom: 1px solid rgba(233, 236, 238, 0.1);
@@ -3074,6 +3215,7 @@ body {
   line-height: 1;
   color: #e9ecee;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .about__layerName {
@@ -3475,6 +3617,27 @@ body {
     min-width: 0;
   }
 
+  /*
+   * **16px, and not for looks (D188).**
+   *
+   * Safari on iOS zooms the whole page when a field smaller than 16px takes
+   * focus, and it does not zoom back out afterwards - so tapping the search box
+   * left the reader in a magnified map they had to pinch their way out of.
+   * There is no property for "do not do that"; the only fix that does not
+   * disable pinch-zoom for the whole document - which would be an accessibility
+   * regression to fix a nuisance - is to give the field the size Safari is
+   * looking for.
+   */
+  .search__input {
+    font-size: 16px;
+  }
+
+  .search__input::placeholder {
+    /* The example is long and the box is one screen wide. The field is 16 for
+       Safari's benefit; the grey prompt inside it does not have to be. */
+    font-size: 13px;
+  }
+
   /* ---- the map's own controls, out from under the header ---- */
 
   /*
@@ -3483,7 +3646,14 @@ body {
    * header's measured height on this layout plus a gap, not a guess.
    */
   .planet-view .maplibregl-ctrl-top-right {
-    top: 128px;
+    /*
+     * MapLibre puts a 10px margin on its control group, so the button's own box
+     * starts ten pixels below whatever this says. 118 + 10 lands its top on 128
+     * with the other two (D188). The menu button is MapLibre's own 29px rather
+     * than our 36, so it is nudged three further to put the three *centres* on
+     * a line rather than their tops.
+     */
+    top: 121px;
   }
 
   /* ---- the layer switcher, at the bottom where the thumb is ---- */
@@ -3584,8 +3754,18 @@ body {
   .legend--collapsed {
     right: auto;
     width: auto;
-    /* 13, not 11: at 11 the pill measured 40 tall against a 44 floor. */
-    padding: 13px 16px;
+    /*
+     * **The same height as the layer bar beside it (D188).**
+     *
+     * The three things on this line were 44, 36 and 44 tall, all starting at
+     * y128 - so they shared a top edge and nothing else, and read as three
+     * controls dropped at slightly different heights. Matching the bar's 36
+     * puts all three centres on one line.
+     */
+    min-height: 36px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
   }
 
   /* ---- the bottom stack ---- */
@@ -3898,16 +4078,24 @@ body {
    * leave the Moon whole.
    */
   .moonlist {
+    /*
+     * The bottom-left corner rather than the full width (D188). Three
+     * spacecraft do not need a screen's width, and a card that spans it reads
+     * as a bar across the Moon rather than a note beside it.
+     */
     left: 12px;
-    right: 12px;
+    right: auto;
     width: auto;
+    max-width: min(310px, calc(100vw - 24px));
+    padding: 10px;
+    font-size: 11px;
   }
 
   .moonlist__item {
-    grid-template-columns: 10px auto minmax(0, 1fr) auto;
+    grid-template-columns: 9px auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0 8px;
-    padding: 9px 6px;
+    gap: 0 7px;
+    padding: 7px 5px;
   }
 
   .moonlist__dot {

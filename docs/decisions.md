@@ -11108,3 +11108,71 @@ same design with more room to be wrong in. The detail panel did it (D184), the
 world list did it (D182), and this is the Moon list doing it.
 
 836 backend tests, 1,109 frontend.
+
+## D188 - Seven notes from a phone and a window
+
+Phone sent four crops and a list. Taken together they are one complaint - the
+chrome had accumulated - and seven separate causes.
+
+### The accent was competing with the map
+
+`#58b6ff` on a screen already full of blue: ocean, night wash, the basemap's own
+water. An accent has one job, to be the thing that is not everything else, and
+it was the same hue as the thing it sat on. **Amber `#ffd166`**, which is
+already in the application - the Moon's spacecraft dots, the low end of the
+altitude ramp - so it reads as lit rather than as interface. Phone's choice from
+three offered.
+
+### The wordmark now uses the solar page's serif
+
+That page sets its title in a system serif and its standfirst in small
+letterspaced capitals, and reads as a masthead. The planet view had the
+sans-serif label every dashboard has. Same family, same restraint, and no
+webfont is fetched for it (D30).
+
+### Three controls on one line, at three different heights
+
+The key pill, the layer bar and the map's own controls were 44, 36 and 44 tall,
+all starting at y128 - **sharing a top edge and nothing else**. They share a
+centre now. The menu button is MapLibre's own 29px, so its offset is three
+different from the others' on purpose.
+
+### Safari zooms any field under 16px
+
+Tapping the search box magnified the page and did not undo it. There is no
+property for "do not do that"; the only fix short of disabling pinch-zoom for
+the whole document - an accessibility regression to fix a nuisance - is to give
+the field the 16px Safari looks for. The placeholder inside it stays at 13.
+
+### A figure and its name are one statement
+
+The About page gave the count `minmax(120px, 1fr)`, a column that grew with the
+window, so "15,687" sat at the left of 490 empty pixels with its label stranded
+across the gap. Capped at 168px and right-aligned, so the three figures stack
+into a column that reads down - which is the whole point of the tabular numerals
+already set on them, and impossible while "1,427" started at the same left edge
+as "32,254". Gap measured 490 to **32**.
+
+### Two permanent buttons became one
+
+The basemap cycle and the night toggle are both useful and neither is used
+often, and together they were most of the chrome down the right-hand edge.
+`viewMenuControl.ts` adds a third button and toggles a class; the stylesheet
+does the rest. **The two controls are not moved, reparented or told anything** -
+MapLibre still owns them and their order - so a fourth added later needs no
+change to either file. Their labels come from their own `title` attributes,
+which already say what pressing will *do* rather than what is on (D68), so the
+menu row cannot drift from the tooltip.
+
+Two mistakes on the way, both found by measuring: the class was going on
+`.planet-view` when MapLibre's container is `.planet-map` inside it; and the
+touch rule squaring these buttons at 44x44 (D178) has equal specificity and
+comes later, so it took the width and clipped a 133px label to 44.
+
+### And the Moon list to the corner
+
+Full width for three spacecraft reads as a bar across the Moon rather than a
+note beside it. Bottom-left, 238 x 138 - **60% of the width and 20% of the
+height** - with the longest name still unclipped.
+
+836 backend tests, 1,109 frontend.
