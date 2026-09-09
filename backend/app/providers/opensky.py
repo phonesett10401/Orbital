@@ -62,7 +62,7 @@ def describe(exc: BaseException) -> str:
     """An exception rendered so the log line says something.
 
     **`str(exc)` is empty for most of httpx's connection errors**, so
-    ``f"token request failed: {describe(exc)}"`` logged the literal text ``token request
+    ``f"token request failed: {exc}"`` logged the literal text ``token request
     failed:`` and stopped - a message whose entire content was that something
     unspecified went wrong. Production spent a day telling us exactly that
     (D194), while the same code on a laptop worked, and the difference between
@@ -155,7 +155,7 @@ class OpenSkyProvider(Provider):
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
         except httpx.HTTPError as exc:
-            raise ProviderUnavailable(f"token request failed: {exc}") from exc
+            raise ProviderUnavailable(f"token request failed: {describe(exc)}") from exc
 
         if response.status_code != 200:
             raise ProviderUnavailable(

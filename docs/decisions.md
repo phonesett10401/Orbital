@@ -11430,3 +11430,36 @@ from both machines, and it answers in 0.25 s from here. What the container sees
 is the next thing to find out, and now the log will say.
 
 **850 backend tests**, 1,114 frontend.
+
+## D195 - The edit landed on the documentation of the bug
+
+D194 routed every `{exc}` in the OpenSky provider through `describe`, tested it,
+deployed it, and production went on logging the old message with nothing after
+the colon.
+
+**Five of six call sites had changed. The sixth was the token request** - the
+only one production was failing on.
+
+The replacement rewrote the *first* occurrence in the file, and the first
+occurrence was inside `describe`'s own docstring, where the broken format string
+is quoted as an example of what not to do. So the edit landed on the description
+of the bug rather than the bug, and left the docstring saying the opposite of
+what the code did.
+
+Three tests passed the whole time, because they call `describe` directly. **A
+test of a helper is not a test of its callers**, and the distance between those
+two things is exactly where this hid: the helper was correct, its docstring was
+about the right problem, and the line that mattered was untouched.
+
+The new tests drive `_request_token` through a transport that raises
+`ConnectError("")` - the real production failure, an exception whose `str()` is
+empty - and assert the message does not end in a colon. Checked by putting the
+original bug back: both fail.
+
+Worth naming the shape, because it is not really about `str.replace`. **An
+example in a docstring is code-shaped text that no test covers**, and any edit
+matching on content can hit it first. The lesson is the same one D190 taught
+about a vacuous measurement: assert on the thing you are shipping, not on the
+thing you are explaining.
+
+**852 backend tests**, 1,114 frontend.

@@ -473,3 +473,61 @@ class TestDescribe:
             RuntimeError("   "),
         ]:
             assert describe(exc).strip() != ""
+
+
+class TestTokenFailureNamesItself:
+    """The raise site, not the helper (D195).
+
+    `describe` was tested and correct while the line that needed it was
+    untouched: the edit replaced the *first* match in the file, which was the
+    helper's own docstring quoting the broken format string as an example. Six
+    call sites, five changed, and the one production was screaming through was
+    the one that did not. **A test of a helper is not a test of its callers.**
+    """
+
+    @pytest.mark.anyio
+    async def test_a_connection_failure_names_the_exception(self):
+        import httpx
+
+        from app.providers.base import ProviderUnavailable
+        from app.providers.opensky import OpenSkyProvider
+
+        def refuse(request: httpx.Request) -> httpx.Response:
+            # What the container was hitting: an error whose str() is empty.
+            raise httpx.ConnectError("")
+
+        provider = OpenSkyProvider(
+            client_id="id",
+            client_secret="secret",
+            client=httpx.AsyncClient(transport=httpx.MockTransport(refuse)),
+        )
+        with pytest.raises(ProviderUnavailable) as caught:
+            await provider._request_token()
+
+        message = str(caught.value)
+        assert "token request failed" in message
+        # The whole point: production logged this message with nothing after
+        # the colon for a day.
+        assert message.rstrip().endswith("ConnectError")
+        assert not message.rstrip().endswith(":")
+
+    @pytest.mark.anyio
+    async def test_every_failure_message_ends_with_something(self):
+        import httpx
+
+        from app.providers.base import ProviderError
+        from app.providers.opensky import OpenSkyProvider
+
+        for error in (httpx.ConnectError(""), httpx.ReadTimeout(""), httpx.ConnectTimeout("")):
+
+            def raise_it(request: httpx.Request, _e=error) -> httpx.Response:
+                raise _e
+
+            provider = OpenSkyProvider(
+                client_id="id",
+                client_secret="secret",
+                client=httpx.AsyncClient(transport=httpx.MockTransport(raise_it)),
+            )
+            with pytest.raises(ProviderError) as caught:
+                await provider._request_token()
+            assert not str(caught.value).rstrip().endswith(":"), str(caught.value)
