@@ -291,6 +291,22 @@ class Settings(BaseSettings):
             "serving that is D86's map of ghosts (D165)."
         ),
     )
+    ship_max_vessels: int = Field(
+        default=14000,
+        ge=0,
+        description=(
+            "The most vessels the global AIS stream will hold, or 0 for no "
+            "limit. **A ceiling on memory that does not depend on how busy the "
+            "sea is.** `ship_object_ttl_seconds` bounds how *old* a vessel may "
+            "be, which is a different question: the same TTL holds 643 vessels "
+            "on Digitraffic alone and 27,000 with the global stream, and the "
+            "second number was measured at about 480 MiB against a 512 MiB "
+            "container, which killed it (D192). 14,000 is the measured 27,000 "
+            "roughly halved - still twenty times the Baltic-only feed, and "
+            "chosen from two data points rather than a model, so it is a dial "
+            "to turn if the container is a different size."
+        ),
+    )
     aisstream_api_key: str = Field(
         default="",
         description=(

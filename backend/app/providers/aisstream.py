@@ -77,6 +77,7 @@ the service does not replay anyway - its own documentation says so.
 from __future__ import annotations
 
 import asyncio
+import heapq
 import contextlib
 import json
 import logging
@@ -171,6 +172,7 @@ class AisStreamProvider(Provider):
         api_key: str,
         url: str = STREAM_URL,
         max_age_seconds: float = ais.SHIP_TTL_SECONDS,
+        max_vessels: int = 0,
         connect=None,
     ) -> None:
         if not api_key:
@@ -181,6 +183,15 @@ class AisStreamProvider(Provider):
         self._api_key = api_key
         self._url = url
         self._max_age = max_age_seconds
+        #: The most vessels to hold, or 0 for no limit.
+        #:
+        #: **A ceiling on memory that does not depend on the sea.** The age
+        #: limit above bounds how *old* a vessel may be, which is not the same
+        #: thing: a busy hour off Singapore and a quiet one off Iceland fit the
+        #: same TTL and hold wildly different numbers. Measured, this process
+        #: settled at 27,000 vessels and around 480 MiB against a 512 MiB
+        #: container, and was killed for it (D192).
+        self._max_vessels = max(0, int(max_vessels))
         #: Injectable so the tests can drive a fake socket. Everything above
         #: the transport is then the real code path.
         self._connect = connect or self._default_connect
@@ -391,14 +402,6 @@ class AisStreamProvider(Provider):
             raise ProviderUnavailable("aisstream has not connected yet")
 
         now = datetime.now(timezone.utc)
-        records = []
-        stale = []
-        for mmsi, position in self._positions.items():
-            age = (now - position["at"]).total_seconds()
-            if age > self._max_age:
-                stale.append(mmsi)
-                continue
-            records.append(self._to_record(mmsi, position))
 
         # **Pruned here, not merely filtered.** A polled source is re-read from
         # scratch every time; this one accumulates in memory for as long as the
@@ -411,10 +414,46 @@ class AisStreamProvider(Provider):
         # data arrives once every six minutes against a position every few
         # seconds. Dropping both together meant a vessel that went quiet for
         # sixteen minutes came back anonymous - see ``STATIC_TTL_SECONDS``.
+        self._expire(now)
+        self._enforce_cap()
+        self._prune_identities()
+
+        # Built from what is left, so the answer and the memory agree. Building
+        # them first and pruning afterwards would serve vessels this provider
+        # has just decided it cannot afford to remember.
+        return [self._to_record(mmsi, position) for mmsi, position in self._positions.items()]
+
+    def _expire(self, now: datetime) -> None:
+        """Drop vessels not heard from within the age limit."""
+        stale = [
+            mmsi
+            for mmsi, position in self._positions.items()
+            if (now - position["at"]).total_seconds() > self._max_age
+        ]
         for mmsi in stale:
             self._positions.pop(mmsi, None)
-        self._prune_identities()
-        return records
+
+    def _enforce_cap(self) -> None:
+        """Hold at most ``max_vessels``, dropping the ones heard from longest ago.
+
+        **Oldest first, and that is the whole of the policy.** The freshest
+        position is the one most likely to still be true, so when there is not
+        room for every vessel the ones to lose are the ones already closest to
+        expiring anyway. It is the age limit's own ordering, applied a second
+        time for a different reason.
+
+        The alternative - dropping whatever the dictionary happened to yield
+        first - would thin the fleet at random and make the map's coverage a
+        function of hash order.
+        """
+        if not self._max_vessels or len(self._positions) <= self._max_vessels:
+            return
+        excess = len(self._positions) - self._max_vessels
+        oldest = heapq.nsmallest(
+            excess, self._positions.items(), key=lambda item: item[1]["at"]
+        )
+        for mmsi, _ in oldest:
+            self._positions.pop(mmsi, None)
 
     def _prune_identities(self) -> None:
         """Forget vessels not heard from in hours, so memory stays bounded."""

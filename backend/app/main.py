@@ -164,7 +164,19 @@ def create_app(
             # nothing else, which is a smaller map rather than a broken one
             # (D166).
             if settings.ship_global_enabled and settings.aisstream_api_key:
-                ship_stream = AisStreamProvider(api_key=settings.aisstream_api_key)
+                # **Both limits, and the first one is a fix.**
+                #
+                # `ship_object_ttl_seconds` was reaching the store below and
+                # nothing else, so the stream went on holding its own default
+                # 900 seconds of vessels and handing them straight back on the
+                # next snapshot: the store evicted at the configured age and was
+                # refilled immediately, which is why turning that dial down
+                # moved the count by 16% instead of halving it (D192).
+                ship_stream = AisStreamProvider(
+                    api_key=settings.aisstream_api_key,
+                    max_age_seconds=settings.ship_object_ttl_seconds,
+                    max_vessels=settings.ship_max_vessels,
+                )
                 sources.append(ship_stream)
             elif settings.ship_global_enabled:
                 logger.info(

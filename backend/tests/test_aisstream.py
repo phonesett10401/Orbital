@@ -415,3 +415,80 @@ class TestMessageNineteenIsBothThings:
         provider = await provider_with([EXTENDED_CLASS_B])
         assert (await provider.fetch())[0].meta["length"] == "15 m"
         await provider.aclose()
+
+
+class TestVesselCap:
+    """The ceiling on how many vessels are held, regardless of the sea (D192).
+
+    `max_age_seconds` bounds how *old* a vessel may be, which is a different
+    question from how many there are: the same age limit held 643 vessels on
+    Digitraffic alone and 27,000 with the global stream, and the second number
+    was measured at about 480 MiB against a 512 MiB container.
+    """
+
+    def _provider(self, **kwargs) -> AisStreamProvider:
+        return AisStreamProvider(api_key="k", **kwargs)
+
+    def _place(self, provider: AisStreamProvider, mmsi: int, seconds_ago: float) -> None:
+        # The shape `_absorb_position` writes, so the record builder is
+        # exercised for real rather than against a convenient fiction.
+        provider._positions[mmsi] = {
+            "lat": 60.0,
+            "lon": 25.0,
+            "sog": 8.0,
+            "cog": 90.0,
+            "heading": 90,
+            "navStat": 0,
+            "at": datetime.now(timezone.utc) - timedelta(seconds=seconds_ago),
+        }
+        provider._connected_at = 1.0
+
+    @pytest.mark.anyio
+    async def test_holds_everything_when_no_cap_is_set(self):
+        # 0 means "no limit", which has to stay the default behaviour: a
+        # deployment with room should not silently lose vessels.
+        provider = self._provider(max_vessels=0)
+        for mmsi in range(50):
+            self._place(provider, mmsi, seconds_ago=1)
+        assert len((await provider.fetch())) == 50
+
+    @pytest.mark.anyio
+    async def test_never_holds_more_than_the_cap(self):
+        provider = self._provider(max_vessels=10)
+        for mmsi in range(40):
+            self._place(provider, mmsi, seconds_ago=1)
+        assert len((await provider.fetch())) == 10
+        # And the dictionary itself is what shrank - filtering the answer while
+        # the memory kept growing would defeat the entire point.
+        assert len(provider._positions) == 10
+
+    @pytest.mark.anyio
+    async def test_keeps_the_freshest_and_drops_the_stalest(self):
+        # The policy, and the reason for it: the newest position is the one most
+        # likely to still be true, so the vessels to lose are the ones already
+        # closest to expiring.
+        provider = self._provider(max_vessels=3)
+        for mmsi, age in [(1, 500), (2, 5), (3, 400), (4, 1), (5, 300), (6, 50)]:
+            self._place(provider, mmsi, seconds_ago=age)
+        (await provider.fetch())
+        assert set(provider._positions) == {4, 2, 6}
+
+    @pytest.mark.anyio
+    async def test_the_age_limit_still_applies_under_the_cap(self):
+        # Two independent limits. A vessel too old to serve must go even when
+        # there is plenty of room, or the cap would resurrect the ghosts the
+        # TTL exists to bury (D86).
+        provider = self._provider(max_age_seconds=100, max_vessels=1000)
+        self._place(provider, 1, seconds_ago=5)
+        self._place(provider, 2, seconds_ago=5000)
+        assert {r.id for r in (await provider.fetch())} == {"1"}
+
+    @pytest.mark.anyio
+    async def test_the_answer_and_the_memory_agree(self):
+        # Records are built after pruning, so the provider never serves a
+        # vessel it has just decided it cannot afford to remember.
+        provider = self._provider(max_vessels=5)
+        for mmsi in range(30):
+            self._place(provider, mmsi, seconds_ago=mmsi)
+        served = {r.id for r in (await provider.fetch())}
+        assert served == {str(mmsi) for mmsi in provider._positions}

@@ -11288,3 +11288,49 @@ OOM-restarting and flight tracks stay short. Phone's call - the durable fix is a
 cap on the ship store rather than switching a source off, and there is time.
 
 836 backend tests, 1,114 frontend.
+
+## D192 - A ceiling that does not depend on the sea
+
+The container had been OOM-killed on a cycle for most of a day. D191 recorded
+the choice to keep global ships and fix it properly; this is that fix.
+
+### The dial was not connected to the thing that accumulates
+
+`ORBITAL_SHIP_OBJECT_TTL_SECONDS` was applied to the **store** and to nothing
+else. The aisstream provider keeps its own `_positions` dictionary and was
+constructed without an age at all, so it went on holding its default 900
+seconds' worth and handing them straight back on the next snapshot: the store
+evicted at the configured age and was refilled immediately.
+
+That is why turning it from 900 to 400 moved the vessel count by **16%** -
+32,254 to about 27,000 - when it should have roughly halved it. I recommended
+that change and watched it underperform without asking why the number was
+disappointing rather than merely small. **A setting that does not reach the
+thing it names is worse than no setting**: it looks like a lever and answers
+like one.
+
+### An age limit is not a size limit
+
+Even connected, the TTL bounds how *old* a vessel may be, which is a different
+question from how many there are. The same limit holds 643 vessels on
+Digitraffic alone and 27,000 with the global stream: the number is a fact about
+how busy the sea is, and memory cannot be budgeted against that.
+
+So `ship_max_vessels` is a hard ceiling, default **14,000** - the measured
+27,000 roughly halved, still twenty times the Baltic-only feed. Two data points
+and a straight line rather than a model, which is why it is a setting.
+
+**Oldest first, and that is the whole policy.** The freshest position is the one
+most likely to still be true, so when there is not room the vessels to lose are
+the ones already closest to expiring. Dropping whatever the dictionary yielded
+first would have made coverage a function of hash order.
+
+The two limits are independent and both apply: a vessel too old to serve goes
+even when there is room, or the cap would resurrect the ghosts the TTL exists to
+bury (D86). Records are built *after* pruning, so the provider never serves a
+vessel it has just decided it cannot afford to remember.
+
+Five tests, checked by breaking it twice - disabling the cap fails two of them,
+reversing the eviction order fails the one that names it.
+
+**841 backend tests**, 1,114 frontend.
