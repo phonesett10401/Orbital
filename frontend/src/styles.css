@@ -1558,6 +1558,17 @@ body {
  * the panel does not jump as one resolves into another. Planespotters returns
  * about 497x280, which is 16:9 within a pixel.
  */
+/*
+ * Hidden by default, shown only on the phone sheet.
+ *
+ * A desktop panel shows all of itself at once, so a control offering to reveal
+ * what is already on screen would be a puzzle. The component renders it either
+ * way rather than asking what size the window is (D186).
+ */
+.panel__more {
+  display: none;
+}
+
 .panel__photo {
   margin: 0 0 10px;
   aspect-ratio: 16 / 9;
@@ -3508,8 +3519,31 @@ body {
     top: 128px;
     bottom: auto;
     z-index: 3;
-    padding: 3px;
-    gap: 3px;
+    /*
+     * **No panel behind it.**
+     *
+     * Phone asked for it to look like the wordmark and the About link above -
+     * and those have no box at all, only text over the map. A control bar with
+     * a surface, a border and a shadow reads as furniture; the same three words
+     * floating read as part of the view. The active one keeps its fill, because
+     * that is the only thing distinguishing it.
+     */
+    padding: 0;
+    gap: 2px;
+    background: none;
+    backdrop-filter: none;
+    border: 0;
+    box-shadow: none;
+  }
+
+  /* A readable shadow instead of a panel: text over imagery needs one. */
+  .app .layers__button {
+    text-shadow: 0 1px 3px rgba(5, 7, 13, 0.9);
+  }
+
+  .app .layers__button--active {
+    /* Still a filled pill, and now the only one - which is the point. */
+    text-shadow: none;
   }
 
   /*
@@ -3570,10 +3604,20 @@ body {
      * credit as actually drawn, and re-published when it wraps. Everything in
      * this stack is positioned from it, so one measurement moves all of them.
      */
-    bottom: calc(var(--attribution-height, 44px) + 12px + env(safe-area-inset-bottom, 0px));
-    gap: 6px 14px;
-    padding: 8px 14px;
-    font-size: 11.5px;
+    /*
+     * Still measured from the credit (D182) - and the credit is now the small
+     * round button it was always configured to be, so this lands at the foot of
+     * the screen without a constant being guessed at (D186). Nothing here
+     * changed to move it down; the thing it was avoiding got smaller.
+     */
+    bottom: calc(var(--attribution-height, 44px) + 6px + env(safe-area-inset-bottom, 0px));
+    gap: 4px 12px;
+    padding: 5px 12px;
+    font-size: 10.5px;
+    /* One line. Two lines of counter at the foot of a phone is a second status
+       bar competing with the operating system's. */
+    flex-wrap: nowrap;
+    overflow: hidden;
     /* The gradient has to reach the bottom of the screen even though the bar
        does not, or there is a bright seam under it. */
     background: linear-gradient(to top, rgba(5, 7, 13, 0.94) 56px, rgba(5, 7, 13, 0.9), transparent);
@@ -3755,6 +3799,40 @@ body {
    */
   .panel__caveat {
     display: none;
+  }
+
+  /*
+   * ---- the sheet opens brief (D186) ----
+   *
+   * Phone: only the second screenshot is necessary. That is the callsign,
+   * whether the position can be trusted, where the flight is scheduled to go,
+   * and the picture - four things, and every one of them answers "what am I
+   * looking at". Everything under them is reference: identifiers, derived
+   * speeds, how many positions the track holds. True, and not what a tap on a
+   * marker was asking.
+   *
+   * So they are behind a control instead of behind a scroll. A scroll hides
+   * things without admitting it; a button that says "See more" is a promise
+   * that there is more.
+   */
+  .panel--brief > .panel__fields,
+  .panel--brief > .panel__route:nth-of-type(2) {
+    display: none;
+  }
+
+  .panel__more {
+    display: block;
+    grid-column: 1 / -1;
+    justify-self: start;
+    margin-top: 4px;
+    padding: 10px 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 12.5px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
   }
 
   /*

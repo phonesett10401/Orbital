@@ -86,6 +86,17 @@ export function DetailPanel() {
 
   // Ticks once a second so the age counts up while the panel is open, rather
   // than freezing at whatever it was when the fetch landed.
+  /**
+   * Whether the phone's sheet is showing everything or only the top of it.
+   *
+   * Reset whenever the selection changes: a reader who opened one aircraft in
+   * full has said nothing about the next one, and inheriting the choice would
+   * hand them a full-height sheet the moment they tapped a different marker
+   * (D186).
+   */
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => setExpanded(false), [selectedId]);
+
   const [, setNow] = useState(Date.now());
   useEffect(() => {
     if (!selectedId) return undefined;
@@ -222,7 +233,10 @@ export function DetailPanel() {
   }
 
   return (
-    <aside className="panel" aria-label={`Details for ${detail.label}`}>
+    <aside
+      className={`panel ${expanded ? '' : 'panel--brief'}`}
+      aria-label={`Details for ${detail.label}`}
+    >
       {header}
 
       {/*
@@ -458,6 +472,22 @@ export function DetailPanel() {
           </>
         )}
       </section>
+
+      {/*
+        **Only on a phone**, where `.panel--brief` hides everything below the
+        route. On a desktop the whole panel is visible at once and a control
+        that reveals what is already on screen would be a puzzle, so the
+        stylesheet hides this there rather than the component knowing about
+        viewports (D186).
+      */}
+      <button
+        type="button"
+        className="panel__more"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((was) => !was)}
+      >
+        {expanded ? 'See less' : 'See more'}
+      </button>
     </aside>
   );
 }

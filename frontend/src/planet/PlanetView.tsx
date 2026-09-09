@@ -656,6 +656,18 @@ export function PlanetView() {
           // bars that have to stay above it. Measured rather than assumed:
           // three fixed offsets in a row were wrong, because the credit wraps
           // (D182).
+          // **Collapsed to its button, which is what `compact: true` means.**
+          //
+          // MapLibre renders the compact control expanded on first paint and
+          // only collapses it once someone presses the button. On a phone that
+          // is two lines of credit across the foot of the map before anyone has
+          // asked for them - and this application asked for compact when it
+          // built the map. The credit is not hidden: the round button is the
+          // control, and it opens on a tap (D186).
+          const credit = container.querySelector('.maplibregl-ctrl-attrib');
+          credit?.classList.remove('maplibregl-compact-show');
+
+          // Measured after that, so the published height is the collapsed one.
           stopMeasuringCredit = trackAttributionHeight(container, document.documentElement);
 
           // Both controls exist now, so the world underneath can have its

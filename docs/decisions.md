@@ -11024,3 +11024,59 @@ past five on a machine also running a dev server, a browser and a build.
 because they check everything, which is the property worth keeping.
 
 836 backend tests, 1,109 frontend.
+
+## D186 - Only the second screenshot was necessary
+
+Phone, with four crops of the running site: only the second one is needed, make
+it smaller, put the rest behind a "see more"; make the layer bar transparent
+like the wordmark above it; move the counter to the foot and shrink it.
+
+### The sheet opens brief
+
+The second crop is the callsign, whether the position can be trusted, where the
+flight is scheduled to go, and the picture. Four things, and every one answers
+*what am I looking at*. Everything under them - identifiers, derived speeds, how
+many positions the track holds - is reference. True, and not what a tap on a
+marker was asking.
+
+So it is behind a control rather than behind a scroll. **A scroll hides things
+without admitting it; a button that says "See more" is a promise that there is
+more.** Brief measures **244px against 364**, and needs no scrolling at all -
+61% of the screen stays map.
+
+The control is reset whenever the selection changes: a reader who opened one
+aircraft in full has said nothing about the next one.
+
+### The bar loses its furniture
+
+Phone asked for it to look like the wordmark and the About link above it, and
+those have no box at all - only text over the map. Background, backdrop filter,
+border and shadow all go; the active layer keeps its fill, because that is now
+the only thing distinguishing it, and the other two get a text shadow because
+words over imagery need one.
+
+### The counter went down by making something else smaller
+
+The status bar sat above the credit, which put a counter across the middle of
+the map. It is now 34px against 60, one line, 10.5px - and **nothing in its
+positioning changed at all**.
+
+`attributionControl: { compact: true }` was set when the map was built, and
+MapLibre renders the compact control *expanded* on first paint, collapsing it
+only when someone presses its button. On a phone that is two lines of credit
+across the foot of the map before anyone asked. Removing `maplibregl-compact-show`
+once, after load, gives the arrangement the code always requested: a 24px round
+button in the corner that opens the full credit on a tap - verified, 24px to
+374px and back.
+
+The status bar then dropped on its own, because D182 positions it from the
+*measured* credit height rather than a constant. The published value went 44 to
+24 and everything above it followed. **That is the return on having stopped
+guessing**: a change to the credit moved four other elements correctly without
+one of them being touched.
+
+The credit is not hidden. It is the control it was configured to be, and this
+project's rule is that the source must be credited (D120) - not that it must
+occupy the foot of every phone.
+
+836 backend tests, 1,109 frontend.
