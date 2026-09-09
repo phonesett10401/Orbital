@@ -10957,3 +10957,70 @@ when busy is a suite nobody trusts - which is the exact objection recorded in
 the conftest comment about tests that fail only in company.
 
 836 backend tests, 1,109 frontend.
+
+## D185 - The sheet gets two columns, and the prose goes
+
+Two rounds in one sitting, both from Phone looking at a real phone.
+
+### First: 72vh was a takeover, not a sheet
+
+D184's sheet put its top edge under the search bar. The map went away, and with
+it the aircraft that had just been tapped - *"now what the freak is this"*, which
+is the correct response to an application that hides the thing it is describing.
+
+**52vh.** The map keeps its upper 286 of 700 pixels, and the callsign, the
+staleness line and the whole route still arrive without a scroll. A grab bar at
+the top says which edge it is attached to, which is the difference between a
+sheet and a panel that happens to be at the bottom.
+
+### Then: two columns, and no prose
+
+Phone's layout, and it is better than the one it replaced: the photograph to the
+bottom right, the route and its departure airport in the space beside it, and
+the explanations gone.
+
+**The prose goes.** Every caveat in this panel is true and worth saying - what a
+scheduled route is and is not (D88), where an observed origin comes from and how
+far the nearest airport was (D78). Each is three lines of explanation sitting
+between the reader and the next fact, on a surface that is not doing first
+readings. The *claims* stay: "Scheduled route" and "Observed path" are still
+separate headings, which is the distinction those caveats exist to protect.
+
+Measured: photograph at x 244-378, route at x 16-232, side by side, no text
+under the picture, both sections visible without scrolling.
+
+### The grid rule that cost the most time
+
+`order` alone could not pair them, and the reason is in the spec rather than in
+a mistake I made: when an auto-placed item names a column to the *left* of the
+placement cursor, the cursor drops to the next row. So a column-2 item can never
+be joined afterwards by a column-1 item - whichever way the two were ordered, one
+started a new row and they came out stacked. Naming explicit rows for the four
+that lead takes the cursor out of the argument.
+
+### The layer switcher moves up, and gets smaller
+
+D180 put it at the foot of the screen for the thumb. Right instinct, wrong
+result once the sheet existed: the sheet owns the bottom half, so the bar had to
+hide whenever anything was selected - a control that vanishes exactly when you
+are exploring. It sits under the header now, centred in the measured gap between
+the key pill (x 12-63) and the map's controls (x 340-394).
+
+Its buttons are **36px, under the 44px floor D178 set**. Broken on request, and
+defensible rather than sloppy: the three targets sit together with nothing else
+near them, so a miss lands on another layer rather than on something
+destructive - and it is no longer at the bottom of the screen where a miss used
+to land on the status bar or the credit.
+
+### And the flaky suite was real
+
+Five tests failed, then six different ones, then none. The reason, once
+captured: **"Test timed out in 5000ms."** A few of these are slow because they
+are exhaustive - every index in the star catalogue, the ring profile at every
+radius, the graticule mesh to the edge of mercator - about 1.8 s unloaded, and
+past five on a machine also running a dev server, a browser and a build.
+
+`testTimeout: 20_000`, raised rather than the tests made shallower. They are slow
+because they check everything, which is the property worth keeping.
+
+836 backend tests, 1,109 frontend.

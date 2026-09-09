@@ -111,5 +111,21 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    /**
+     * Four times the default five seconds.
+     *
+     * A handful of these tests are genuinely slow because they are genuinely
+     * exhaustive: every index in the star catalogue, the ring profile at every
+     * radius, the graticule mesh to the edge of mercator. Unloaded they take
+     * about 1.8 s; on a machine also running a dev server, a browser and a
+     * build they crossed 5 s and failed - and the *set* that failed moved
+     * between runs, which is the signature.
+     *
+     * Raised rather than the tests made shallower: they are slow because they
+     * check everything, which is the property worth keeping. A suite that fails
+     * only when the machine is busy is a suite nobody trusts, and this
+     * repository already has that objection written down in its conftest.
+     */
+    testTimeout: 20_000,
   },
 });

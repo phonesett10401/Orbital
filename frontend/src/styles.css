@@ -3487,17 +3487,44 @@ body {
    * Above the status bar, which is above the attribution. That order is not
    * arbitrary: the credit is a licence obligation and keeps the corner (D120).
    */
+  /*
+   * The layer switcher moves up under the header (D185).
+   *
+   * D180 put it at the foot of the screen for the thumb, which was the right
+   * instinct and the wrong result once the detail sheet arrived: the sheet owns
+   * the bottom half now, the bar had to hide whenever anything was selected,
+   * and a control that disappears exactly when you are exploring is a control
+   * in the wrong place. Phone asked for it smaller and above; up here it is
+   * always visible and never fights the sheet.
+   *
+   * Centred between the key pill on the left and the map's own controls on the
+   * right - measured, they occupy x 12-63 and x 321-375, and a bar this size
+   * sits inside the gap.
+   */
   .layers {
     position: fixed;
     left: 50%;
     transform: translateX(-50%);
-    /* Credit + status bar + a gap, all from the one measurement (D182). */
-    bottom: calc(var(--attribution-height, 44px) + 84px + env(safe-area-inset-bottom, 0px));
+    top: 128px;
+    bottom: auto;
     z-index: 3;
+    padding: 3px;
+    gap: 3px;
   }
 
-  .layers__button {
-    padding: 11px 18px;
+  /*
+   * **Deliberately under the 44px touch floor**, which D178 set and this breaks
+   * on request. Two things make it defensible rather than sloppy: the three
+   * targets sit side by side with nothing else near them, so a miss lands on
+   * another layer rather than on something destructive; and the bar no longer
+   * competes for the bottom of the screen, where a mis-tap used to mean the
+   * status bar or the credit. `.app` in the selector beats the bare
+   * `(pointer: coarse)` rule below on specificity rather than order.
+   */
+  .app .layers__button {
+    min-height: 36px;
+    padding: 8px 13px;
+    font-size: 12.5px;
   }
 
   /* ---- the key, as a pill until it is asked for ---- */
@@ -3610,7 +3637,20 @@ body {
     /* Only the credit stays uncovered. It is a licence obligation and it keeps
        its corner however large the sheet gets (D120). */
     bottom: calc(var(--attribution-height, 44px) + 6px + env(safe-area-inset-bottom, 0px));
-    max-height: 72vh;
+    /*
+     * **Half the screen, not most of it.**
+     *
+     * 72vh was the first attempt and it was a takeover: its top edge landed
+     * under the search bar, so the map went away and with it the aircraft the
+     * reader had just tapped. A sheet that hides the thing it describes is a
+     * page, and this is not a page.
+     *
+     * 52vh leaves the upper half of the map showing. The callsign, the
+     * staleness line and the whole scheduled route still arrive without a
+     * scroll - that was the point of the reordering - and everything below the
+     * route is reference the reader can pull up when they want it.
+     */
+    max-height: 52vh;
     overflow-y: auto;
     /* Square at the foot, because it meets the bottom of the screen there. */
     border-radius: 16px 16px 0 0;
@@ -3636,9 +3676,102 @@ body {
    * position can be trusted, then where it is going - and the photograph
    * directly under them, still well inside the first screenful.
    */
+  /*
+   * **Two columns at the foot: what it is doing, and what it looks like.**
+   *
+   * A single column meant the photograph pushed the route down or the route
+   * pushed the photograph out of sight, and neither is a choice worth making on
+   * a screen this size - they are different questions and they fit side by
+   * side. The route takes the left, where reading starts; the picture takes the
+   * right, where it can be glanced at (D185).
+   *
+   * Grid rather than flex, because two of these children have to span both
+   * columns and the rest do not. `order` still governs placement, so the row
+   * order below is the reading order.
+   */
   .panel {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 37%;
+    column-gap: 12px;
+    align-content: start;
+  }
+
+  /*
+   * **Explicit rows for the four that lead, and the rest fall in behind.**
+   *
+   * `order` alone could not pair the photograph with the route, and the reason
+   * is a rule in the grid spec rather than a mistake: when an auto-placed item
+   * names a column to the *left* of where the cursor already is, the cursor
+   * drops to the next row. So a column-2 item can never be joined by a column-1
+   * item afterwards - whichever way the two were ordered, one of them started a
+   * new row and they ended up stacked.
+   *
+   * Naming the rows for the leading four removes the cursor from the argument.
+   * The route sections then auto-place into column 1 from row 4, which is where
+   * the photograph already is.
+   */
+  .panel::before {
+    grid-row: 1;
+    grid-column: 1 / -1;
+  }
+
+  .panel__header {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+
+  .panel__age {
+    grid-row: 3;
+    grid-column: 1 / -1;
+  }
+
+  .panel > .panel__photo {
+    grid-column: 2;
+    /* Two rows: the scheduled route and the observed path, which is exactly
+       what the reader is meant to be looking at while glancing at it. */
+    grid-row: 4 / span 2;
+    align-self: start;
+    margin: 0;
+  }
+
+  .panel > .panel__route {
+    grid-column: 1;
+  }
+
+  .panel > .panel__fields {
+    grid-column: 1 / -1;
+  }
+
+  /*
+   * **The prose goes.**
+   *
+   * Every caveat in this panel is true and worth saying, and each is two or
+   * three lines of explanation that on a phone sits between the reader and the
+   * next fact. They say what a scheduled route is and is not, and where an
+   * observed origin comes from - which is context for a first reading, on a
+   * surface that is not doing first readings. The claims themselves stay:
+   * "Scheduled route" and "Observed path" are still separate headings, which is
+   * the distinction the caveats exist to protect (D78, D88).
+   */
+  .panel__caveat {
+    display: none;
+  }
+
+  /*
+   * The grab bar. It does not drag anything - it says which edge the thing is
+   * attached to, which is the whole difference between a sheet and a panel that
+   * happens to be at the bottom.
+   */
+  .panel::before {
+    content: '';
+    order: -4;
+    flex: none;
+    align-self: center;
+    width: 36px;
+    height: 4px;
+    margin: 0 0 10px;
+    border-radius: 2px;
+    background: var(--border);
   }
 
   .panel__header {
@@ -3658,7 +3791,9 @@ body {
    * clearest thing in the panel, and no longer most of it.
    */
   .panel__photo {
-    max-height: 22vh;
+    /* A column now, so it is sized by its width. The cap only stops a tall
+       crop from stretching the row the route sits in. */
+    max-height: 16vh;
   }
 
   /*
