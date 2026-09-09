@@ -11,6 +11,7 @@ import {
   initialCamera,
   orbit,
   pan,
+  pinchFactor,
   worldPerPixel,
   zoom,
 } from './solarCamera';
@@ -142,5 +143,31 @@ describe('turning around it', () => {
     const c = orbit({ ...initialCamera(), distance: 33 }, 1, 0.2);
     expect(c.distance).toBe(33);
     expect(MIN_DISTANCE).toBeLessThan(MAX_DISTANCE);
+  });
+});
+
+describe('pinchFactor', () => {
+  it('brings the scene closer when the fingers spread', () => {
+    // Spreading means "closer" on every touch screen, and closer here is a
+    // smaller distance - so the factor has to be below 1.
+    expect(pinchFactor(100, 200)).toBeLessThan(1);
+  });
+
+  it('pushes it away when they close', () => {
+    expect(pinchFactor(200, 100)).toBeGreaterThan(1);
+  });
+
+  it('covers the same proportion whatever the scale', () => {
+    // The whole reason this is a ratio: doubling the gap has to mean the same
+    // thing at Mercury and at Neptune.
+    expect(pinchFactor(50, 100)).toBeCloseTo(pinchFactor(400, 800), 10);
+  });
+
+  it('does nothing when the gap is not a real measurement', () => {
+    // Two fingers in the same place, or a reading taken before the second one
+    // moved. Dividing by it would send the camera to infinity.
+    for (const [a, b] of [[0, 100], [100, 0], [-5, 100], [Number.NaN, 100]]) {
+      expect(pinchFactor(a, b)).toBe(1);
+    }
   });
 });

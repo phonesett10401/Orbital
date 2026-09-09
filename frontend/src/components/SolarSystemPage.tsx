@@ -8,12 +8,18 @@
  *
  * ## What the pointer does here
  *
- * - **Drag** slides the scene, one world-unit per pixel, because the camera has
- *   a target to move. This is the thing that could not be done at any damping
- *   while the map owned the camera (D160).
- * - **Wheel** moves in and out by a proportion of the remaining distance.
- * - **Right-drag** turns the system, since owning the camera means there is
- *   something to turn.
+ * - **Drag** turns the system around the Sun, which stays where it is.
+ * - **Wheel**, or **two fingers**, moves in and out by a proportion of the
+ *   remaining distance.
+ * - **Right-drag** slides the scene, one world-unit per pixel - the thing that
+ *   could not be done at any damping while the map owned the camera (D160).
+ *
+ * Drag and right-drag were the other way round until D183. Panning is the more
+ * capable gesture and it was on the button everyone has, which meant the
+ * ordinary way to explore the system was to push it off the screen - and on a
+ * touch screen, where there is no second button, it was the *only* thing a
+ * finger could do. Turning is what the scene is for: it is a set of rings seen
+ * from an angle, and the reward for moving is seeing them from another one.
  *
  * ## It renders only while it is open
  *
@@ -34,6 +40,7 @@ import {
   initialCamera,
   orbit,
   pan,
+  pinchFactor,
   zoom,
   type SolarCamera,
 } from '../solarCamera';
@@ -82,6 +89,16 @@ const CENTRE_EASE = 0.14;
 const DRIFT_YAW = 0.055;
 const DRIFT_PITCH = 0.026;
 
+/**
+ * How far a pixel of drag turns the system.
+ *
+ * A full sweep of a 375-pixel phone comes to about 107 degrees, so the system
+ * can be brought most of the way round in one gesture and all the way round in
+ * two - without a careless flick spinning it past the point of knowing which
+ * way you are looking.
+ */
+const ORBIT_RADIANS_PER_PIXEL = 0.005;
+
 /** How much of the way toward the pointer's drift each frame closes. */
 const DRIFT_EASE = 0.055;
 
@@ -122,6 +139,16 @@ export function SolarSystemPage() {
 
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const dragState = useRef({ x: 0, y: 0, startX: 0, startY: 0, button: 0, active: false });
+
+  /**
+   * Every pointer currently down, and the finger gap a pinch started from.
+   *
+   * Touch has no wheel and no second button, so without this the only thing a
+   * phone could do to this scene was turn it - and a system eighteen globe
+   * radii across is not much use at one fixed distance (D183).
+   */
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinchGap = useRef(0);
   const scene = useRef<SolarScene | null>(null);
   const camera = useRef<SolarCamera>(initialCamera());
   const [markers, setMarkers] = useState<BodyMarker[]>([]);
@@ -313,7 +340,36 @@ export function SolarSystemPage() {
   // the next pointermove, and the scene would jump or stop following.
   const drag = dragState.current;
 
+  /**
+   * The distance between the two fingers down, or 0 when there are not two.
+   *
+   * **The last two, not the first two.** A pointer is removed when its `up` or
+   * `cancel` arrives, and one that never arrives - a lost capture, a gesture
+   * interrupted by the system - would otherwise sit at the front of the map
+   * forever, holding a gap that never changes and a zoom that never moves.
+   * Reading from the end means the pair being measured is always the pair that
+   * arrived most recently.
+   */
+  const fingerGap = () => {
+    const all = [...pointers.current.values()];
+    const [a, b] = all.slice(-2);
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  };
+
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    // `>= 2` rather than `=== 2`: a third finger, or a stale one left behind by
+    // a cancelled gesture, should still leave a pinch working.
+    if (pointers.current.size >= 2) {
+      // A second finger ends the drag rather than fighting it: the first finger
+      // is still moving, and a pinch read as a turn spins the scene while the
+      // reader is only trying to zoom.
+      drag.active = false;
+      pinchGap.current = fingerGap();
+      return;
+    }
+
     drag.x = event.clientX;
     drag.y = event.clientY;
     drag.startX = event.clientX;
@@ -330,6 +386,21 @@ export function SolarSystemPage() {
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pointers.current.has(event.pointerId)) {
+      pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+
+    // A pinch outranks everything: no hover, no drag, no drift. Two fingers on
+    // the glass is never a request to look at what is under one of them.
+    if (pointers.current.size >= 2) {
+      const gap = fingerGap();
+      if (gap > 0 && pinchGap.current > 0) {
+        camera.current = zoom(camera.current, pinchFactor(pinchGap.current, gap));
+      }
+      pinchGap.current = gap;
+      return;
+    }
+
     const box = event.currentTarget.getBoundingClientRect();
     driftTo.current = driftFrom(
       event.clientX - box.left,
@@ -354,11 +425,18 @@ export function SolarSystemPage() {
     const height = event.currentTarget.clientHeight;
     camera.current =
       drag.button === 2
-        ? orbit(camera.current, -dx * 0.005, -dy * 0.005)
-        : pan(camera.current, dx, dy, height);
+        ? pan(camera.current, dx, dy, height)
+        : orbit(camera.current, -dx * ORBIT_RADIANS_PER_PIXEL, -dy * ORBIT_RADIANS_PER_PIXEL);
   };
 
   const endDrag = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const wasPinching = pointers.current.size >= 2;
+    pointers.current.delete(event.pointerId);
+    // Lifting one finger of a pinch leaves the other one down. Starting a fresh
+    // gap here would make the next move a wild zoom; it is measured again when
+    // a second finger arrives.
+    pinchGap.current = 0;
+
     const wasActive = drag.active;
     drag.active = false;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -367,7 +445,9 @@ export function SolarSystemPage() {
 
     // A press that went nowhere is a click. The canvas is both the thing you
     // drag and the thing you click, so the two are told apart afterwards.
-    if (!wasActive || drag.button !== 0) return;
+    // A pinch is not a click, however little either finger travelled - and the
+    // one that lifts first has usually barely moved at all.
+    if (wasPinching || !wasActive || drag.button !== 0) return;
     const travelled = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
     if (travelled > CLICK_SLOP_PX) return;
 

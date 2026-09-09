@@ -10838,3 +10838,65 @@ longer credit, and a browser with its own chrome at the bottom. None of those
 are conditions a viewport size reproduces.
 
 836 backend tests, 1,105 frontend.
+
+## D183 - The gesture everyone has should do the thing the page is for
+
+Phone: *"for solar system view, I think its better for us to have the system
+fixed at Sun in middle and be able to drag around in mobile, should apply same
+on window."*
+
+Half of it was already true and measurement said so: with the page open, the Sun
+sits at **(197, 350)** on a 394 x 700 canvas whose centre is **(197, 350)**.
+D172 snaps the camera there on open. What was wrong is that the first drag moved
+it away.
+
+### The bindings were the wrong way round
+
+- **Drag** panned - it moved the camera's *target*, sliding the whole system off
+  centre.
+- **Right-drag** turned it.
+
+Panning is the more capable gesture and it was on the button everybody has,
+which made the ordinary way to explore the system "push it off the screen". On
+a touch screen, where there is no second button, panning was the **only** thing
+a finger could do: the Sun could be shoved out of frame and never turned.
+
+Turning is what this page is for. It is a set of rings seen from an angle, and
+the reward for moving is seeing them from another one. So drag turns, and
+right-drag pans for the reader who wants it.
+
+Measured after, with a synthetic `pointerType: 'touch'` drag across the canvas:
+**the Sun moved 0.0 px** while **Jupiter moved 103.7 px**. The system turned
+around a fixed Sun, which is the sentence Phone wrote.
+
+### Touch had no zoom at all
+
+No wheel, no second button. A system eighteen globe radii across is not much use
+at one fixed distance, so two fingers pinch. `pinchFactor` is a ratio for the
+same reason `zoom` is: the same finger movement should cover the same
+*proportion* of the remaining distance at Mercury and at Neptune.
+
+A second finger ends the drag rather than fighting it, and a pinch is never a
+click however little either finger travelled - the one that lifts first has
+usually barely moved.
+
+### A test bug that was worth listening to
+
+A run threw before dispatching `pointerup`, leaving two dead pointers in the
+map. `fingerGap` read the *first* two entries, so every later pinch measured a
+gap between two fingers that were no longer there and never changed.
+
+That is my test leaking state - and also a real defect. A `pointerup` that never
+arrives is an ordinary event on a touch screen: a lost capture, a gesture the
+system interrupts. It reads the **last** two now, so the pair being measured is
+always the pair that arrived most recently, and a stranded pointer cannot freeze
+the zoom.
+
+### And an instrument that lied again
+
+The first pinch measurement said nothing had moved. It had: I was measuring
+Venus's *label*, and `stackLabels` moves labels off their bodies to stop them
+colliding. Label position is not body position. Jupiter, far enough out not to
+be stacked, showed the zoom plainly.
+
+836 backend tests, 1,109 frontend.

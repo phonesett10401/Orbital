@@ -146,6 +146,26 @@ export function zoom(camera: SolarCamera, factor: number): SolarCamera {
   };
 }
 
+/**
+ * The zoom factor for a pinch that changed the gap between two fingers.
+ *
+ * Expressed as a ratio rather than a delta for the same reason the wheel is
+ * (see `zoom`): the same finger movement should cover the same *proportion* of
+ * the remaining distance whether you are looking at Mercury or at Neptune.
+ *
+ * Spreading the fingers (`to > from`) returns a factor below 1, which `zoom`
+ * turns into a smaller distance - the scene comes closer, which is what
+ * spreading means everywhere else on a touch screen.
+ *
+ * A gap of zero is not a pinch, it is two fingers in the same place or a
+ * measurement taken before the second one moved, and dividing by it would send
+ * the camera to infinity.
+ */
+export function pinchFactor(from: number, to: number): number {
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from <= 0 || to <= 0) return 1;
+  return from / to;
+}
+
 /** Turn the camera around the scene. */
 export function orbit(camera: SolarCamera, dYaw: number, dPitch: number): SolarCamera {
   return {
