@@ -32,6 +32,7 @@ import { SearchBar } from './components/SearchBar';
 import { StatusBar } from './components/StatusBar';
 import { chromeFor } from './components/layerChrome';
 import { useOrbitalStore } from './state/store';
+import { shipCoverage } from './shipCoverage';
 import { PlanetView } from './planet/PlanetView';
 import {
   useObjectPolling,
@@ -53,6 +54,9 @@ export function App() {
   // The wordmark's subtitle names what is on screen, so it has to follow the
   // layer rather than being written once for aircraft (D100).
   const activeLayer = useOrbitalStore((s) => s.activeLayer);
+  // Selected narrowly rather than taking the whole feed: this re-renders the
+  // header, and the feed object changes on every poll.
+  const feedSource = useOrbitalStore((s) => s.feed.source);
 
   // Aircraft and satellites are statements about Earth. On another world the
   // search box, the layer toggle, the altitude key and the object count are
@@ -79,6 +83,17 @@ export function App() {
   const selectedId = useOrbitalStore((s) => s.selectedId);
   const selectedMoonId = useOrbitalStore((s) => s.selectedMoonId);
   const panelOpen = selectedId !== null || selectedMoonId !== null;
+
+  /**
+   * The layer's subtitle, and for ships the scope of the feed behind it.
+   *
+   * `chromeFor` cannot know which AIS sources are running - that is a
+   * deployment setting - so it settles for the phrase true of either. Here the
+   * answer has arrived with the data, so the subtitle can say which one it is
+   * and correct itself if that changes (D191).
+   */
+  const coverage = activeLayer.id === 'ship' ? shipCoverage(feedSource) : null;
+  const subtitle = coverage?.where ?? chromeFor(activeLayer.id, []).subtitle;
 
   // **The anchored banner yields to the time control**, which is centred just
   // above the status bar and would sit underneath it. That control only exists
@@ -118,8 +133,8 @@ export function App() {
           <img className="app__mark" src="/logo.svg" alt="" aria-hidden="true" />
           <div className="app__brandText">
             <span className="app__title">Orbital</span>
-            <span className="app__subtitle">
-              {onEarth ? chromeFor(activeLayer.id, []).subtitle : 'surface imagery'}
+            <span className="app__subtitle" title={coverage?.note}>
+              {onEarth ? subtitle : 'surface imagery'}
             </span>
             {/*
               A wrapper that is not a box on the desktop.

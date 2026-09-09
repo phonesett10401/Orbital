@@ -11242,3 +11242,49 @@ clicking the actual buttons, the subtitles differ, the brand's right edge moves
 before trusting it applies to measurements too.
 
 836 backend tests, 1,109 frontend.
+
+## D191 - The map says where it is listening
+
+Phone asked whether the ships tab should carry an "under development" sign and
+show only the Baltic, on account of what the global feed costs to hold.
+
+**Half of that, and not the "under development" half.** Nothing here is
+unfinished: the global stream works and measured 17,848 vessels against
+Digitraffic's 643 (D166). What is true is that holding them costs more memory
+than this box has. A sign saying "under development" invites a reader to think
+it is broken or coming soon, and if the cap is never raised it becomes a claim
+that quietly never expires.
+
+So the map says which feeds it is actually using, and the subtitle follows:
+
+| Feed | Subtitle |
+|---|---|
+| `digitraffic+aisstream` | ships in coastal waters |
+| `digitraffic` | **ships in the northern Baltic** |
+
+`layerChrome` deliberately refused to answer this - "coastal waters" was chosen
+because it is the one phrase true of both, and that was right for a subtitle
+that *cannot know* which sources are running, since that is a deployment
+setting. **`shipCoverage` can know**, because the answer arrives with the data:
+the backend already names the feeds it combined. Derived rather than declared,
+so it corrects itself the day the global stream comes back rather than becoming
+a stale sign.
+
+Neither answer says "everywhere". Both sources are terrestrial AIS listening
+from the shore, so the holes are the open ocean and every coast without a
+receiver - the Indian Ocean returned 2 vessels and the Gulf returned 0. A test
+asserts that neither string can claim otherwise, because that is the failure
+this layer is one careless edit away from.
+
+An unrecognised feed name gets **no** answer rather than a guessed one. Guessing
+the scope of a source we cannot identify is how a map ends up confident about
+sea it has never heard from.
+
+Five tests. Verified live by forcing the feed source both ways in the running
+app and back again.
+
+**Not done, deliberately**: global ships stay on, so the backend keeps
+OOM-restarting and flight tracks stay short. Phone's call - the durable fix is a
+cap on the ship store rather than switching a source off, and there is time.
+
+836 backend tests, 1,114 frontend.
