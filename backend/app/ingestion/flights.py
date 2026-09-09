@@ -41,6 +41,20 @@ logger = logging.getLogger(__name__)
 
 #: How long a fetched flight stays good.
 #:
+#: The speeds at which a gap between a track's end and the aircraft's position
+#: is explained by the aircraft simply having flown there, unheard.
+#:
+#: **Time alone cannot tell a coverage hole from a previous flight, and speed
+#: can.** SIA23's track ended 99 minutes and 1,441 km before its position -
+#: 874 km/h, a cruise. CSH832's ended 3.5 hours and 45 km away - 13 km/h, which
+#: no airliner does, because it had landed, sat on a stand and departed again
+#: (D202).
+#:
+#: The band is wide on purpose. It is not trying to identify the aircraft type;
+#: it is separating "flew there" from "went somewhere else and came back".
+TRACK_CONTINUITY_MIN_KMH = 250.0
+TRACK_CONTINUITY_MAX_KMH = 1200.0
+
 #: How far behind the aircraft's own position a provider track may end.
 #:
 #: **Not a freshness rule, an identity one.** A track that stops hours before
@@ -300,13 +314,27 @@ class FlightHistory:
             return detail
         behind = (detail.last_seen - newest.timestamp).total_seconds()
         if behind > PROVIDER_TRACK_MAX_LAG_SECONDS:
-            logger.info(
-                "provider track for %s ends %.0f min before the aircraft's own "
-                "position; keeping the observed track",
-                detail.id,
-                behind / 60,
+            # **A long gap is a question, not an answer (D202).** D196 rejected
+            # every one of them and threw away good paths: an aircraft crossing
+            # an ocean goes unheard for an hour and more, and its track ends
+            # where the receivers did. What separates that from the previous leg
+            # is whether the aircraft could have *flown* from the end of the
+            # track to where it is now.
+            kilometres = (
+                haversine_metres(newest.lat, newest.lon, detail.lat, detail.lon) / 1000.0
             )
-            return detail
+            implied_kmh = kilometres / (behind / 3600.0)
+            if not (TRACK_CONTINUITY_MIN_KMH <= implied_kmh <= TRACK_CONTINUITY_MAX_KMH):
+                logger.info(
+                    "provider track for %s ends %.0f min and %.0f km from the "
+                    "aircraft - %.0f km/h, which is not a flight; keeping the "
+                    "observed track",
+                    detail.id,
+                    behind / 60,
+                    kilometres,
+                    implied_kmh,
+                )
+                return detail
 
         update: dict[str, object] = {
             "track": flight.track,

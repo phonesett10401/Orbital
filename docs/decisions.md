@@ -11751,3 +11751,42 @@ An accidental confirmation worth keeping: **CCA868's trimmed path starts at
 is finding real runways.
 
 **880 backend tests**, 1,118 frontend.
+
+## D202 - Time could not tell a coverage hole from a previous flight
+
+Phone: *"I dont even see their route lines anymore."* SIA23's panel said **"Not
+enough observations yet to draw a path"** while the provider was returning
+**1,445 points** for it.
+
+D196's guard rejected any provider track ending more than fifteen minutes before
+the aircraft's own position, on the reasoning that such a track belonged to a
+previous leg. That was right about CSH832 and wrong about the sea.
+
+| | Gap | Distance | Implied speed |
+|---|---|---|---|
+| SIA23 - **wrongly rejected** | 99 min | 1,441 km | **874 km/h** |
+| THA662 - accepted | 15 min | 202 km | 822 km/h |
+| CSH832 - the real fault (D196) | 3.5 h | 45 km | **13 km/h** |
+
+**The third column is the whole answer.** An aircraft crossing the Andaman Sea
+goes unheard for an hour and a half and its track ends where the receivers did;
+an aircraft that landed, sat on a stand and departed again leaves a track ending
+near where it now is, hours later. Time is identical in shape between those two.
+Speed is not: 874 km/h is a cruise, 13 km/h is an aircraft that stopped.
+
+So a long gap is now a **question** rather than an answer. It is asked whether
+the aircraft could have flown from the end of the track to where it is, and the
+track is kept when it could. The band is 250 to 1,200 km/h - wide on purpose,
+because it is not identifying an aircraft type, only separating "flew there"
+from "went somewhere else and came back".
+
+D196 was written from one example and generalised from it. Both examples were
+available; I only had one, and the guard I built fit it exactly. **The
+measurement that would have prevented this is the same one that fixed it** -
+distance over time, which took two minutes to compute once there was a second
+case to compare against.
+
+Two tests, checked by breaking it both ways: rejecting on time alone fails the
+crossing, and removing the guard fails the previous leg.
+
+**881 backend tests**, 1,118 frontend.

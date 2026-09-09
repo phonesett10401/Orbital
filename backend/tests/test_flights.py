@@ -575,6 +575,24 @@ class TestTrackBelongsToThisFlight:
     """
 
     @pytest.mark.anyio
+    async def test_a_long_unheard_crossing_is_still_this_flight(self):
+        """The case D196 got wrong and D202 fixes.
+
+        SIA23 crossed the Andaman Sea unheard for 99 minutes and 1,441 km. Its
+        track ended where the receivers did, which the first version of this
+        guard read as a previous leg - and threw away a 1,445-point path,
+        leaving the panel saying "not enough observations yet".
+
+        874 km/h is a cruise. The aircraft flew there.
+        """
+        # 1,000 km of latitude in 75 minutes is 800 km/h.
+        far = (point(1.0, 2.0, offset=-5400), point(10.0, 2.0, offset=-4500))
+        history = FlightHistory(StubProvider(far))
+        enriched = await history.enrich(detail_with(lat=19.0, lon=2.0, last_seen=NOW))
+
+        assert enriched.track_source is TrackSource.PROVIDER
+
+    @pytest.mark.anyio
     async def test_a_track_from_the_previous_leg_is_refused(self):
         # The real shape: a complete, well-formed track of the outbound flight,
         # hours old, while the aircraft is somewhere else on the way back.
@@ -583,7 +601,9 @@ class TestTrackBelongsToThisFlight:
             point(12.3, 101.1, offset=-2 * 3600),
         )
         history = FlightHistory(StubProvider(old_leg))
-        enriched = await history.enrich(detail())
+        # The aircraft is near where that track ended, two hours later: 13 km/h,
+        # which is an aircraft that landed and sat rather than one that flew.
+        enriched = await history.enrich(detail_with(lat=12.0, lon=100.8))
 
         assert enriched.track_source is TrackSource.OBSERVED
         # And the aircraft keeps the heading it reported, rather than one
