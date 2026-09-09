@@ -11894,3 +11894,107 @@ Two tests, checked both ways: splitting on duration alone breaks the ocean
 crossing, and never splitting on a gap breaks the turnaround.
 
 **887 backend tests**, 1,118 frontend.
+
+## D206 - A stop is time the aircraft cannot account for
+
+Phone, mid-audit: *"and this plane is having two tracks."* TAX231 drew Bangkok
+to Delhi and back as one line, and the panel named Don Mueang as the departure
+point of an aircraft that was arriving at Don Mueang.
+
+I had finished sweeping four bounding boxes an hour earlier and found nothing.
+The sweep only looked for tracks that were *wrong*; it never asked whether a
+track was two.
+
+### The ratio hid the shape of the gap
+
+D205's rule was displacement over duration, against a 100 km/h ceiling. The
+Delhi turnaround came out at 122 km/h and was read as flight.
+
+The trace says why. adsb.lol lost TAX231 400 km short of Delhi on the way in and
+did not hear it again until it was 400 km out on the way home, so the two points
+either side of a 197-minute stop stood 402 km apart. Averaged over the gap that
+is 122 km/h. It is not a speed the aircraft ever flew: it is thirty minutes of
+flying and 167 minutes of sitting still, averaged together into a number that
+resembles neither.
+
+**Credit the aircraft a fast cruise, ask how much flying the distance could pay
+for, and weigh what is left over.**
+
+| | Silence | Distance | Flight it buys | Unexplained |
+|---|---|---|---|---|
+| TAX231 at Delhi | 197 min | 402 km | 30 min | **167 min** |
+| AXM104 | 223 min | 467 km | 35 min | **188 min** |
+| HVN430 | 401 min | 1,486 km | 111 min | **289 min** |
+| SIA23 crossing the Bay | 99 min | 1,441 km | 108 min | **0 min** |
+
+The last row is the rule's own proof: the distance alone needs longer than the
+silence lasted, so there is nothing to explain and nothing to cut.
+
+An hour is the threshold, and it is set against the one thing that imitates a
+stand while still flying - a holding pattern, which circles and so covers no
+ground. Holds run to twenty minutes and occasionally forty.
+
+### Second fault: an hour is too long when the aircraft is on approach
+
+AIC1MQ turned round at Trivandrum in fifty-six minutes. Its trace holds no
+ground reading there at all - adsb.lol last heard it descending through 175 m
+and next heard it climbing through 495 m. Four minutes under the threshold, and
+Delhi to Trivandrum and back was drawn as one line.
+
+A 1,000 m ceiling with a twenty-minute rule fixed AIC1MQ and missed VOE9CM,
+which went quiet at Figari through 1,882 m and came back through 1,326 m, one
+minute under the hour.
+
+Raising the ceiling on its own is not safe: an aircraft can cruise at 2,500 m
+and a helicopter can sit at 300 m all morning. But **no hold ends by descending
+and resumes by climbing**, and that shape is in the data:
+
+| | Descent into the silence | Climb out of it |
+|---|---|---|
+| AIC1MQ at Trivandrum | 434 m | 2,819 m |
+| VOE9CM at Figari | 1,326 m | 1,958 m |
+| VOE9CM at Lille | 533 m | 1,753 m |
+| AIC1MQ at Hyderabad | 846 m | 1,745 m |
+
+Every real turnaround measured clears 150 m several times over. So: below
+3,000 m, descending in and climbing out, twenty minutes of stillness is a
+landing - whatever the trace failed to say about the ground.
+
+### Two more, found by sweeping rather than by reasoning
+
+**Distance is now haversine.** The old function called itself great-circle and
+was equirectangular. Flattening the earth under-reports distance, which credits
+an aircraft with less flying than it did - the direction that turns a real
+crossing into a stop.
+
+**GFA112 had been parked at Bahrain for two hours.** Its most recent reading was
+ground, so the boundary was the final point, the tail was empty, and the
+fallback that protects an aircraft on short final handed back the whole
+twenty-hour trace. Being on a stand is not being about to touch down: a trailing
+run of ground readings ends the previous flight rather than beginning the next,
+so the search now starts in front of it. GFA112 became Dammam to Bahrain, 81 km.
+
+### Two of my own tests were vacuous, again
+
+Mutation-testing every threshold caught both. `test_level_flight_either_side...`
+passed against code with the profile check deleted - its fixture's points were
+ten minutes apart, so the three-minute window saw *nothing* rather than seeing
+level flight, and returned None either way. And no test pinned the 3,000 m
+ceiling at all; it passed at 1,000 m, the value that had just been shown wrong.
+
+Every threshold in the function now fails a test when moved.
+
+### Where it lands
+
+| | Before | After |
+|---|---|---|
+| TAX231 | 838 pts, both legs | 347 pts, Lucknow to Bangkok |
+| AIC1MQ | 1,078 pts, Delhi and back | 90 pts, one leg |
+| VOE9CM | Lille to Corsica to Paris | 360 pts, Figari to Paris |
+| GFA112 | 1,803 pts, 20 h | 90 pts, Dammam to Bahrain |
+
+**142 live traces across twelve regions: none doubles back.** The thirteen very
+short ones are aircraft that took off two to nine minutes ago, where the last
+ground reading is minutes old and a short track is the truth.
+
+**895 backend tests**, 1,118 frontend.
