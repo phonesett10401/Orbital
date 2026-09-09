@@ -10900,3 +10900,60 @@ colliding. Label position is not body position. Jupiter, far enough out not to
 be stacked, showed the zoom plainly.
 
 836 backend tests, 1,109 frontend.
+
+## D184 - A card is a shape for the corner of a large window
+
+Phone, with a screenshot of an aircraft selected on a phone: *"I think we need
+to fix the layout big, I mean how am I going to view the route and the plane
+like that?"*
+
+The right question. D182 had put the detail panel above the bottom stack, which
+made it **correctly placed and still unusable**: a 40vh card, most of it a 16:9
+photograph, with the route somewhere below a scroll bar nobody could see.
+
+Nothing overlapped. Every measurement in D182 passed. The panel was in exactly
+the place it had been told to be, and the thing the reader opened it for was off
+the bottom of it.
+
+### Two changes, and the second is the one that matters
+
+**A sheet, not a card.** Full width, 72vh, square where it meets the foot of the
+screen. A card is a shape for a corner of a large window; on a phone the thing
+being read is the only thing being read. The layer bar and the status bar hide
+while it is open rather than hiding behind it - and the credit keeps its corner,
+because that is a licence obligation (D120) and the sheet stops just above it.
+
+**The route comes first.** In source order the panel reads callsign,
+photograph, staleness, eight rows of identifiers and derived speeds, and only
+then the route. That order is *right* in a tall window where all of it is
+visible at once - the picture answers "what am I looking at" faster than any row
+can (D116). On a phone it buries the answer.
+
+The sheet is a flex column, so the order changes without the markup changing:
+callsign, whether the position can be trusted, where it is going - and the
+photograph directly under them, still inside the first screenful. Measured:
+visual order **header, age, route, route, photo, fields**, and the route is
+inside the sheet without scrolling.
+
+### The lesson, which is not the same as D182's
+
+D182 said an emulated phone is a screenshot of a guess. This one is smaller and
+worse: **every pair of boxes can clear every other pair and the layout can still
+be wrong.** "Nothing overlaps" is a test for a defect, not a definition of a
+design. The panel passed every geometric check I could write and failed the only
+question that mattered, which was whether the thing it exists to show could be
+seen.
+
+### An aside worth recording
+
+The suite failed 5 tests, then 6 different ones, then passed 1109 of 1109. The
+failing set moved between runs, and the tests that moved are the slow ones - the
+star catalogue, the ring profile, the graticule mesh. They were timing out
+against a machine running a dev server, a browser and a build at once.
+
+Not a defect today and a real risk tomorrow: those tests are close enough to the
+timeout that a loaded CI runner would fail them, and a suite that fails only
+when busy is a suite nobody trusts - which is the exact objection recorded in
+the conftest comment about tests that fail only in company.
+
+836 backend tests, 1,109 frontend.

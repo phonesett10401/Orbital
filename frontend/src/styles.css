@@ -3583,7 +3583,6 @@ body {
    * caught it running under the status bar with Chandrayaan-2 cut off the
    * bottom of the screen.
    */
-  .panel,
   .moonlist {
     bottom: calc(var(--attribution-height, 44px) + 148px + env(safe-area-inset-bottom, 0px));
     /* Enough for its content or the room available, whichever is smaller: a
@@ -3591,6 +3590,85 @@ body {
        a spacecraft nobody can read. */
     max-height: 40vh;
     overflow-y: auto;
+  }
+
+  /*
+   * ---- the detail panel is a sheet on a phone, not a card (D184) ----
+   *
+   * D182 put it above the bottom stack, which made it correctly placed and
+   * still unusable: a 40vh card, most of it a 16:9 photograph, with the route
+   * somewhere below a scroll nobody knew was there. Phone's question was the
+   * right one - "how am I going to view the route and the plane like that?"
+   *
+   * A card is a shape for a corner of a large window. On a phone the thing
+   * being read is the only thing being read, so it gets the width of the
+   * screen and most of its height.
+   */
+  .panel {
+    left: 0;
+    right: 0;
+    /* Only the credit stays uncovered. It is a licence obligation and it keeps
+       its corner however large the sheet gets (D120). */
+    bottom: calc(var(--attribution-height, 44px) + 6px + env(safe-area-inset-bottom, 0px));
+    max-height: 72vh;
+    overflow-y: auto;
+    /* Square at the foot, because it meets the bottom of the screen there. */
+    border-radius: 16px 16px 0 0;
+    border-left: 0;
+    border-right: 0;
+    padding: 14px 16px 20px;
+    /* Above the bars it replaces, so a stale frame of either cannot show
+       through the sheet's blur. */
+    z-index: 4;
+  }
+
+  /*
+   * **The route comes first.**
+   *
+   * In source order the panel reads callsign, photograph, staleness, then eight
+   * rows of identifiers and derived speeds, and only then the route. That order
+   * is right in a tall window where all of it is visible at once - the picture
+   * answers "what am I looking at" faster than any row can (D116).
+   *
+   * On a phone it means the one thing a reader opened the panel for is the one
+   * thing off the bottom of it. The sheet is a flex column so the order can be
+   * different without the markup being different: callsign, then whether the
+   * position can be trusted, then where it is going - and the photograph
+   * directly under them, still well inside the first screenful.
+   */
+  .panel {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel__header {
+    order: -3;
+  }
+
+  .panel__age {
+    order: -2;
+  }
+
+  .panel__route {
+    order: -1;
+  }
+
+  /*
+   * A 16:9 photograph at full width is 197px of a 700px screen. Still the
+   * clearest thing in the panel, and no longer most of it.
+   */
+  .panel__photo {
+    max-height: 22vh;
+  }
+
+  /*
+   * The bars the sheet replaces get out of its way rather than hiding behind
+   * it. Nothing is lost: the sheet carries its own staleness line, and the
+   * layer switcher is one tap away behind the close button.
+   */
+  .app--inspecting .layers,
+  .app--inspecting .status {
+    display: none;
   }
 
   .moonlist {

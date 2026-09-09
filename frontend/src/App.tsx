@@ -93,7 +93,11 @@ export function App() {
   const leavingForSystem = useOrbitalStore((s) => s.journey) === 'system';
 
   return (
-    <div className={`app ${leavingForSystem ? 'app--leaving' : ''}`}>
+    <div
+      className={`app ${leavingForSystem ? 'app--leaving' : ''} ${
+        panelOpen ? 'app--inspecting' : ''
+      }`}
+    >
       <PlanetView />
 
       {/* Directly over the map and under every control: the trip is something
