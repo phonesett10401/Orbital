@@ -11790,3 +11790,48 @@ Two tests, checked by breaking it both ways: rejecting on time alone fails the
 crossing, and removing the guard fails the previous leg.
 
 **881 backend tests**, 1,118 frontend.
+
+## D203 - The circle was a question the track could already answer
+
+Phone, on a screenshot of SIA23 with its full 1,445-point path from JFK drawn
+behind it: *"okay path is showing up for this flight, why is it circle?"*
+
+Because the legend is honest: a disc means the heading is unknown. That report
+carried no callsign, no ground speed and no heading - a sparse position, which
+happens - so the marker had no direction to point.
+
+**And a 1,445-point track was sitting beside it saying exactly which way the
+aircraft was going.** The last two points are 37 seconds apart and unambiguous.
+
+### The decision this was waiting for
+
+The correction blocks were guarded on `detail.heading is not None`: they only
+ever *corrected* a reported value, never *supplied* a missing one. That was
+deliberate, and the test said so:
+
+> Unknown is a value (D18, D40). Filling it would change what the legend's
+> "heading unknown" disc means, **which is a separate decision**.
+
+That decision arrived tonight, in the form of a question about a circle. Taken:
+where the aircraft reports nothing and the track can measure it, the track
+answers, marked `derived` in meta exactly as a correction is.
+
+**The disc keeps its meaning and gets a smaller, truer set.** It now says the
+aircraft did not report a heading *and* no track could supply one - a single
+waypoint, or none at all. Nothing is invented: a track that cannot measure a
+direction still leaves it unknown, and that has its own test.
+
+Both old tests were rewritten to record the reversal rather than deleted, so the
+next reader finds the decision rather than its absence.
+
+### Two of my own fixtures were nonsense
+
+The tests I wrote first put an aircraft 55 km east in 30 seconds - **1,853 m/s**
+- and `speed_from_track` rightly refused to believe it, which is the check
+working. Fixed to a realistic 278 m/s. Worth noting because the tests failed for
+the right reason and I nearly read it as a fault in the change.
+
+Four tests, checked both ways: reverting to correct-only fails four, and
+supplying over a good reported heading fails three.
+
+**885 backend tests**, 1,118 frontend.

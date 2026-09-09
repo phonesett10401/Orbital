@@ -368,13 +368,22 @@ class FlightHistory:
         # 777 that started this reported 12 m/s on a heading of 7 degrees while
         # crossing Myanmar eastbound at cruise, and the marker pointed north
         # while its own line ran east (D80).
+        #
+        # **And a heading the aircraft never sent is supplied rather than left
+        # blank.** These two blocks only ever *corrected* a reported value, so a
+        # position that arrived without one - which happens on a sparse report,
+        # and did to SIA23 crossing the Bay of Bengal with no callsign, no speed
+        # and no heading - was drawn as a featureless disc while a 1,445-point
+        # track sat beside it saying exactly which way the aircraft was going
+        # (D203).
         course = course_from_track(flight.track)
-        if (
-            course is not None
-            and detail.heading is not None
+        disagrees = (
+            detail.heading is not None
+            and course is not None
             and abs((course - detail.heading + 540.0) % 360.0 - 180.0)
             > COURSE_MAX_DISAGREEMENT_DEG
-        ):
+        )
+        if course is not None and (detail.heading is None or disagrees):
             # Said out loud rather than corrected silently: every other number
             # in the panel is the source's own, and one that is not should be
             # identifiable.
@@ -388,15 +397,16 @@ class FlightHistory:
         # wrong on the panel: the client dead-reckons along it, so the marker
         # crawls while the aircraft it represents does 240 m/s (D81).
         speed = speed_from_track(flight.track)
-        if (
-            speed is not None
-            and detail.velocity is not None
+        implausible = (
+            detail.velocity is not None
+            and speed is not None
             and abs(speed - detail.velocity) > SPEED_MIN_DIFFERENCE_MS
             and (
                 speed > SPEED_MIN_RATIO * detail.velocity
                 or detail.velocity > SPEED_MIN_RATIO * speed
             )
-        ):
+        )
+        if speed is not None and (detail.velocity is None or implausible):
             meta = dict(update.get("meta", detail.meta))  # type: ignore[arg-type]
             meta["velocitySource"] = "derived"
             update["velocity"] = speed

@@ -322,13 +322,19 @@ class TestHeadingFromTheTrack:
         assert enriched.heading == inside
 
     @pytest.mark.anyio
-    async def test_a_null_heading_stays_null(self) -> None:
-        # Unknown is a value (D18, D40). Filling it would change what the
-        # legend's "heading unknown" disc means, which is a separate decision.
+    async def test_a_null_heading_is_now_answered_by_the_track(self) -> None:
+        # **This test used to assert the opposite**, and said why: filling it
+        # would change what the legend's "heading unknown" disc means, which is
+        # a separate decision. That decision was taken in D203, when a sparse
+        # report left SIA23 a featureless disc beside its own 1,445-point path.
+        #
+        # The disc still means "heading unknown" - it now means the aircraft did
+        # not report one *and* no track could supply it, which is a smaller and
+        # more truthful set.
         provider = StubProvider((point(20.0, 95.0, offset=0), point(20.0, 95.05, offset=6)))
         enriched = await FlightHistory(provider).enrich(detail_with(heading=None))
-        assert enriched.heading is None
-        assert "headingSource" not in enriched.meta
+        assert enriched.heading == pytest.approx(90.0, abs=2.0)
+        assert enriched.meta["headingSource"] == "derived"
 
     @pytest.mark.anyio
     async def test_an_unmeasurable_track_leaves_the_heading_reported(self) -> None:
@@ -419,10 +425,13 @@ class TestSpeedCorrection:
         assert SPEED_MAX_PLAUSIBLE_MS < 1100
 
     @pytest.mark.anyio
-    async def test_a_null_velocity_stays_null(self) -> None:
+    async def test_a_null_velocity_is_now_answered_by_the_track(self) -> None:
+        # The same reversal as the heading above, and for the same reason
+        # (D203): a number the track can measure is better than a blank.
         provider = StubProvider((point(0.0, 0.0, offset=0), point(0.0, 0.05, offset=20)))
         enriched = await FlightHistory(provider).enrich(detail_with(velocity=None))
-        assert enriched.velocity is None
+        assert enriched.velocity is not None and enriched.velocity > 0
+        assert enriched.meta["velocitySource"] == "derived"
 
     @pytest.mark.anyio
     async def test_both_corrections_can_apply_to_one_aircraft(self) -> None:
@@ -640,3 +649,54 @@ class TestTrackBelongsToThisFlight:
         from app.ingestion.flights import PROVIDER_TRACK_MAX_LAG_SECONDS
 
         assert 60.0 < PROVIDER_TRACK_MAX_LAG_SECONDS < 134 * 60.0
+
+
+class TestSuppliesWhatWasNotReported:
+    """A track can answer a question the feed left blank (D203).
+
+    These blocks only ever corrected a reported value. A sparse position - no
+    callsign, no speed, no heading - was drawn as a featureless disc while a
+    1,445-point track sat beside it saying exactly which way the aircraft was
+    going. SIA23 over the Bay of Bengal, and the reason Phone asked why it was
+    a circle.
+    """
+
+    @pytest.mark.anyio
+    async def test_a_heading_the_aircraft_never_sent_comes_from_the_track(self):
+        # Due east, so the derived course is unambiguous.
+        east = (point(1.0, 2.0, offset=-50), point(1.0, 2.05, offset=-30))
+        enriched = await FlightHistory(StubProvider(east)).enrich(
+            detail_with(heading=None, lat=1.0, lon=2.06)
+        )
+        assert enriched.heading == pytest.approx(90.0, abs=2.0)
+        # Marked as ours, like every other number this module derives.
+        assert enriched.meta["headingSource"] == "derived"
+
+    @pytest.mark.anyio
+    async def test_a_speed_the_aircraft_never_sent_comes_from_the_track(self):
+        east = (point(1.0, 2.0, offset=-50), point(1.0, 2.05, offset=-30))
+        enriched = await FlightHistory(StubProvider(east)).enrich(
+            detail_with(velocity=None, lat=1.0, lon=2.06)
+        )
+        assert enriched.velocity is not None and enriched.velocity > 0
+        assert enriched.meta["velocitySource"] == "derived"
+
+    @pytest.mark.anyio
+    async def test_a_reported_heading_that_agrees_is_still_left_alone(self):
+        # The existing contract: the source's own number wins unless it
+        # contradicts the aircraft's own track (D80). Supplying a missing value
+        # must not turn into overwriting a present one.
+        east = (point(1.0, 2.0, offset=-50), point(1.0, 2.05, offset=-30))
+        enriched = await FlightHistory(StubProvider(east)).enrich(
+            detail_with(heading=91.0, lat=1.0, lon=2.06)
+        )
+        assert enriched.heading == 91.0
+        assert "headingSource" not in enriched.meta
+
+    @pytest.mark.anyio
+    async def test_nothing_is_invented_when_the_track_cannot_say(self):
+        # A single point has no direction. Unknown has to stay unknown rather
+        # than become a confident zero pointing north (D18).
+        one = (point(1.0, 2.0, offset=-30),)
+        enriched = await FlightHistory(StubProvider(one)).enrich(detail_with(heading=None))
+        assert enriched.heading is None
