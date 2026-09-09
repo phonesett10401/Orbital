@@ -159,10 +159,17 @@ class UnionProvider(Provider):
     async def fetch_track(self, object_id: str):
         """The flight track, from whichever source has one.
 
-        Only OpenSky offers flight history (D78); adsb.lol has no equivalent
-        endpoint. So this asks the primary first for the day that changes, and
-        falls back to the supplement, which is where the answer comes from
-        today.
+        **Both offer one now, and the order matters.** This said "only OpenSky
+        offers flight history; adsb.lol has no equivalent endpoint" for eight
+        decisions, and it was true of `api.adsb.lol` and wrong about the
+        project - the traces are published by the map server, and D200 wired
+        them up.
+
+        The primary is asked first, which is now the right order rather than a
+        hopeful one: adsb.lol is free and unmetered where OpenSky costs four
+        credits a call, and over south-east Asia it is the only one of the two
+        that answers - three aircraft in ten had an OpenSky track there against
+        ten in ten here.
         """
         for provider in (self.primary, self.supplement):
             try:

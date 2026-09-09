@@ -55,6 +55,7 @@ def _build_opensky(settings: "Settings") -> Provider:
 def _build_adsblol(settings: "Settings") -> Provider:
     return AdsbLolProvider(
         base_url=settings.adsblol_base_url,
+        trace_base_url=settings.adsblol_trace_base_url,
         timeout_seconds=settings.adsblol_timeout_seconds,
         user_agent=settings.adsblol_user_agent,
     )

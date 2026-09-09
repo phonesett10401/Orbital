@@ -419,3 +419,123 @@ class TestTheRequestGate:
         started = time.monotonic()
         await provider.fetch(VIEWPORT)
         assert time.monotonic() - started >= SPACED_ENOUGH
+
+
+#: A trace shaped exactly like the one adsb.lol served for 9V-SGB, an A359 over
+#: the Bay of Bengal, trimmed to the rows that matter. Captured from the live
+#: service rather than invented, because the whole value of this parser is that
+#: it agrees with what the service actually sends (D200).
+REAL_TRACE = {
+    "icao": "76cce2",
+    "r": "9V-SGB",
+    "t": "A359",
+    "timestamp": 1788973515.29,
+    "trace": [
+        [19.54, 23.000809, 85.946554, 41000, 480.9, 131.7],
+        [79.12, 22.900000, 86.100000, 41000, 481.0, 131.5],
+        [139.00, 22.800000, 86.250000, "ground", 0.0, 0.0],
+    ],
+}
+
+
+class TestFlightTrace:
+    """The method D78 concluded did not exist (D200).
+
+    It was right about `api.adsb.lol` and wrong about the project: the traces
+    are published by the map server in readsb's format. Over Thailand, three
+    aircraft in ten had an OpenSky track and ten in ten had one here.
+    """
+
+    @pytest.mark.anyio
+    async def test_reads_a_real_trace_oldest_first(self):
+        track = await provider(responds(REAL_TRACE)).fetch_track("76cce2")
+
+        assert track is not None and len(track) == 3
+        assert [p.timestamp for p in track] == sorted(p.timestamp for p in track)
+        # Base timestamp plus the row's own offset, not the offset alone.
+        assert track[0].timestamp == datetime.fromtimestamp(
+            1788973515.29 + 19.54, tz=timezone.utc
+        )
+
+    @pytest.mark.anyio
+    async def test_altitudes_arrive_in_feet_and_are_stored_in_metres(self):
+        # **The unit that would otherwise be silently wrong.** OpenSky's
+        # altitudes are already metric, so an unconverted 41,000 would put a
+        # cruising airliner above the Karman line on a map that draws
+        # satellites.
+        track = await provider(responds(REAL_TRACE)).fetch_track("76cce2")
+        assert track is not None
+        assert track[0].altitude == pytest.approx(12496.8, abs=1.0)
+
+    @pytest.mark.anyio
+    async def test_ground_is_nil_rather_than_unknown(self):
+        # readsb writes the string "ground" instead of a number. An aircraft on
+        # a runway is at zero, which is a fact, not a missing reading (D165).
+        track = await provider(responds(REAL_TRACE)).fetch_track("76cce2")
+        assert track is not None
+        assert track[-1].altitude == 0.0
+
+    @pytest.mark.anyio
+    async def test_a_row_without_a_position_is_dropped(self):
+        # A point at (0, 0) draws a line through the Gulf of Guinea (D18).
+        payload = {**REAL_TRACE, "trace": [[1.0, None, None, 1000], *REAL_TRACE["trace"]]}
+        track = await provider(responds(payload)).fetch_track("76cce2")
+        assert track is not None and len(track) == 3
+
+    @pytest.mark.anyio
+    async def test_an_untraced_aircraft_is_an_answer_not_a_fault(self):
+        # Most of the sky has never been traced. A 404 means "no path", and the
+        # caller keeps the track it observed itself rather than seeing an error.
+        assert await provider(responds(None, status=404)).fetch_track("76cce2") is None
+
+    @pytest.mark.anyio
+    async def test_rate_limiting_is_reported_as_rate_limiting(self):
+        # 420 is this service's own "enhance your calm"; the poller's backoff
+        # understands that and a generic failure would not (D26).
+        for status in (420, 429):
+            with pytest.raises(ProviderRateLimited):
+                await provider(responds(None, status=status)).fetch_track("76cce2")
+
+    @pytest.mark.anyio
+    async def test_an_empty_trace_is_no_track_rather_than_an_empty_one(self):
+        payload = {**REAL_TRACE, "trace": []}
+        assert await provider(responds(payload)).fetch_track("76cce2") is None
+
+    @pytest.mark.anyio
+    async def test_the_file_is_addressed_by_the_last_two_hex_characters(self):
+        # readsb shards the directory that way, and getting it wrong is a 404
+        # for every aircraft rather than a visible error.
+        seen: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(str(request.url))
+            return httpx.Response(200, json=REAL_TRACE)
+
+        await provider(handler).fetch_track("76CCE2")
+        assert seen[0].endswith("/e2/trace_recent_76cce2.json"), seen[0]
+
+    @pytest.mark.anyio
+    async def test_the_trace_does_not_queue_behind_the_poll_gate(self):
+        # **The gate must not apply here.** It spaces *polls* twelve seconds
+        # apart to stay under a rate limiter; a trace is a static file on a
+        # different host, fetched when a reader selects an aircraft. Behind the
+        # gate it would miss the three-second budget a detail request allows
+        # (D181) and never arrive.
+        p = AdsbLolProvider(
+            client=httpx.AsyncClient(transport=httpx.MockTransport(responds(REAL_TRACE))),
+            min_request_interval_seconds=12.0,
+        )
+        before = p._next_allowed_at
+        assert await p.fetch_track("76cce2") is not None
+        assert p._next_allowed_at == before, "the trace claimed a poll slot"
+
+    @pytest.mark.anyio
+    async def test_an_empty_base_url_turns_it_off(self):
+        # The off switch, for a deployment that wants OpenSky to be the only
+        # source of a path from takeoff.
+        p = AdsbLolProvider(
+            trace_base_url="",
+            client=httpx.AsyncClient(transport=httpx.MockTransport(responds(REAL_TRACE))),
+            min_request_interval_seconds=0.0,
+        )
+        assert await p.fetch_track("76cce2") is None

@@ -216,6 +216,17 @@ class Settings(BaseSettings):
 
     #: adsb.lol needs no credentials at all, which is most of its appeal (D83).
     adsblol_base_url: str = "https://api.adsb.lol/v2"
+    adsblol_trace_base_url: str = Field(
+        default="https://globe.adsb.lol/data/traces",
+        description=(
+            "Where adsb.lol's flight traces live. **A different host from the "
+            "API above**, which is why it is a separate setting and why D78 "
+            "concluded this feed had no flight history: it does, on the map "
+            "server rather than the API, in readsb's own file format. Emptying "
+            "this turns the trace lookup off and leaves OpenSky as the only "
+            "source of a path from takeoff (D200)."
+        ),
+    )
     adsblol_timeout_seconds: float = Field(default=30.0, gt=0)
     adsblol_user_agent: str = Field(
         default="Orbital/0.1 (CSC480 student project)",

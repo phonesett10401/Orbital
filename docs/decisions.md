@@ -11638,3 +11638,67 @@ correctly, and describing it as a fault would make the map look broken for a
 third of everything it draws.
 
 836 backend tests, **1,118 frontend**.
+
+## D200 - The endpoint that did not exist
+
+Phone, on being told adsb.lol could fill OpenSky's gap: *"I thought we built our
+union with adsb.lol and opensky merged already."*
+
+Right, and the correction is smaller and more embarrassing than the answer I was
+giving. `UnionProvider.fetch_track` has always looped over **both** providers.
+adsb.lol is the primary and is asked *first*. It answered `None` every time,
+because it inherits the base class default and never implemented the method -
+and the union's own docstring explained why:
+
+> Only OpenSky offers flight history (D78); adsb.lol has no equivalent endpoint.
+
+**True of `api.adsb.lol`, wrong about the project.** The traces are published by
+the *map server*, `globe.adsb.lol`, in readsb's own format: one gzipped file per
+aircraft, sharded by the last two characters of the hex. D78 evaluated the API,
+concluded correctly, and the conclusion outlived the fact by eight decisions -
+including an hour today where I proposed adding "a new provider" to a slot that
+had been sitting empty and waiting the whole time.
+
+### Why it matters where it matters
+
+| Region | OpenSky track | adsb.lol trace |
+|---|---|---|
+| Europe | 8 of 8 | - |
+| North America | 8 of 8 | - |
+| **South-east Asia** | **3 of 8** | **10 of 10** |
+
+OpenSky is a community receiver network and its receivers are in Europe and
+North America. Over Thailand - where this project is written and used - most
+aircraft have no OpenSky track at all. Measured on three that failed: one with
+no track, one that fell back to 12 observed points, one with a 6-point provider
+track. All three have **92-point traces** here.
+
+### Three details that would each have been silently wrong
+
+- **Feet, not metres.** OpenSky's `baro_altitude` is already metric; this feed
+  is imperial. Unconverted, a cruising airliner sits at 41,000 *metres* - above
+  the Karman line, on a map that also draws satellites.
+- **The last two hex characters**, not the first. Getting it backwards is a 404
+  for every aircraft rather than a visible error.
+- **Not behind the poll gate.** That gate spaces requests to `api.adsb.lol`
+  twelve seconds apart. A trace is a static file on another host fetched when a
+  reader selects an aircraft; behind the gate it would miss the three-second
+  budget (D181) every time and never arrive.
+
+Each is asserted by a test, and each test was checked by making the mistake.
+
+### On the environment variable Phone asked about
+
+**No key is needed.** The traces are static files and adsb.lol's API is
+currently keyless - they intend to require one eventually, obtainable by feeding
+data back. What was added is `ORBITAL_ADSBLOL_TRACE_BASE_URL`, because the
+traces live on a different host from the API and because emptying it is the off
+switch.
+
+Licence is unchanged and already satisfied: ODbL, the same feed this project
+already takes positions from and already credits in `aboutFacts.ts`.
+
+Ten tests. Verified against the live service, not only a fixture: 92 points
+each, altitudes 7,498-12,504 m.
+
+**873 backend tests**, 1,118 frontend.

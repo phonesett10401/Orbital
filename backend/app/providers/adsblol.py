@@ -42,7 +42,7 @@ from typing import Any
 
 import httpx
 
-from app.models import BBox, ObjectType, TrackedObjectRecord
+from app.models import BBox, ObjectType, TrackedObjectRecord, TrackPoint
 from app.providers.base import (
     Provider,
     ProviderBadResponse,
@@ -113,6 +113,14 @@ GLOBAL_RADIUS_NM = 6000
 #: poll, and a viewport request can wait up to one interval for a slot.
 MIN_REQUEST_INTERVAL_SECONDS = 12.0
 
+#: Trace altitudes arrive in feet; everything in Orbital is metres.
+#:
+#: OpenSky's ``baro_altitude`` is already metric, so a track built from this
+#: feed without the conversion would put a cruising airliner at 41,000 *metres* -
+#: five times the height of Everest and well above the Kármán line, on a map
+#: that also draws satellites (D200).
+FEET_TO_METRES = 0.3048
+
 #: The largest radius asked for a viewport, in nautical miles.
 #:
 #: A bounding box becomes the circle that contains it, and a viewport zoomed
@@ -131,12 +139,15 @@ class AdsbLolProvider(Provider):
         self,
         *,
         base_url: str = "https://api.adsb.lol/v2",
+        trace_base_url: str = "https://globe.adsb.lol/data/traces",
         timeout_seconds: float = 30.0,
         user_agent: str = "Orbital/0.1 (CSC480 student project)",
         min_request_interval_seconds: float = MIN_REQUEST_INTERVAL_SECONDS,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        #: Empty turns the trace lookup off entirely.
+        self.trace_base_url = trace_base_url.rstrip("/")
         self._min_interval = min_request_interval_seconds
         #: Serialises the wait itself, so two callers cannot both look at the
         #: clock, both see a free slot, and both take it.
@@ -158,6 +169,99 @@ class AdsbLolProvider(Provider):
         # free service run on donations deserves to know who is calling it.
         self._client = client or httpx.AsyncClient(
             timeout=timeout_seconds, headers={"User-Agent": user_agent}
+        )
+
+    async def fetch_track(self, object_id: str) -> tuple[TrackPoint, ...] | None:
+        """The path this aircraft has flown, from adsb.lol's trace files.
+
+        **This is the method D78 concluded did not exist**, and the union's own
+        docstring said so for eight decisions. It was right about
+        `api.adsb.lol`, which has no track endpoint, and wrong about the
+        project: the traces are published by the map server in readsb's format,
+        one gzipped file per aircraft, keyed by the last two characters of the
+        hex.
+
+        It matters most where OpenSky is thinnest. Measured over Thailand, three
+        aircraft in ten had an OpenSky track; **ten in ten had one here**, and
+        where both existed this one was five to thirty times denser (D200).
+
+        `trace_recent` rather than `trace_full`: 4 kB against 89 kB, half an
+        hour of flying rather than a day. The panel draws the path of the
+        current flight, and a day of it is both slower to fetch and wrong -
+        yesterday's leg is not this one (D196).
+
+        **Not behind `_wait_turn`.** That gate exists to keep our *polling* off
+        api.adsb.lol at twelve-second intervals; these are static files on a
+        different host, fetched once per aircraft a reader selects and cached
+        upstream for two minutes. Queueing them behind the poll would guarantee
+        they miss the three-second budget a detail request allows (D181) and so
+        never arrive at all.
+        """
+        hex_id = (object_id or "").strip().lower()
+        if not self.trace_base_url or len(hex_id) < 2:
+            return None
+
+        # readsb shards the files by the last two characters of the hex.
+        url = f"{self.trace_base_url}/{hex_id[-2:]}/trace_recent_{hex_id}.json"
+        try:
+            response = await self._client.get(url, follow_redirects=True)
+        except httpx.HTTPError as exc:
+            raise ProviderUnavailable(f"adsb.lol trace request failed: {exc}") from exc
+
+        # An aircraft nobody has traced is a 404, and that is an answer rather
+        # than a fault: the caller keeps the track it observed itself.
+        if response.status_code == 404:
+            return None
+        if response.status_code in (420, 429):
+            raise ProviderRateLimited(
+                f"adsb.lol rate-limited the trace with {response.status_code}"
+            )
+        if response.status_code >= 400:
+            raise ProviderUnavailable(f"adsb.lol trace returned {response.status_code}")
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ProviderBadResponse(f"adsb.lol sent unparsable trace: {exc}") from exc
+
+        base = payload.get("timestamp")
+        rows = payload.get("trace")
+        if not isinstance(base, (int, float)) or not isinstance(rows, list):
+            return None
+
+        points = [self._trace_point(float(base), row) for row in rows]
+        kept = tuple(p for p in points if p is not None)
+        return kept or None
+
+    @staticmethod
+    def _trace_point(base: float, row: Any) -> TrackPoint | None:
+        """One ``[seconds_after_base, lat, lon, alt_ft, ...]`` row.
+
+        A row without a position is dropped rather than defaulted, for the
+        reason a state vector without one is (D18): a point at (0, 0) draws a
+        line through the Gulf of Guinea.
+        """
+        if not isinstance(row, (list, tuple)) or len(row) < 3:
+            return None
+        offset, lat, lon = row[0], row[1], row[2]
+        if not all(isinstance(v, (int, float)) for v in (offset, lat, lon)):
+            return None
+
+        altitude: float | None = None
+        if len(row) > 3:
+            raw = row[3]
+            if isinstance(raw, (int, float)):
+                altitude = float(raw) * FEET_TO_METRES
+            elif raw == "ground":
+                # readsb says "ground" rather than a number, and nil is a fact
+                # about an aircraft on a runway rather than a missing reading.
+                altitude = 0.0
+
+        return TrackPoint(
+            lat=float(lat),
+            lon=float(lon),
+            altitude=altitude,
+            timestamp=datetime.fromtimestamp(base + float(offset), tz=timezone.utc),
         )
 
     async def fetch(self, bbox: BBox | None = None) -> list[TrackedObjectRecord]:
