@@ -11702,3 +11702,52 @@ Ten tests. Verified against the live service, not only a fixture: 92 points
 each, altitudes 7,498-12,504 m.
 
 **873 backend tests**, 1,118 frontend.
+
+## D201 - The whole flight, not the last half hour
+
+D200 wired adsb.lol's traces in and used `trace_recent`: 4 kB against 89 kB, and
+the smaller file looked like the polite choice. Phone looked at four aircraft
+and said the routes still did not work.
+
+They did work - the four paths were correct, pointed the right way, and the one
+that rendered as a dashed line was `routeFeatures` honestly marking an 86-minute
+coverage hole where nobody heard SIA23 cross the Bay of Bengal. **They were just
+short**: half an hour of flying where Flightradar shows the journey.
+
+So the full trace, trimmed. Measured live afterwards:
+
+| | Before | After |
+|---|---|---|
+| SIA23 (JFK-SIN) | 92 pts, 2.0 h | **1,445 pts, 14.8 h** |
+| THA662 (BKK-PVG) | 92 pts, 0.4 h | 379 pts, 1.4 h |
+| CCA868 (JNB-SZX) | 92 pts | 350 pts, 14.4 h |
+
+### Trimming, because a day of trace is several flights
+
+Drawn whole it is the D196 fault with more points: a confident line along a
+journey the aircraft finished hours ago.
+
+**The ground is the boundary.** readsb writes `"ground"` instead of an altitude
+when an aircraft is on a runway or a stand, so everything after the last of
+those is this flight - a definition with no threshold in it that cannot drift.
+
+Where a trace never touches the ground - a long-haul still airborne, one that
+begins mid-ocean - the fallback is the longest silence over three hours. That
+number has to sit above a coverage hole and below a turnaround, and SIA23's
+86-minute crossing is the measurement that says where: a gap in listening is one
+flight, not two. **A guess where the ground is a fact**, which is why it is
+second and not first.
+
+An aircraft on the ground *now* keeps its whole path rather than being trimmed
+to nothing - erasing the line at the moment of landing would be the worst time
+to do it.
+
+Seven tests, checked by breaking it twice: ignoring ground contact fails two,
+and setting the break threshold to a minute turns SIA23's coverage hole into a
+new flight and fails the two that say it must not.
+
+An accidental confirmation worth keeping: **CCA868's trimmed path starts at
+1,600 m**, because Johannesburg is 1,753 m above the sea. The ground detection
+is finding real runways.
+
+**880 backend tests**, 1,118 frontend.

@@ -22,7 +22,7 @@ import anyio
 import httpx
 import pytest
 
-from app.models import BBox
+from app.models import BBox, TrackPoint
 from app.providers.adsblol import (
     GLOBAL_RADIUS_NM,
     GLOBAL_SWEEP,
@@ -30,6 +30,7 @@ from app.providers.adsblol import (
     VIEWPORT_MAX_RADIUS_NM,
     AdsbLolProvider,
     _circle_for,
+    current_flight,
 )
 from app.providers.base import ProviderBadResponse, ProviderRateLimited, ProviderUnavailable
 
@@ -512,7 +513,7 @@ class TestFlightTrace:
             return httpx.Response(200, json=REAL_TRACE)
 
         await provider(handler).fetch_track("76CCE2")
-        assert seen[0].endswith("/e2/trace_recent_76cce2.json"), seen[0]
+        assert seen[0].endswith("/e2/trace_full_76cce2.json"), seen[0]
 
     @pytest.mark.anyio
     async def test_the_trace_does_not_queue_behind_the_poll_gate(self):
@@ -539,3 +540,64 @@ class TestFlightTrace:
             min_request_interval_seconds=0.0,
         )
         assert await p.fetch_track("76cce2") is None
+
+
+def _pt(minutes: float, alt: float | None) -> TrackPoint:
+    return TrackPoint(
+        lat=1.0 + minutes / 1000,
+        lon=2.0,
+        altitude=alt,
+        timestamp=datetime(2026, 9, 10, tzinfo=timezone.utc) + timedelta(minutes=minutes),
+    )
+
+
+class TestCurrentFlight:
+    """Trimming a day-long trace to the leg in progress (D201).
+
+    A full trace covers 24 hours and several flights. Drawn whole it is the
+    D196 fault with more points: a confident line along a journey the aircraft
+    finished hours ago.
+    """
+
+    def test_the_ground_is_the_boundary(self):
+        # Taxi, take off, climb, cruise. Everything after the last wheels-down
+        # reading is this flight, and that needs no threshold at all.
+        track = (
+            _pt(0, 0.0), _pt(5, 0.0),          # yesterday, on a stand
+            _pt(600, 10000.0),                 # yesterday's leg
+            _pt(1200, 0.0),                    # landed, on the ground
+            _pt(1260, 3000.0), _pt(1290, 11000.0),  # today's leg
+        )
+        assert current_flight(track) == track[4:]
+
+    def test_the_last_ground_contact_wins_not_the_first(self):
+        track = (_pt(0, 0.0), _pt(60, 9000.0), _pt(120, 0.0), _pt(180, 9000.0), _pt(200, 9500.0))
+        assert current_flight(track) == track[3:]
+
+    def test_an_aircraft_on_the_ground_now_keeps_its_path(self):
+        # On final approach or taxiing in, the last ground reading is the most
+        # recent point and the tail is empty. Erasing the path at the moment of
+        # landing would be the worst time to do it.
+        track = (_pt(0, 9000.0), _pt(30, 3000.0), _pt(60, 0.0))
+        assert current_flight(track) == track
+
+    def test_a_long_silence_is_the_fallback_when_nothing_touched_the_ground(self):
+        # A trace that begins mid-ocean, or a long-haul still airborne. Four
+        # hours of silence is a turnaround, not a coverage hole.
+        track = (_pt(0, 11000.0), _pt(30, 11000.0), _pt(300, 11000.0), _pt(330, 11000.0))
+        assert current_flight(track) == track[2:]
+
+    def test_a_coverage_hole_is_not_a_new_flight(self):
+        # **The distinction that matters.** SIA23 crossed the Bay of Bengal for
+        # 86 minutes unheard; that is one flight with a gap in it, and cutting
+        # there would throw away most of a real path.
+        track = (_pt(0, 11000.0), _pt(20, 11000.0), _pt(106, 11000.0), _pt(126, 11000.0))
+        assert current_flight(track) == track
+
+    def test_a_trace_with_no_break_is_kept_whole(self):
+        track = tuple(_pt(i * 5, 11000.0) for i in range(10))
+        assert current_flight(track) == track
+
+    def test_too_short_to_trim_is_returned_as_is(self):
+        for track in ((), (_pt(0, 0.0),)):
+            assert current_flight(track) == track

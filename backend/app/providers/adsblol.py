@@ -54,6 +54,15 @@ from app.providers.base import (
 logger = logging.getLogger(__name__)
 
 FEET_TO_METRES = 0.3048
+
+#: A silence longer than this ends a flight, when no ground contact says so.
+#:
+#: Coverage holes are ordinary - SIA23 crossed the Bay of Bengal for 86 minutes
+#: unheard - so the threshold has to sit above a plausible gap in listening and
+#: below a turnaround. Three hours is longer than any ocean crossing goes
+#: unheard on this network and shorter than any aircraft sits on a stand
+#: between long-haul legs (D201).
+FLIGHT_BREAK_SECONDS = 3 * 3600.0
 KNOTS_TO_MS = 0.514444
 NAUTICAL_MILE_KM = 1.852
 EARTH_RADIUS_KM = 6371.0088
@@ -129,6 +138,48 @@ FEET_TO_METRES = 0.3048
 VIEWPORT_MAX_RADIUS_NM = 3000
 
 
+def current_flight(points: "tuple[TrackPoint, ...]") -> "tuple[TrackPoint, ...]":
+    """The tail of a day-long trace that belongs to the flight now in progress.
+
+    A full trace covers 24 hours and several legs. Drawing it whole is the D196
+    fault with more points: a confident line along a journey the aircraft
+    finished hours ago.
+
+    **The ground is the boundary, when there is one.** An altitude of zero is
+    readsb saying the aircraft was on a runway or a stand, and everything after
+    the last of those is this flight - a definition that needs no threshold and
+    cannot drift.
+
+    Where the trace never touches the ground - a long-haul still airborne, or a
+    trace that begins mid-ocean - the fallback is the longest silence over
+    `FLIGHT_BREAK_SECONDS`. That is a guess where the ground is a fact, which is
+    why it is second.
+
+    Falls back to everything rather than to nothing: a short honest path beats
+    an empty one, and the panel already says a track may begin in flight.
+    """
+    if len(points) < 2:
+        return points
+
+    for index in range(len(points) - 1, -1, -1):
+        if points[index].altitude == 0.0:
+            tail = points[index + 1 :]
+            # An aircraft on the ground *now* leaves no tail at all; keep what
+            # there is rather than erasing the path on final approach.
+            return tail if len(tail) >= 2 else points
+
+    longest, cut = 0.0, None
+    for index in range(len(points) - 1):
+        silence = (points[index + 1].timestamp - points[index].timestamp).total_seconds()
+        if silence > FLIGHT_BREAK_SECONDS and silence > longest:
+            longest, cut = silence, index + 1
+
+    if cut is None:
+        return points
+    tail = points[cut:]
+    return tail if len(tail) >= 2 else points
+
+
 class AdsbLolProvider(Provider):
     """Aircraft positions from adsb.lol's public API."""
 
@@ -185,10 +236,12 @@ class AdsbLolProvider(Provider):
         aircraft in ten had an OpenSky track; **ten in ten had one here**, and
         where both existed this one was five to thirty times denser (D200).
 
-        `trace_recent` rather than `trace_full`: 4 kB against 89 kB, half an
-        hour of flying rather than a day. The panel draws the path of the
-        current flight, and a day of it is both slower to fetch and wrong -
-        yesterday's leg is not this one (D196).
+        `trace_full` and then trimmed, rather than `trace_recent`. The recent
+        file is a twentieth of the size and holds half an hour, which drew a
+        stub of a path where Flightradar shows the whole flight. The full one
+        holds a day - which must not be drawn whole, or it puts yesterday's leg
+        on today's map (D196) - so `current_flight` cuts it back to this leg,
+        leaving 333 to 2,038 points against the recent file's 92 (D201).
 
         **Not behind `_wait_turn`.** That gate exists to keep our *polling* off
         api.adsb.lol at twelve-second intervals; these are static files on a
@@ -202,7 +255,7 @@ class AdsbLolProvider(Provider):
             return None
 
         # readsb shards the files by the last two characters of the hex.
-        url = f"{self.trace_base_url}/{hex_id[-2:]}/trace_recent_{hex_id}.json"
+        url = f"{self.trace_base_url}/{hex_id[-2:]}/trace_full_{hex_id}.json"
         try:
             response = await self._client.get(url, follow_redirects=True)
         except httpx.HTTPError as exc:
@@ -231,7 +284,7 @@ class AdsbLolProvider(Provider):
 
         points = [self._trace_point(float(base), row) for row in rows]
         kept = tuple(p for p in points if p is not None)
-        return kept or None
+        return current_flight(kept) or None
 
     @staticmethod
     def _trace_point(base: float, row: Any) -> TrackPoint | None:
