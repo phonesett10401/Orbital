@@ -226,3 +226,83 @@ class TestFreshness:
     def test_age_is_measured_from_the_last_successful_poll(self, store):
         store.apply([record()], source="fixture", fetched_at=NOW)
         assert store.age_seconds(now=NOW + timedelta(seconds=45)) == pytest.approx(45.0)
+
+
+class TestObjectCap:
+    """A ceiling on the store, not only on how old its contents may be (D193).
+
+    The TTL bounds age; the size is then the number of distinct objects seen
+    inside that window, which for a stream is a fact about the world rather than
+    about the configuration. Capping the provider was not enough on its own - it
+    holds a fixed number at a time but churns through more, and this store keeps
+    the union of everything it was handed.
+    """
+
+    def _store(self, **kwargs) -> ObjectStore:
+        return ObjectStore(
+            object_ttl_seconds=900.0,
+            track_history_points=10,
+            snapshot_ttl_seconds=60.0,
+            **kwargs,
+        )
+
+    def _record(self, key: str, seconds_ago: float) -> TrackedObjectRecord:
+        return TrackedObjectRecord(
+            id=key,
+            lat=1.0,
+            lon=2.0,
+            altitude=0.0,
+            velocity=None,
+            heading=None,
+            label=key,
+            model=None,
+            last_seen=utcnow() - timedelta(seconds=seconds_ago),
+            type=ObjectType.SHIP,
+        )
+
+    def test_holds_everything_when_no_cap_is_set(self):
+        store = self._store(max_objects=0)
+        store.apply([self._record(str(i), 1) for i in range(60)], source="test")
+        store.evict()
+        assert len(store.get()) == 60
+
+    def test_never_holds_more_than_the_cap(self):
+        store = self._store(max_objects=10)
+        store.apply([self._record(str(i), 1) for i in range(60)], source="test")
+        store.evict()
+        assert len(store.get()) == 10
+
+    def test_keeps_the_most_recently_seen(self):
+        store = self._store(max_objects=3)
+        store.apply([self._record(key, age) for key, age in
+                       [("a", 500), ("b", 5), ("c", 400), ("d", 1), ("e", 50)]], source="test")
+        store.evict()
+        assert {r.id for r in store.get()} == {"d", "b", "e"}
+
+    def test_the_ttl_still_applies_under_the_cap(self):
+        # Two independent limits. Something too old to serve goes even when
+        # there is room, or the cap would resurrect the ghosts the TTL buries.
+        store = self._store(max_objects=1000)
+        store.object_ttl_seconds = 100.0
+        store.apply([self._record("fresh", 5), self._record("ancient", 5000)], source="test")
+        store.evict()
+        assert {r.id for r in store.get()} == {"fresh"}
+
+    def test_the_cap_is_enforced_on_the_write_path(self):
+        # `apply` sweeps as it writes, so the ceiling holds without anything
+        # else remembering to call `evict`. This is the property that matters:
+        # a cap that only applied when someone asked would let the store grow
+        # between polls, which is exactly when it grows.
+        store = self._store(max_objects=3)
+        store.apply([self._record(str(i), 1) for i in range(6)], source="test")
+        assert len(store.get()) == 3
+
+    def test_track_history_goes_with_the_object(self):
+        # A route for something no longer displayed serves no purpose, and a
+        # cap that dropped records but kept their tracks would leak exactly what
+        # it was added to bound.
+        store = self._store(max_objects=1)
+        store.apply([self._record("keep", 1), self._record("drop", 900)], source="test")
+        store.apply([self._record("keep", 1), self._record("drop", 900)], source="test")
+        store.evict()
+        assert "drop" not in store._tracks

@@ -11334,3 +11334,46 @@ Five tests, checked by breaking it twice - disabling the cap fails two of them,
 reversing the eviction order fails the one that names it.
 
 **841 backend tests**, 1,114 frontend.
+
+## D193 - The cap has to be on the store as well
+
+D192 capped the aisstream provider at 14,000 vessels, deployed it, and watched
+the ships count climb past 27,000 anyway.
+
+### Why the provider's cap did not bound the store
+
+`/api/ships` reports what the **store** holds, not what the provider holds, and
+they are different numbers for a reason worth writing down.
+
+The provider keeps the freshest 14,000 - but it *churns* through many more than
+that: a vessel evicted for space sends another message a minute later and comes
+straight back. The store is handed the result of every poll and keeps the union
+of all of them until its own TTL expires each one. So the store's size is the
+number of distinct vessels seen in a TTL window, which measured **27,000** while
+the provider was correctly holding 14,000.
+
+**A cap on a source does not bound a cache downstream of it.** That is obvious
+written down and was not obvious while writing D192, where "cap the thing that
+accumulates" felt like the whole of the problem. It was half.
+
+### The fix
+
+`ObjectStore` takes `max_objects` and enforces it in the same sweep as the TTL,
+oldest-seen first, for the reason the provider uses that order: the most recent
+report is the one most likely to still be true.
+
+Two things fell out of writing the tests, both better than what I had assumed:
+
+- **`apply` sweeps as it writes**, so the ceiling holds without anything else
+  remembering to call `evict`. My first test asserted a return value from an
+  explicit `evict()` and got 0 - not a bug, but the cap having already done its
+  work on the write path. The test now asserts that property instead, which is
+  the one that matters: a cap that only applied when asked would let the store
+  grow between polls, which is exactly when it grows.
+- Track history goes with the record, so a cap cannot leak the very thing it was
+  added to bound.
+
+Six tests, checked by breaking it twice: disabling the cap fails three,
+reversing the eviction order fails the one that names it.
+
+**847 backend tests**, 1,114 frontend.

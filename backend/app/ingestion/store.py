@@ -24,6 +24,7 @@ adding an ``await`` inside any of these methods would introduce a race.
 
 from __future__ import annotations
 
+import heapq
 import logging
 from collections import deque
 from datetime import datetime
@@ -82,12 +83,23 @@ class ObjectStore:
         snapshot_ttl_seconds: float,
         object_type: ObjectType = ObjectType.AIRCRAFT,
         evict_interval_seconds: float = 60.0,
+        max_objects: int = 0,
     ) -> None:
         self.object_ttl_seconds = object_ttl_seconds
         self.track_history_points = track_history_points
         self.snapshot_ttl_seconds = snapshot_ttl_seconds
         self.object_type = object_type
         self.evict_interval_seconds = evict_interval_seconds
+        #: The most objects to hold, or 0 for no limit.
+        #:
+        #: **The TTL alone does not bound this store.** It bounds how *old* an
+        #: object may be, so the size is the number of distinct things seen
+        #: within that window - and for a stream that is a fact about the world
+        #: rather than about the configuration. Capping the provider was not
+        #: enough on its own: it holds 14,000 vessels at a time but churns
+        #: through more, and this store keeps the union of everything it was
+        #: handed until the TTL expires it, which measured 27,000 (D193).
+        self.max_objects = max(0, int(max_objects))
         self._last_evict_at: datetime | None = None
 
         self._objects: dict[str, TrackedObjectRecord] = {}
@@ -178,7 +190,31 @@ class ObjectStore:
             self._tracks.pop(key, None)
         if expired:
             logger.debug("evicted %d objects past TTL", len(expired))
-        return len(expired)
+        return len(expired) + self._enforce_cap()
+
+    def _enforce_cap(self) -> int:
+        """Hold at most ``max_objects``, dropping those seen longest ago.
+
+        **Oldest first**, for the reason the provider's own cap uses the same
+        order: the most recent report is the one most likely to still be true,
+        so when there is not room the objects to lose are the ones already
+        closest to expiring. Dropping whatever the dictionary yielded first
+        would make the map's coverage a function of hash order.
+
+        Returns how many went, so the caller's count stays honest about what
+        left the store rather than only about what aged out of it.
+        """
+        if not self.max_objects or len(self._objects) <= self.max_objects:
+            return 0
+        excess = len(self._objects) - self.max_objects
+        oldest = heapq.nsmallest(
+            excess, self._objects.items(), key=lambda item: item[1].last_seen
+        )
+        for key, _ in oldest:
+            del self._objects[key]
+            self._tracks.pop(key, None)
+        logger.debug("evicted %d objects over the cap of %d", excess, self.max_objects)
+        return excess
 
     # ---- reading -----------------------------------------------------------
 

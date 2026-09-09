@@ -188,6 +188,11 @@ def create_app(
             ships = ShipUnionProvider(sources)
             ship_store = ObjectStore(
                 object_ttl_seconds=settings.ship_object_ttl_seconds,
+                # The store needs the ceiling too, and this is the one that
+                # decides the memory: it keeps the union of everything the
+                # providers handed it inside the TTL window, which is larger
+                # than what any one of them holds (D193).
+                max_objects=settings.ship_max_vessels,
                 track_history_points=settings.track_history_points,
                 # Twice the poll interval, which is the only value that cannot
                 # be stale by construction - the same rule the aircraft store
