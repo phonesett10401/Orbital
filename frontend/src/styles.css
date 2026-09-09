@@ -3884,10 +3884,45 @@ body {
     display: none;
   }
 
+  /*
+   * ---- the Moon's spacecraft, one line each (D187) ----
+   *
+   * The desktop card is 232px wide, and inside it two lines per craft is
+   * compact: name and altitude on the first, operator under them. D182 gave it
+   * the full width of the phone and kept that shape, so the same three
+   * spacecraft became a card 280px tall sitting over the middle of the Moon -
+   * the object it is a list *about*.
+   *
+   * Four columns instead of two rows. There are only ever three of these, so
+   * one line each is the whole list in about a hundred pixels, low enough to
+   * leave the Moon whole.
+   */
   .moonlist {
     left: 12px;
     right: 12px;
     width: auto;
+  }
+
+  .moonlist__item {
+    grid-template-columns: 10px auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0 8px;
+    padding: 9px 6px;
+  }
+
+  .moonlist__dot {
+    /* One row now, not two. */
+    grid-row: auto;
+  }
+
+  .moonlist__operator {
+    /* Beside the name rather than under it, and first to give up room: the
+       operator is the least of the three things a row says. */
+    grid-column: auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 

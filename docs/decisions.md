@@ -11080,3 +11080,31 @@ project's rule is that the source must be credited (D120) - not that it must
 occupy the foot of every phone.
 
 836 backend tests, 1,109 frontend.
+
+## D187 - Three spacecraft should not cost the Moon
+
+Phone's screenshot of the Moon on a phone: the "In orbit" list covering the body
+it is a list *about*, from limb to limb.
+
+The desktop card is 232px wide, and inside it two lines per craft is compact -
+name and altitude on the first, operator beneath. D182 gave the card the full
+width of the phone and kept that shape, so three spacecraft became **280px of
+card over the middle of the Moon**.
+
+Four columns instead of two rows. There are only ever three of these, so one
+line each is the whole list in **158px - 23% of the screen against 40%** - and
+the Moon stays whole. The operator truncates first if a row runs out of room,
+being the least of the three things a row says; measured, the longest name we
+carry ("Chandrayaan-2 Orbiter") does not truncate at all and the altitude stays
+inside the card.
+
+Desktop verified unchanged: 232px, `10px 1fr auto`, the dot still spanning two
+rows, 71px rows.
+
+**The pattern is worth naming, because this is the third time.** A component
+laid out for a narrow card in the corner of a large window is given the full
+width of a phone and keeps its old shape - which is not "responsive", it is the
+same design with more room to be wrong in. The detail panel did it (D184), the
+world list did it (D182), and this is the Moon list doing it.
+
+836 backend tests, 1,109 frontend.
