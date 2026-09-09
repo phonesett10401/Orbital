@@ -10591,3 +10591,64 @@ Measured after: every target 44 or more, `tooSmall` empty; status clears the
 credit; About rows stack at 335px each; no horizontal overflow anywhere.
 
 832 backend tests, 1,093 frontend.
+
+## D179 - The map that renders perfectly and draws nothing
+
+Orbital went up: the backend on Northflank, the frontend on Vercel. The last
+step was CORS, and once that was set the site loaded, the globe turned, the
+status bar read **2,000 aircraft, showing a sample of 7,859 in view** - and
+there was not a single marker on the map.
+
+### The counts came from the store, not the map
+
+That is the detail that makes this defect hard to see. `/api/aircraft` was
+answering 200 with 2,000 objects at the same moment the map was empty, and the
+status bar reports what the store holds. Everything that measures the data said
+the data was fine, because it was.
+
+### What was actually wrong
+
+`/assets/maplibre-gl-worker.mjs` - **404**.
+
+MapLibre spawns its tile worker as `new Worker(new URL(e, import.meta.url))`
+where `e` is a *variable*: it picks between the dev and production worker at
+runtime. Vite can only follow that pattern when the path is a string literal,
+so it emitted nothing and left the URL to resolve against the chunk's own
+folder, where nothing exists.
+
+No worker means no tile processing, which means **`load` never fires** - and
+every layer this application adds lives inside that handler. Aircraft,
+satellites, ships: never created. Meanwhile the raster imagery painted
+perfectly, because raster tiles are loaded on the main thread.
+
+### This was the other half of D63
+
+D63 recorded exactly this signature - "renders raster imagery perfectly while
+never drawing a single road or label" - and fixed it with
+`optimizeDeps.exclude`. **That setting has no effect on `vite build`.** The
+comment describing the failure sat four lines above a fix that only ever
+applied to the dev server, and the production build was never opened in a
+browser until the day it was deployed. A defect can be documented and unfixed
+at the same time.
+
+### The fix
+
+A build plugin copies `maplibre-gl-worker.mjs` and `maplibre-gl-shared.mjs`
+into the output beside MapLibre's chunk. Both keep their exact names: the
+worker resolves its sibling by the literal specifier
+`./maplibre-gl-shared.mjs`, so a hashed copy would 404 one level down in
+precisely the same way.
+
+It asserts the files are non-empty rather than trusting the copy. The entire
+reason this survived is that a missing worker says nothing at all, so a build
+that fails to produce one has to fail loudly at build time instead of silently
+in someone's browser.
+
+### The lesson
+
+**A build is not exercised until something loads it.** Every test passed, the
+dev server was correct, and 1,093 frontend tests had nothing to say about a
+file that Rollup declined to emit. The instrument that finally answered it was
+`curl -D -` against a static asset.
+
+832 backend tests, 1,093 frontend.
