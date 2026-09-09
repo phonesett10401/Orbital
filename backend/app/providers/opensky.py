@@ -58,6 +58,23 @@ HEADER_REMAINING = "X-Rate-Limit-Remaining"
 HEADER_RETRY_AFTER = "X-Rate-Limit-Retry-After-Seconds"
 
 
+def describe(exc: BaseException) -> str:
+    """An exception rendered so the log line says something.
+
+    **`str(exc)` is empty for most of httpx's connection errors**, so
+    ``f"token request failed: {describe(exc)}"`` logged the literal text ``token request
+    failed:`` and stopped - a message whose entire content was that something
+    unspecified went wrong. Production spent a day telling us exactly that
+    (D194), while the same code on a laptop worked, and the difference between
+    ``ConnectTimeout`` and ``ConnectError`` is most of the diagnosis.
+
+    The class name is always there. The message is added when there is one.
+    """
+    detail = str(exc).strip()
+    name = type(exc).__name__
+    return f"{name}: {detail}" if detail else name
+
+
 class OpenSkyProvider(Provider):
     """Fetches aircraft state vectors from OpenSky Network."""
 
@@ -150,7 +167,7 @@ class OpenSkyProvider(Provider):
             token = payload["access_token"]
             expires_in = float(payload.get("expires_in", 1800))
         except (ValueError, KeyError, TypeError) as exc:
-            raise ProviderBadResponse(f"malformed token response: {exc}") from exc
+            raise ProviderBadResponse(f"malformed token response: {describe(exc)}") from exc
 
         self._token = token
         self._token_expires_at = asyncio.get_running_loop().time() + max(
@@ -218,7 +235,7 @@ class OpenSkyProvider(Provider):
                 headers=headers,
             )
         except httpx.HTTPError as exc:  # pragma: no cover - network failure
-            raise ProviderUnavailable(f"OpenSky track request failed: {exc}") from exc
+            raise ProviderUnavailable(f"OpenSky track request failed: {describe(exc)}") from exc
 
         self._record_credit_headers(response)
         if response.status_code == 404:
@@ -280,9 +297,9 @@ class OpenSkyProvider(Provider):
                 f"{self.base_url}/states/all", params=params, headers=headers
             )
         except httpx.TimeoutException as exc:
-            raise ProviderUnavailable(f"OpenSky timed out: {exc}") from exc
+            raise ProviderUnavailable(f"OpenSky timed out: {describe(exc)}") from exc
         except httpx.HTTPError as exc:
-            raise ProviderUnavailable(f"OpenSky request failed: {exc}") from exc
+            raise ProviderUnavailable(f"OpenSky request failed: {describe(exc)}") from exc
 
         self._record_credit_headers(response)
 
@@ -307,7 +324,7 @@ class OpenSkyProvider(Provider):
         try:
             payload = response.json()
         except ValueError as exc:
-            raise ProviderBadResponse(f"OpenSky response was not JSON: {exc}") from exc
+            raise ProviderBadResponse(f"OpenSky response was not JSON: {describe(exc)}") from exc
         if not isinstance(payload, dict):
             raise ProviderBadResponse("OpenSky response was not an object")
         return payload

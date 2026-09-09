@@ -11377,3 +11377,56 @@ Six tests, checked by breaking it twice: disabling the cap fails three,
 reversing the eviction order fails the one that names it.
 
 **847 backend tests**, 1,114 frontend.
+
+## D194 - An error message that said nothing, for a day
+
+Phone: *"I honestly dont think its northflank fault as the route error is still
+same in localhost."* Right, and the way to settle it was already on the desk.
+
+### What the comparison proved
+
+| | Local | Northflank |
+|---|---|---|
+| Uptime | **408 min**, no restarts | 14 min |
+| ETH609 track | 9 points | 10 points |
+| Track source | **provider, 8 of 8** (62-291 pts) | **observed, 0 of 8** (6-8 pts) |
+| OpenSky credits | **3,724** | **None** |
+
+A backend up seven hours shows the same short track for that aircraft as one up
+fourteen minutes, which kills the story I had been telling: the OOM restarts
+were real and worth fixing, and they were **not** why routes looked wrong. I
+built an explanation around uptime and never tested it against the machine
+running on the same desk. Phone did.
+
+The real fault is in the third row. Every aircraft locally gets OpenSky's own
+flight track - the path from takeoff, 62 to 291 points. In production every one
+falls back to our own ring buffer of 6 to 8. Same credentials, verified by
+fingerprint rather than by eye.
+
+### The log line that wasted the day
+
+```
+opensky could not supply a track: token request failed:
+```
+
+That colon is the end of the message. `str(exc)` is empty for most of httpx's
+connection errors, so `f"token request failed: {exc}"` logged *the fact that
+something unspecified went wrong* and nothing else - 308 times.
+
+**The difference between `ConnectTimeout` and `ConnectError` is most of the
+diagnosis**: one says the route is slow or filtered, the other says the
+connection was refused or the host unreachable. Neither was recoverable from the
+line as written, so the failure looked like a mystery when it was merely
+unlabelled.
+
+Every `{exc}` in this provider now goes through `describe`, which always yields
+the class name and adds the message when there is one. Three tests, including
+one asserting the result is never blank whatever is thrown - the property the
+old format string failed to have.
+
+The cause of the token failure itself is still open: the endpoint has no AAAA
+record so it is not an IPv6 fallback, the host resolves to one Swiss address
+from both machines, and it answers in 0.25 s from here. What the container sees
+is the next thing to find out, and now the log will say.
+
+**850 backend tests**, 1,114 frontend.

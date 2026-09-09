@@ -434,3 +434,42 @@ class TestFailureMapping:
         provider = make_provider(states_handler([1, 2, 3]))
         with pytest.raises(ProviderBadResponse):
             await provider.fetch()
+
+
+class TestDescribe:
+    """An error message that says nothing is a defect (D194).
+
+    Production logged `token request failed:` - the whole message - for a day,
+    because `str(exc)` is empty for most of httpx's connection errors and the
+    format string had nothing else in it.
+    """
+
+    def test_names_the_exception_when_it_carries_no_message(self):
+        import httpx
+
+        from app.providers.opensky import describe
+
+        # The real case: httpx raises these with no arguments at all.
+        assert describe(httpx.ConnectError("")) == "ConnectError"
+        assert describe(httpx.ConnectTimeout("")) == "ConnectTimeout"
+
+    def test_keeps_the_message_when_there_is_one(self):
+        from app.providers.opensky import describe
+
+        assert describe(ValueError("no such realm")) == "ValueError: no such realm"
+
+    def test_never_returns_something_empty(self):
+        import httpx
+
+        from app.providers.opensky import describe
+
+        # The property that matters: whatever is thrown, the log line has
+        # content. A blank one sent a day's diagnosis down the wrong path.
+        for exc in [
+            httpx.ConnectError(""),
+            httpx.ReadTimeout(""),
+            httpx.RemoteProtocolError(""),
+            ValueError(""),
+            RuntimeError("   "),
+        ]:
+            assert describe(exc).strip() != ""
