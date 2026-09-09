@@ -11595,3 +11595,46 @@ Three tests remain, and the one that names the property fails when the cooldown
 is ignored.
 
 **863 backend tests**, 1,114 frontend.
+
+## D199 - Half the aircraft have no route, and that is the answer
+
+Phone checked forty flights: about half showed a route and about half showed
+nothing. *"This is getting out of hand."*
+
+Measured across 28 aircraft aloft:
+
+| | Count | What they are |
+|---|---|---|
+| Route published | 18 | CLX245, AAL123, THY169, UAL820, SIA23, ANA203, KLM219 - airlines, every one |
+| No route | 10 | **N926NA, PRPCH, N125GH, N840MA** (registrations), **BTX1A, NJE926F, QQE709** (business jets), and two transmitting no callsign at all |
+
+**Not a bug, and not even a gap.** A community route database lists scheduled
+airline services. A private aircraft has no published schedule to be listed in,
+and roughly a third of what is in the sky at any moment is general aviation,
+business and cargo. D88 measured adsbdb answering 14 of 20 - 70% - and this is
+that number seen from the other side.
+
+The provider tracks were checked at the same time and are healthy: 21 of 22
+`provider`, 48 to 500 points, none stale. The staleness guard from D196 is not
+over-firing.
+
+### The interface was the thing at fault
+
+The section was rendered only when a route existed, so for those ten it simply
+was not there - and a reader who had just seen a route on the previous aircraft
+reasonably concluded the application had broken. **Silence reads as a defect
+even when it is a fact.**
+
+It now says which of two things happened, because they are different and should
+not be dressed as the same one:
+
+- **no callsign transmitted** - nothing was ever looked up;
+- **a callsign with nothing published against it** - it was looked up, by name,
+  and there is no route.
+
+Four tests, one of them asserting the wording never calls this an error or a
+failure. A private aircraft without a published schedule is the world working
+correctly, and describing it as a fault would make the map look broken for a
+third of everything it draws.
+
+836 backend tests, **1,118 frontend**.

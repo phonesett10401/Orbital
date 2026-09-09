@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { legLabel, summariseRoute } from './routeSummary';
+import { legLabel, missingRouteReason, summariseRoute } from './routeSummary';
 import type { Airport, FlightRoute, TrackedObjectDetail } from '../types';
 
 function airport(overrides: Partial<Airport> = {}): Airport {
@@ -131,5 +131,38 @@ describe('naming one end of the route', () => {
 
   it('says an unnamed end is unknown rather than rendering a blank', () => {
     expect(legLabel(null)).toEqual({ code: '???', place: 'Unknown' });
+  });
+});
+
+describe('missingRouteReason', () => {
+  it('distinguishes "nothing to look up" from "looked and found nothing"', () => {
+    // Two different facts. An aircraft with no callsign was never searched for;
+    // one with a callsign was, and came back empty. Collapsing them would make
+    // the panel claim a search it never ran.
+    const noCallsign = missingRouteReason(null);
+    const searched = missingRouteReason('N926NA');
+
+    expect(noCallsign).toMatch(/not transmitting a callsign/);
+    expect(searched).toMatch(/N926NA/);
+    expect(noCallsign).not.toBe(searched);
+  });
+
+  it('treats blank and whitespace callsigns as absent', () => {
+    for (const empty of [null, undefined, '', '   ']) {
+      expect(missingRouteReason(empty)).toMatch(/nothing to look up/);
+    }
+  });
+
+  it('names the callsign it failed to find, so the reader can check it', () => {
+    expect(missingRouteReason('  PRPCH ')).toContain('PRPCH');
+  });
+
+  it('does not call the absence an error', () => {
+    // A private aircraft having no published schedule is the world working
+    // correctly. Wording it as a failure would make the map look broken for
+    // a third of what is in the sky.
+    for (const text of [missingRouteReason('N840MA'), missingRouteReason(null)]) {
+      expect(text.toLowerCase()).not.toMatch(/error|failed|unavailable|could not/);
+    }
   });
 });

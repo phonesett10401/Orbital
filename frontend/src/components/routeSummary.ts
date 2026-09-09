@@ -66,3 +66,31 @@ export function legLabel(airport: Airport | null): { code: string; place: string
     place: airport.municipality ?? airport.name,
   };
 }
+
+/**
+ * Why there is no scheduled route to show, in words for the panel.
+ *
+ * **Silence was the bug.** The section was rendered only when a route existed,
+ * so an aircraft without one showed nothing at all - and a reader who had just
+ * seen a route on the previous aircraft reasonably concluded the application
+ * had broken. Measured across 28 aircraft aloft, 10 had no published route, and
+ * every one of them was an N-number, a business-jet callsign, or an aircraft
+ * transmitting no callsign at all (D199).
+ *
+ * That is not a gap in the data so much as a fact about who flies. A community
+ * route database lists scheduled airline services; a private aircraft has no
+ * published schedule to list. Saying so is more useful than an empty space, and
+ * more honest than implying one is missing.
+ */
+export function missingRouteReason(callsign: string | null | undefined): string {
+  const label = (callsign ?? '').trim();
+  if (!label) {
+    // Nothing was transmitted to look up, which is a different answer from
+    // "looked and found nothing" and should not be dressed as the same one.
+    return 'This aircraft is not transmitting a callsign, so there is nothing to look up.';
+  }
+  return (
+    `No route is published against ${label}. Route databases list scheduled ` +
+    'airline services; private and business aircraft usually have none.'
+  );
+}

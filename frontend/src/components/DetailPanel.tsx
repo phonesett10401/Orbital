@@ -34,7 +34,7 @@ import { useAirline } from '../airlines';
 import type { Airport } from '../types';
 import { wingspanFor } from '../wingspan';
 import { generalMetaRows } from './panelFields';
-import { legLabel, summariseRoute } from './routeSummary';
+import { legLabel, missingRouteReason, summariseRoute } from './routeSummary';
 import { SATELLITE_META_SHOWN, satelliteRows } from './satelliteFacts';
 import { SHIP_META_SHOWN, shipRows } from './shipFacts';
 import { useOrbitalStore } from '../state/store';
@@ -380,6 +380,24 @@ export function DetailPanel() {
           aircraft. Designators are occasionally reassigned, so an unfamiliar
           name may be a previous holder of {airline.code}.
         </p>
+      )}
+
+      {/*
+        **The absence is said out loud (D199).**
+
+        Rendered only when a route existed, this section simply vanished for the
+        third of aircraft that have none - and a reader who had just seen one on
+        the previous aircraft concluded the application had broken. Measured
+        across 28 aloft, the 10 without a route were N-numbers, business-jet
+        callsigns and aircraft transmitting no callsign at all. That is a fact
+        about who flies, not a gap in the feed, and it reads better as a
+        sentence than as an empty space.
+      */}
+      {!scheduled && (
+        <section className="panel__route">
+          <h3 className="panel__subtitle">Scheduled route</h3>
+          <p className="panel__note">{missingRouteReason(detail.label)}</p>
+        </section>
       )}
 
       {scheduled && (
