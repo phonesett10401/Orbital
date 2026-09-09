@@ -3208,3 +3208,238 @@ body {
 .app__about:focus-visible {
   color: var(--text);
 }
+
+
+/*
+ * ---- the mobile pass (D178) ----
+ *
+ * Phone asked whether this is friendly on a phone. Measured at 375x812 it did
+ * not break - no horizontal overflow anywhere, which is the commonest failure -
+ * but it was not comfortable, and three things were properly wrong.
+ *
+ * Everything below is one of those three. Nothing here changes the desktop.
+ */
+
+/*
+ * **Touch targets, keyed on the pointer rather than the width.**
+ *
+ * `(pointer: coarse)` is the honest question. What needs 44 pixels is a finger,
+ * not a narrow window - a phone in landscape is 812 wide and still a phone,
+ * and a 500-pixel desktop window is still a mouse. Measured before: the night
+ * and basemap toggles were **30x30**, sign-in 61x20, and the About link 84x12.
+ *
+ * The visible box is left alone wherever the design depends on it. These grow
+ * the *hit* area instead - padding on the text controls, a pseudo-element on
+ * the small square ones - so nothing on screen gets heavier and every one of
+ * them reaches 44.
+ */
+@media (pointer: coarse) {
+  .app .maplibregl-ctrl button.orbital-terminator-toggle,
+  .app .maplibregl-ctrl button.orbital-basemap-toggle {
+    width: 44px;
+    height: 44px;
+    font-size: 19px;
+  }
+
+  .account__button,
+  .app__about {
+    /*
+     * `min-height` and not padding. Padding alone left these at 38 and 36:
+     * `* { box-sizing: border-box }` puts the padding *inside* the height, so
+     * adding some to an element that already has one buys nothing. Measured
+     * both ways rather than assumed.
+     *
+     * The negative margin keeps the header from growing by the space the hit
+     * area just gained, so nothing on screen moves.
+     */
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 10px;
+    margin: -6px -10px;
+  }
+
+  .layers__button {
+    min-height: 44px;
+    padding-top: 11px;
+    padding-bottom: 11px;
+  }
+
+  .solarlabel__visit,
+  .stepper__arrow,
+  .system__back,
+  .system__index-toggle,
+  .about__close {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .stepper__arrow {
+    min-width: 44px;
+    justify-content: center;
+  }
+}
+
+/*
+ * **The status bar was sitting on the map attribution.**
+ *
+ * Both are anchored to the bottom, and at 375 the status wrapped to two lines
+ * and covered it: status y 737-812, attribution y 758-802. That is not a
+ * cosmetic overlap - the attribution is a licence obligation, and this project
+ * already treats crediting the wrong source as a licence fault rather than a
+ * tidiness one (D120). Burying the credit under a counter is the same family.
+ *
+ * The status bar moves up. The credit keeps the corner.
+ */
+@media (max-width: 560px) {
+  .status {
+    /*
+     * Clear of the attribution's *measured* height, not a guess at it. At 375
+     * the credit wraps to two lines and occupies y 758-802, so anything ending
+     * below 758 covers it - 34px was not enough and the overlap survived the
+     * first attempt.
+     */
+    bottom: 56px;
+    gap: 10px 14px;
+    padding: 8px 14px;
+    font-size: 11.5px;
+    /* The gradient has to reach the bottom of the screen even though the bar
+       does not, or there is a bright seam under it. */
+    background: linear-gradient(to top, rgba(5, 7, 13, 0.94) 56px, rgba(5, 7, 13, 0.9), transparent);
+    padding-bottom: 8px;
+    margin-bottom: 0;
+  }
+
+  .planet-view .maplibregl-ctrl-attrib {
+    font-size: 10px;
+  }
+
+  /*
+   * The header was 188px on a 812-tall screen - a quarter of it - and squeezed
+   * the search field to 191px starting at x=168. Less padding, a smaller
+   * wordmark, and the search gets the room instead.
+   */
+  .app__header {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  /*
+   * A floor on the search, because the brand row will take everything it is
+   * given. With the controls on one line the field measured **105px**, which
+   * is not a field. Below this it wraps to its own row instead - a row is
+   * cheaper than an unusable input.
+   */
+  .search {
+    flex: 1 1 190px;
+    min-width: 190px;
+  }
+
+  .app__title {
+    font-size: 16px;
+  }
+
+  .app__subtitle {
+    font-size: 10px;
+  }
+
+  .app__brand {
+    padding: 2px;
+    gap: 8px;
+  }
+
+  /*
+   * The body picker, the account and the About link go on **one row**.
+   *
+   * Stacked, they cost three times 44 pixels once the hit areas were made
+   * finger-sized, and the header went from 165 to 200 - worse than before the
+   * pass began. Side by side they cost 44 once. The name and the subtitle keep
+   * their own lines by taking the full width of the wrap.
+   */
+  .app__brand {
+    /*
+     * Full width, so the three controls below the name fit on one line. In a
+     * row beside the search the brand was 123px and they wrapped to three
+     * lines of 44 - which is how making the hit areas finger-sized took the
+     * header from 165 to 200, worse than it started.
+     */
+    flex: 1 0 100%;
+  }
+
+  .app__brandText {
+    display: flex;
+    /*
+     * **`row`, and this is the whole fix.** The base rule is
+     * `flex-direction: column`; setting `display: flex` here overrode nothing,
+     * so the controls kept stacking through two attempts that each made the
+     * header taller instead of shorter. Read the rule being overridden.
+     */
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 14px;
+    row-gap: 0;
+  }
+
+  /*
+   * The subtitle goes. It says "live aircraft" directly above a control that
+   * says Aircraft, Satellites, Ships - and on a phone the duplicate costs a
+   * line the map wants back.
+   */
+  .app__subtitle {
+    display: none;
+  }
+
+  .app__title {
+    flex: 0 0 100%;
+  }
+
+  .legend {
+    /* It was 232x198 over a 375-wide map. Still readable, less of the view. */
+    font-size: 11px;
+  }
+}
+
+/*
+ * **The About page's rows collapsed rather than stacked.**
+ *
+ * Three columns at 375 measured 140 / **15** / 140 - the middle one, which
+ * carries what each source provides, was crushed to fifteen pixels. A grid
+ * that cannot fit its columns should stop being a grid.
+ */
+@media (max-width: 640px) {
+  .about__rows li,
+  .about__rows li:has(.about__rowEnd--wide) {
+    grid-template-columns: 1fr;
+    gap: 5px;
+    padding: 15px 0;
+  }
+
+  .about__rowEnd,
+  .about__rowEnd--wide {
+    /* Left, with everything else. A right-aligned value under a left-aligned
+       label reads as a different column that has fallen over. */
+    text-align: left;
+  }
+
+  .about__layers li {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding-bottom: 22px;
+  }
+
+  .about__count {
+    grid-row: auto;
+  }
+
+  .about__hero {
+    /* The mark is behind the words; on a narrow screen it has to sit further
+       back still or the serif loses its edges over the limb. */
+    padding: 0 22px;
+  }
+
+  .about__mark {
+    opacity: 0.6;
+  }
+}

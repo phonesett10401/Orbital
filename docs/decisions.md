@@ -10508,3 +10508,86 @@ take a measurement. This project already has a memory about instrument error;
 this is two more entries for it.
 
 Thirteen tests on the claims. 832 backend, 1,093 frontend.
+
+## D178 - The mobile pass, and three attempts that made it worse
+
+Phone asked whether the site is friendly on a phone. Measured at 375x812 the
+answer was: it does not break, but it is not comfortable.
+
+### What was already right
+
+**No horizontal overflow anywhere** - the map, the About page, all of it, with
+`scrollWidth` equal to the viewport exactly. That is the commonest mobile
+failure and it was absent. D167 had already measured performance there: 4.2 ms
+p50 with 915 markers. And the solar page's Visit buttons already had a
+`@media (hover: none)` rule, so somebody had thought about touch.
+
+### What was wrong
+
+| | Measured |
+|---|---|
+| Night toggle | **30 x 30** |
+| Basemap toggle | **30 x 30** |
+| Sign in | 61 x 20 |
+| **About** | **84 x 12** |
+| Layer buttons | 75 x 33 |
+
+Against a 44-pixel guideline, everything interactive on the map was about half
+size - and the worst of them was the About link added the day before.
+
+**The status bar sat on the map attribution**: status y 737-812, credit y
+758-802. Not cosmetic. This project already treats crediting the wrong source
+as a licence fault rather than a tidiness one (D120), and burying the credit
+under a counter is the same family.
+
+**The About page's source rows collapsed** rather than stacking: three columns
+measured 140 / **15** / 140, so the middle one - what each source provides -
+was fifteen pixels wide.
+
+### The fixes, and the query that matters
+
+Touch targets are keyed on `(pointer: coarse)`, not on width. That is the
+honest question: what needs 44 pixels is a finger. A phone in landscape is 812
+wide and still a phone; a 500-pixel desktop window is still a mouse.
+
+The status bar moves up 56px - clear of the credit's *measured* height, since
+34px was tried first and the overlap survived it.
+
+The About rows stop being a grid below 640px. A grid that cannot fit its
+columns is not a grid.
+
+### Three attempts made the header taller, not shorter
+
+The header was 188px on an 812-tall screen. Making the hit areas finger-sized
+pushed it to **200**, because the three controls under the wordmark stack.
+
+- Attempt one: pad the text controls. They stayed at 38 and 36 - `box-sizing:
+  border-box` puts padding *inside* the height, so adding some to an element
+  that already has one buys nothing. `min-height` instead.
+- Attempt two: put the controls on one row with `display: flex`. Still stacked.
+- Attempt three: give the brand the full width so they fit. **234**. Worse
+  again, and still stacked.
+
+The cause of all three: `.app__brandText` is `flex-direction: column` in the
+base rule, and every mobile override set `display: flex` without touching
+`flex-direction`. I was overriding a property that was already what I was
+setting it to, and never read the rule I was overriding.
+
+With `flex-direction: row` the header dropped to **139** - and crushed the
+search to 105px, which is not a field. A floor of 190px sends the search to its
+own row: header **185**, search **351** where it was 191.
+
+Marginally shorter than it started, with a search nearly twice as wide and
+every target at 44. That is the trade, and 185 with a usable field beats 139
+with an unusable one.
+
+### The lesson
+
+**Read the rule you are overriding.** Three rounds of a mobile layout getting
+worse, each measured, none diagnosed, because I kept adding declarations
+instead of looking at the four lines they were fighting.
+
+Measured after: every target 44 or more, `tooSmall` empty; status clears the
+credit; About rows stack at 335px each; no horizontal overflow anywhere.
+
+832 backend tests, 1,093 frontend.
