@@ -55,24 +55,88 @@ logger = logging.getLogger(__name__)
 
 FEET_TO_METRES = 0.3048
 
+EARTH_RADIUS_KM = 6371.0
+
 #: A silence at least this long is worth asking about.
 #:
 #: Only a floor: what decides is whether the aircraft *moved* across it (D205).
 FLIGHT_BREAK_SECONDS = 30 * 60.0
 
-#: Below this, the aircraft did not fly across the silence - so it ended a
-#: flight rather than interrupting one.
+#: The speed we credit an aircraft with when guessing how much of a silence it
+#: could have spent flying.
 #:
-#: **Duration cannot separate the two and displacement can.** Measured on two
-#: real traces: RLH5046's turnarounds were 224 and 671 minutes covering 16 and
-#: 64 km - 4 and 6 km/h, an aircraft on a stand. SIA23's ocean crossings were
-#: 195 and 223 minutes covering 3,533 and 3,529 km - 1,088 and 949 km/h, an
-#: aircraft in the cruise. The same trace also holds a 199-minute gap covering
-#: **0 km**, which is where it sat at JFK before this flight began (D205).
+#: Deliberately generous. Crediting a fast cruise means we conclude "it was
+#: flying" wherever that is even arguable, and only call a silence a stop when
+#: the arithmetic leaves no room for doubt.
+CRUISE_KMH = 800.0
+
+#: How much of a silence must be unexplainable by flight before it counts as
+#: the end of one.
 #:
-#: 100 km/h leaves room for taxiing and repositioning without coming close to
-#: any speed an airliner crosses an ocean at.
-FLIGHT_BREAK_MAX_KMH = 100.0
+#: **The earlier test compared the gap against a taxi speed, and that asks the
+#: wrong question (D206).** TAX231 sat at Delhi for most of three hours, but
+#: adsb.lol lost it 400 km short of the airport and did not hear it again until
+#: it was 400 km out on the way back - so the two points either side of the
+#: stop were 402 km apart, 122 km/h over 197 minutes, and a 100 km/h ceiling
+#: called that flight. It drew Bangkok to Delhi and back as one line.
+#:
+#: Displacement was the right instinct and the ratio was the wrong use of it.
+#: What separates a stop from a crossing is not average speed but *time
+#: unaccounted for*: subtract the flying the distance can pay for and see what
+#: is left. TAX231's Delhi gap leaves 167 minutes with nothing to show for
+#: them. SIA23's 99-minute, 1,441 km crossing leaves none at all - the distance
+#: alone needs 108 minutes of flight, more than the silence lasted.
+#:
+#: An hour is chosen against the one thing that can imitate a stop: an
+#: aircraft holding, which moves in circles and so covers no ground. Holds run
+#: to twenty minutes and occasionally forty; an hour of them, with no position
+#: heard throughout, does not happen in scheduled service. And the cost of
+#: being wrong is small - a track that begins on approach rather than at the
+#: gate, which the panel already tells the reader may happen.
+UNEXPLAINED_SILENCE_SECONDS = 60 * 60.0
+
+#: Below this, an aircraft is arriving or leaving rather than going anywhere.
+#:
+#: Three thousand metres and not one, which was too tight by half. VOE9CM's
+#: turnaround at Figari was last heard at 1,882 m and next heard at 1,326 m -
+#: unmistakably an approach and a departure, and both outside a 1,000 m ceiling
+#: that let it draw Lille to Corsica to Paris as one line.
+#:
+#: The ceiling is only the first of three questions now, which is what lets it
+#: be generous: what actually identifies a landing is the shape either side of
+#: the silence, not the number.
+NEAR_THE_GROUND_METRES = 3000.0
+
+#: The same test, for a silence that begins and ends near the ground (D206).
+#:
+#: **AIC1MQ turned round at Trivandrum in fifty-six minutes.** Its trace holds
+#: no ground contact there at all: adsb.lol last heard it descending through
+#: 175 m and heard it next climbing through 495 m, eight kilometres and 56
+#: minutes later. Too short for the hour above, and too low for that hour's
+#: reason to apply - the hold it guards against cannot happen at 175 m.
+#:
+#: Twenty minutes is longer than any gap between a final approach and the
+#: climb that follows it, and shorter than the briefest turnaround.
+NEAR_THE_GROUND_SILENCE_SECONDS = 20 * 60.0
+
+#: What we credit an aircraft near the ground with, in place of `CRUISE_KMH`.
+#:
+#: Crediting 800 km/h down here would be the generosity pointing the wrong way:
+#: it makes a light aircraft's coverage hole - thirty minutes at 200 km/h, a
+#: hundred kilometres - look like time that cannot be accounted for. At this
+#: altitude a hundred kilometres is most of half an hour's honest flying, and
+#: this says so.
+NEAR_THE_GROUND_KMH = 250.0
+
+#: How far back to look for the descent that precedes a landing, and forward
+#: for the climb that follows a departure.
+VERTICAL_WINDOW_SECONDS = 180.0
+
+#: How much height must be given up, or gained, across that window.
+#:
+#: Large enough not to fire on the ordinary wandering of a barometric reading,
+#: small enough that the last three minutes of any approach clear it.
+VERTICAL_CHANGE_METRES = 150.0
 KNOTS_TO_MS = 0.514444
 NAUTICAL_MILE_KM = 1.852
 EARTH_RADIUS_KM = 6371.0088
@@ -149,11 +213,89 @@ VIEWPORT_MAX_RADIUS_NM = 3000
 
 
 def _distance_km(a: "TrackPoint", b: "TrackPoint") -> float:
-    """Great-circle distance, near enough for telling a stand from a cruise."""
-    mean = math.radians((a.lat + b.lat) / 2.0)
-    dy = (b.lat - a.lat) * 111.0
-    dx = (b.lon - a.lon) * 111.0 * math.cos(mean)
-    return math.hypot(dx, dy)
+    """Great-circle distance between two points, in kilometres.
+
+    Haversine rather than the flat approximation it replaced. Over a stand the
+    two agree to metres, but this is also asked about ocean crossings, where
+    flattening the earth *under*-reports the distance - and under-reporting is
+    the dangerous direction: it credits the aircraft with less flying than it
+    did, and a real crossing starts to look like a stop.
+    """
+    lat1, lat2 = math.radians(a.lat), math.radians(b.lat)
+    dlat = lat2 - lat1
+    dlon = math.radians(b.lon - a.lon)
+    h = math.sin(dlat / 2.0) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2.0) ** 2
+    return 2.0 * EARTH_RADIUS_KM * math.asin(min(1.0, math.sqrt(h)))
+
+
+def _near_the_ground(point: "TrackPoint") -> bool:
+    """Was this reading taken close enough to a runway to be part of using one?
+
+    An unknown altitude is not treated as low. Absence of a reading is not
+    evidence of a landing, and guessing one would cut tracks on the strength of
+    a missing field.
+    """
+    return point.altitude is not None and point.altitude <= NEAR_THE_GROUND_METRES
+
+
+def _height_change(
+    points: "tuple[TrackPoint, ...]", index: int, step: int
+) -> float | None:
+    """How much height ``points[index]`` has on the reading a window away.
+
+    Walks `step` at a time - backwards for the approach into a silence, forwards
+    for the climb out of one - and measures against the furthest point still
+    inside `VERTICAL_WINDOW_SECONDS`. Positive means the aircraft was higher
+    there than at `index`, so a descent read backwards and a climb read forwards
+    both come out positive.
+
+    None when either end has no altitude, or when there is no point to compare
+    against: an unmeasurable profile is not a flat one.
+    """
+    here = points[index]
+    if here.altitude is None:
+        return None
+
+    other = None
+    cursor = index + step
+    while 0 <= cursor < len(points):
+        elapsed = abs((points[cursor].timestamp - here.timestamp).total_seconds())
+        if elapsed > VERTICAL_WINDOW_SECONDS:
+            break
+        if points[cursor].altitude is not None:
+            other = points[cursor]
+        cursor += step
+
+    if other is None:
+        return None
+    return other.altitude - here.altitude
+
+
+def _landed_and_left(points: "tuple[TrackPoint, ...]", index: int) -> bool:
+    """Did the aircraft come down before this silence and climb away after it?
+
+    **This is what a turnaround looks like from the outside**, and it is a
+    sharper question than any altitude on its own. AIC1MQ was last heard over
+    Trivandrum descending through 175 m and next heard climbing through 495 m;
+    VOE9CM went quiet at Figari descending through 1,882 m and came back
+    climbing through 1,326 m. Neither trace holds a single ground reading -
+    adsb.lol lost both a few seconds short of the runway - but the shape either
+    side says plainly what happened in between.
+
+    A reading that merely happens to be low says much less. An aircraft can
+    cruise at 3,000 m for hours, and a helicopter can sit at 300 m all morning;
+    what neither does is descend, fall silent, and reappear climbing.
+    """
+    if not (_near_the_ground(points[index]) and _near_the_ground(points[index + 1])):
+        return False
+    descent = _height_change(points, index, -1)
+    climb = _height_change(points, index + 1, 1)
+    return (
+        descent is not None
+        and climb is not None
+        and descent >= VERTICAL_CHANGE_METRES
+        and climb >= VERTICAL_CHANGE_METRES
+    )
 
 
 def current_flight(points: "tuple[TrackPoint, ...]") -> "tuple[TrackPoint, ...]":
@@ -191,22 +333,51 @@ def current_flight(points: "tuple[TrackPoint, ...]") -> "tuple[TrackPoint, ...]"
     # A flight begins at whichever happened last: the wheels leaving a runway,
     # or the aircraft reappearing after a silence too long to be a gap in
     # listening.
+    # **An aircraft parked now still has a last flight, and it is not all of
+    # them (D206).** GFA112 had been on a stand at Bahrain for two hours; its
+    # most recent reading was ground, so the boundary was the final point, the
+    # tail was empty, and the fallback below handed back all twenty hours - a
+    # day of flying drawn as one shape.
+    #
+    # The trailing run of ground readings is the end of the flight that just
+    # finished, not the start of the next one, so the search begins in front of
+    # it. For an aircraft in the air - which is nearly all of them - this is the
+    # last point either way and nothing changes.
+    airborne_end = -1
+    for index in range(len(points) - 1, -1, -1):
+        if points[index].altitude != 0.0:
+            airborne_end = index
+            break
+
+    # Never off the ground in the whole trace: there is no flight to find.
+    if airborne_end < 1:
+        return points
+
     boundary = -1
 
-    for index in range(len(points) - 1, -1, -1):
+    for index in range(airborne_end - 1, -1, -1):
         if points[index].altitude == 0.0:
             boundary = index
             break
 
-    for index in range(len(points) - 2, boundary, -1):
+    for index in range(airborne_end - 1, boundary, -1):
         silence = (points[index + 1].timestamp - points[index].timestamp).total_seconds()
         if silence <= FLIGHT_BREAK_SECONDS:
             continue
-        # **Did the aircraft fly across it?** A long silence over an ocean is
-        # one flight nobody could hear; the same silence spent on a stand is
-        # two. Duration is identical between them and displacement is not.
+        # **How much of the silence can flying account for?** A long gap over
+        # an ocean is one flight nobody could hear; the same gap spent on a
+        # stand is two. Duration is identical between them; the distance the
+        # aircraft has to show for it is not.
+        #
+        # Credit it a fast cruise, ask how long the distance would have taken,
+        # and weigh what is left over - the time it was somewhere else than in
+        # the air (D206).
         travelled = _distance_km(points[index], points[index + 1])
-        if travelled / (silence / 3600.0) < FLIGHT_BREAK_MAX_KMH:
+        speed, allowed = CRUISE_KMH, UNEXPLAINED_SILENCE_SECONDS
+        if _landed_and_left(points, index):
+            speed, allowed = NEAR_THE_GROUND_KMH, NEAR_THE_GROUND_SILENCE_SECONDS
+        flying = min(silence, travelled / speed * 3600.0)
+        if silence - flying >= allowed:
             boundary = index
             break
 

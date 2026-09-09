@@ -542,7 +542,9 @@ class TestFlightTrace:
         assert await p.fetch_track("76cce2") is None
 
 
-def _pt(minutes: float, alt: float | None, lat: float | None = None) -> TrackPoint:
+def _pt(
+    minutes: float, alt: float | None, lat: float | None = None, lon: float = 2.0
+) -> TrackPoint:
     """A point at a time, and optionally at a place.
 
     `lat` matters because a gap is now judged by whether the aircraft *moved*
@@ -551,7 +553,7 @@ def _pt(minutes: float, alt: float | None, lat: float | None = None) -> TrackPoi
     """
     return TrackPoint(
         lat=1.0 + minutes / 1000 if lat is None else lat,
-        lon=2.0,
+        lon=lon,
         altitude=alt,
         timestamp=datetime(2026, 9, 10, tzinfo=timezone.utc) + timedelta(minutes=minutes),
     )
@@ -637,6 +639,163 @@ class TestCurrentFlight:
             _pt(430, 9000.0),
         )
         assert current_flight(track) == track[3:]
+
+    def test_a_stop_the_aircraft_was_lost_on_the_way_into_counts_as_one(self):
+        """TAX231, and why the ratio was the wrong use of displacement (D206).
+
+        It flew Bangkok to Delhi, sat, and flew back. adsb.lol lost it 400 km
+        short of Delhi on the way in and did not hear it again until it was
+        400 km out on the way home, so the two points either side of a
+        197-minute stop stood 402 km apart - 122 km/h, over a ceiling of 100,
+        and the stop read as flight. The panel drew both legs as one path and
+        named Don Mueang as where a Bangkok-bound aircraft had departed from.
+
+        Averaging hides the shape of the gap. 402 km buys thirty minutes of
+        flying at any speed an A330 cruises at; the remaining 167 minutes are
+        time the aircraft has nothing to show for, and that is the stop.
+        """
+        track = (
+            # Outbound, heading north-west towards Delhi, lost near Lucknow.
+            _pt(0, 11000.0, lat=26.95, lon=80.70),
+            _pt(30, 3000.0, lat=28.47, lon=77.62),
+            _pt(60, 1000.0, lat=28.51, lon=77.24),
+            # 197 minutes later, back at cruise 402 km away: the return leg.
+            _pt(257, 10668.0, lat=26.79, lon=80.82),
+            _pt(300, 11000.0, lat=24.00, lon=85.00),
+        )
+        assert current_flight(track) == track[3:]
+
+    def test_an_hour_is_not_yet_long_enough_to_end_a_flight(self):
+        """The threshold's other edge, and what it is set against.
+
+        An aircraft in a hold circles, so it covers no ground - the one thing
+        that can imitate a stand while still flying. Holds run to twenty
+        minutes and sometimes forty. Cutting there would throw away the whole
+        flight and keep the approach, so the silence has to be longer than any
+        hold before it is read as an aircraft that stopped.
+        """
+        track = (
+            _pt(0, 11000.0, lat=0.0),
+            _pt(20, 11000.0, lat=3.0),
+            _pt(65, 3000.0, lat=3.02),   # 45 minutes, near enough to nowhere
+            _pt(80, 500.0, lat=3.1),
+        )
+        assert current_flight(track) == track
+
+    def test_a_descent_then_a_silence_then_a_climb_ends_a_flight(self):
+        """AIC1MQ at Trivandrum, and the hour's blind spot (D206).
+
+        Delhi to Trivandrum and back. Its trace holds no ground contact at
+        Trivandrum at all - adsb.lol last heard it descending through 175 m and
+        heard it next climbing through 495 m, fifty-six minutes and eight
+        kilometres later. Under an hour, so the general threshold kept both
+        legs and drew a line down India and back up it.
+
+        The hour exists to outlast a holding pattern, and no hold ends by
+        descending to 175 m and beginning again by climbing away from it. Where
+        the profile says this plainly, twenty minutes of stillness is enough.
+        """
+        track = (
+            _pt(0, 11000.0, lat=20.0, lon=77.0),
+            _pt(89, 700.0, lat=8.40, lon=76.99),
+            _pt(91, 282.0, lat=8.442, lon=76.959),
+            _pt(92, 175.0, lat=8.455, lon=76.947),   # descending, then silence
+            _pt(148, 495.0, lat=8.509, lon=76.893),  # climbing away, 56 min on
+            _pt(150, 1400.0, lat=8.60, lon=76.80),
+            _pt(160, 3000.0, lat=9.2, lon=77.1),
+        )
+        assert current_flight(track) == track[4:]
+
+    def test_level_flight_either_side_of_a_short_silence_is_not_a_turnaround(self):
+        """What the profile test buys, over asking only how low the aircraft was.
+
+        Being low is weak evidence: an aircraft can cruise at 2,500 m for hours
+        and a helicopter can sit at 300 m all morning. Half an hour of level
+        flight, a silence, and more level flight is a receiver that lost it -
+        possibly a hold - and the twenty-minute rule must not reach that far
+        down on altitude alone.
+        """
+        track = (
+            _pt(0, 2500.0, lat=0.0, lon=0.0),
+            _pt(8, 2500.0, lat=0.04, lon=0.0),
+            _pt(9, 2500.0, lat=0.045, lon=0.0),
+            _pt(10, 2500.0, lat=0.05, lon=0.0),   # level, and then silence
+            _pt(45, 2500.0, lat=0.08, lon=0.0),   # 35 min on, barely moved
+            _pt(46, 2500.0, lat=0.09, lon=0.0),   # and still level
+            _pt(55, 2500.0, lat=0.2, lon=0.0),
+        )
+        assert current_flight(track) == track
+
+    def test_a_turnaround_well_above_a_thousand_metres_still_ends_a_flight(self):
+        """VOE9CM at Figari, and why the ceiling had to be three thousand.
+
+        Lille to Corsica and back to Paris. adsb.lol lost it on the way down
+        through 1,882 m and found it again climbing through 1,326 m, an hour
+        and a minute later - an approach and a departure by any reading of the
+        profile, and both of them outside a 1,000 m ceiling. That one minute
+        under the hour, and those few hundred metres over the ceiling, were
+        enough to draw two legs and a turnaround as a single line.
+        """
+        track = (
+            _pt(0, 11000.0, lat=44.0, lon=6.0),
+            _pt(95, 2035.0, lat=41.60, lon=9.30),
+            _pt(97, 1951.0, lat=41.57, lon=9.25),
+            _pt(98, 1882.0, lat=41.55, lon=9.23),   # descending, then silence
+            _pt(159, 1326.0, lat=41.41, lon=9.00),  # climbing away, 61 min on
+            _pt(161, 1958.0, lat=41.45, lon=8.95),
+            _pt(175, 6919.0, lat=42.21, lon=8.38),
+        )
+        assert current_flight(track) == track[4:]
+
+    def test_a_coverage_hole_low_down_is_not_a_turnaround(self):
+        """And what the distance still buys, once the profile matches.
+
+        A light aircraft spends its whole flight where an airliner only lands,
+        and it climbs and descends all day. Thirty-two minutes unheard is a
+        receiver that cannot see low - and it has a hundred kilometres to show
+        for the time, which is most of half an hour's honest flying at the
+        speed things move down there.
+        """
+        track = (
+            _pt(0, 1500.0, lat=0.0, lon=0.0),
+            _pt(8, 900.0, lat=0.25, lon=0.0),
+            _pt(10, 700.0, lat=0.3, lon=0.0),    # descending into the hole
+            _pt(42, 700.0, lat=1.2, lon=0.0),    # 32 min later, 100 km on
+            _pt(44, 1100.0, lat=1.25, lon=0.0),  # and climbing out of it
+            _pt(52, 1600.0, lat=1.5, lon=0.0),
+        )
+        assert current_flight(track) == track
+
+    def test_an_aircraft_parked_for_hours_shows_the_flight_that_just_ended(self):
+        """GFA112, and the cost of the on-the-ground fallback (D206).
+
+        It had sat at Bahrain for two hours. Its most recent reading was ground,
+        so the boundary was the final point and the tail was empty - and the
+        fallback that protects an aircraft on short final handed back the whole
+        twenty-hour trace instead, several flights drawn as one shape.
+
+        Being on a stand is not the same as being about to touch down. The
+        trailing run of ground readings ends the previous flight rather than
+        beginning the next, so the search for a boundary starts in front of it,
+        and what is left is the leg that just finished - landing included.
+        """
+        track = (
+            _pt(0, 0.0),          # yesterday, on a stand
+            _pt(60, 9000.0),      # yesterday's leg
+            _pt(120, 0.0),        # and its arrival
+            _pt(600, 0.0),        # eight hours parked
+            _pt(660, 0.0),        # then away again
+            _pt(700, 9000.0),
+            _pt(760, 0.0),        # landed, and parked ever since
+            _pt(880, 0.0),
+        )
+        assert current_flight(track) == track[5:]
+
+    def test_a_trace_that_never_left_the_ground_is_kept_whole(self):
+        # Nothing to trim to, and no boundary that means anything. Handing back
+        # the readings there are beats handing back none.
+        track = (_pt(0, 0.0), _pt(60, 0.0), _pt(600, 0.0))
+        assert current_flight(track) == track
 
     def test_ground_contact_after_a_silence_wins_in_turn(self):
         # The rule is "whichever happened last", not "prefer gaps". An aircraft
