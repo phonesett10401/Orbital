@@ -10718,3 +10718,62 @@ horizontal overflow. Header **119**. Chrome **297 of 812 - 37%**, from 54%.
 Desktop unchanged.
 
 832 backend tests, 1,099 frontend.
+
+## D181 - Twenty seconds was a timeout, not a distance
+
+Phone wanted to move the backend from Northflank to Render, because the ping
+from Bangkok to London was too long for aircraft routes to appear.
+
+The ping is real - **TCP connect ~200 ms**, and the 405 kB aircraft list on a
+ten-second poll takes 1.75 s. But it is not what was wrong.
+
+### Six cold lookups
+
+| Aircraft | TTFB |
+|---|---|
+| 00834c | 20.66 s |
+| 06a120 | 20.69 s |
+| 493284 | 20.65 s |
+| 47a05e | **41.14 s** |
+| 074037 | **42.23 s** |
+| a7c08f | 20.77 s |
+
+Multiples of ten, on a link whose round trip is a fifth of a second. A 200 ms
+RTT cannot produce twenty seconds; **that is a timeout, and it is ours** -
+`opensky.py` allows 20 s, which is right for a poller fetching a state vector
+for the whole world and wrong for an optional enhancement to a panel.
+
+`trackSource` came back `observed` every time, which says it plainly: the
+provider's track never arrived and the fallback was used - after waiting the
+full twenty seconds for it. Meanwhile the route itself worked (UAL61 returned
+Brussels with a full airport record) and adsbdb answers in about 0.1 s.
+
+### The fix is concurrency and a budget
+
+The two enrichments ask different services about different things and neither
+reads the other's answer, so awaiting them in sequence only ever cost the sum.
+They now run together, each with three seconds.
+
+**The budget is shielded, and that is the part worth keeping.** The timeout
+gives up *waiting*; it does not cancel the fetch. `FlightHistory` caches what
+it gets and the client re-polls an aircraft for as long as it stays selected,
+so a slow track arrives on a later poll. Cancelling instead would restart the
+same fetch every few seconds, spend a credit each time (D78), and never once
+arrive - a slow upstream turned into a permanently slow one.
+
+### And the measurements had been lying all day
+
+The deployment showed **five pods in one hour** with memory sawtoothing from
+zero to 400 MiB five times. Not crashes - "Container Restarts Reason" said no
+data - but five *deployments*: CD is wired to `main`, and three frontend-only
+pushes redeployed the backend, each one discarding the half hour of AIS
+accumulation behind it. Ships read 12,642, then 709, then climbing again.
+
+I had proposed an OOM at the 512 MB cap. The chart said otherwise. **Worth
+recording as a wrong call, because the shape was right and the cause was not**
+- and because for most of the day both of us were reading numbers from a
+backend that kept restarting underneath us.
+
+Four tests, checked by making the endpoint sequential again: all four fail.
+
+836 backend tests, 1,099 frontend.

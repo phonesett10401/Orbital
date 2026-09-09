@@ -16,6 +16,9 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from app.api.schemas import ObjectListResponse
+import asyncio
+import logging
+
 from app.api.deps import get_flights, get_poller, get_routes, get_settings_dep, get_store
 from app.api.etag import compute_etag, if_none_match_matches
 from app.config import Settings
@@ -27,6 +30,49 @@ from app.models import BBox, ObjectType, TrackedObject, TrackedObjectDetail
 from app.thinning import thin
 
 logger = logging.getLogger(__name__)
+
+logger = logging.getLogger(__name__)
+
+#: How long a detail request will wait for the provider's flight track.
+#:
+#: Three seconds, against an OpenSky client that allows twenty. That twenty is
+#: right for the poller - a state vector for the whole world is worth waiting
+#: for - and wrong here, where the track is an *enhancement* to a panel whose
+#: other fields are already in hand and which falls back to the track we
+#: observed ourselves.
+TRACK_BUDGET_SECONDS = 3.0
+
+#: The same, for the scheduled route. Measured at about 0.1s from the
+#: container and 0.6s from Bangkok, so this is a stall guard rather than a
+#: limit anything normal will reach.
+ROUTE_BUDGET_SECONDS = 3.0
+
+
+async def _within[T](budget: float, coro: object, fallback: T) -> T:
+    """Await ``coro`` for at most ``budget`` seconds, else return ``fallback``.
+
+    **Shielded, and that is the point.** The timeout gives up *waiting*; it does
+    not cancel the work. Both enrichers cache what they get and the client
+    re-polls an aircraft for as long as it stays selected, so a slow track
+    arrives on a later poll instead of being thrown away and re-requested from
+    cold every few seconds - which would turn a slow upstream into a permanently
+    slow one, and spend a credit each time (D78).
+    """
+    task = asyncio.ensure_future(coro)  # type: ignore[arg-type]
+    try:
+        return await asyncio.wait_for(asyncio.shield(task), budget)
+    except TimeoutError:
+        # Nobody is left to see this task fail, and an unretrieved exception is
+        # a warning on stderr rather than a diagnosis. Both enrichers already
+        # log their own failures, so this only has to retrieve it.
+        task.add_done_callback(_swallow)
+        return fallback
+
+
+def _swallow(task: "asyncio.Future[object]") -> None:
+    if not task.cancelled():
+        task.exception()
+
 
 router = APIRouter(prefix="/api/aircraft", tags=["aircraft"])
 
@@ -199,7 +245,23 @@ async def get_aircraft(
     # buying: this is the only endpoint that spends a credit on a user's click
     # rather than on a schedule, and it falls back to what we observed
     # ourselves rather than failing (D78).
-    detail = await flights.enrich(detail)
+    #
     # And what the callsign is *scheduled* to fly, which is the only place a
     # destination can come from -- an aircraft does not transmit one (D88).
-    return await routes.enrich(detail)
+    #
+    # **Together, not one after the other.** They ask different services about
+    # different things and neither reads the other's answer, so awaiting them
+    # in sequence only ever cost the sum. Measured against the deployment, a
+    # first click on an aircraft took **20.6 seconds** - OpenSky's own
+    # 20-second timeout, with a route lookup that answers in about a tenth of a
+    # second queued behind it (D181).
+    track_result, route_result = await asyncio.gather(
+        _within(TRACK_BUDGET_SECONDS, flights.enrich(detail), detail),
+        _within(ROUTE_BUDGET_SECONDS, routes.enrich(detail), detail),
+    )
+
+    # Each enricher returns its own copy of the same input, so the two answers
+    # are combined rather than chained. Only `route` comes from the second.
+    if route_result.route is not None:
+        return track_result.model_copy(update={"route": route_result.route})
+    return track_result
