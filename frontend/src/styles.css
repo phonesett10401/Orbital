@@ -3325,9 +3325,61 @@ body {
 
   /* ---- the header: two rows, not four ---- */
 
+  /*
+   * **The header needs something behind it.**
+   *
+   * It has never had a background: on a globe seen whole the top of the frame
+   * is empty space, and the wordmark sat on black. Zoomed in to a country it is
+   * daylight terrain, and Phone's screenshot from a phone over Thailand shows
+   * "Orbital", "EARTH", "SIGN IN" and "ABOUT" in pale grey on green farmland,
+   * effectively unreadable (D182).
+   *
+   * A scrim rather than a panel: the map should still be visible through the
+   * top of the frame, and a hard-edged bar would cut the globe in two. It
+   * inherits `pointer-events: none` from the rule above, so this darkens the
+   * view without capturing a single drag.
+   */
   .app__header {
     gap: 8px;
     padding: 10px 12px;
+    background: linear-gradient(
+      to bottom,
+      rgba(5, 7, 13, 0.92) 0%,
+      rgba(5, 7, 13, 0.82) 55%,
+      rgba(5, 7, 13, 0) 100%
+    );
+    padding-bottom: 22px;
+  }
+
+  /*
+   * **The world list ran off the right edge.**
+   *
+   * `.bodies__list` is `left: -8px; min-width: 250px`, which was written when
+   * the picker sat at the left of a wide header. On the phone layout the picker
+   * is in the right-hand group, so a 250px list opening leftward starts near the
+   * right edge and finishes past it - Phone's Moon screenshot has "A star has
+   * no surface to st..." and "radius 2,440..." cut off mid-word.
+   *
+   * Anchored to the right instead, and never wider than the screen it opens on.
+   */
+  .bodies__list {
+    /*
+     * Anchored to the screen, not to the button.
+     *
+     * Anchoring right of the picker only moved the problem: the picker is the
+     * first of three controls in the right-hand group, so a 300px list opening
+     * leftward from it started at **x -42**. There is no edge of this button
+     * that a list this wide can hang from on a 375px screen, so it hangs from
+     * the viewport and always fits.
+     */
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: 60px;
+    width: auto;
+    min-width: 0;
+    max-height: 55vh;
+    overflow-y: auto;
   }
 
   .app__brand {
@@ -3439,7 +3491,8 @@ body {
     position: fixed;
     left: 50%;
     transform: translateX(-50%);
-    bottom: 124px;
+    /* Credit + status bar + a gap, all from the one measurement (D182). */
+    bottom: calc(var(--attribution-height, 44px) + 84px + env(safe-area-inset-bottom, 0px));
     z-index: 3;
   }
 
@@ -3478,18 +3531,27 @@ body {
 
   .status {
     /*
-     * Clear of the attribution's *measured* height, not a guess at it. At 375
-     * the credit wraps to two lines and occupies y 758-802, so anything ending
-     * below 758 covers it - 34px was not enough and the overlap survived the
-     * first attempt.
+     * **Nothing here is a constant any more (D182).**
+     *
+     * Three fixed offsets in a row were wrong - 34, then 44, then 56 - because
+     * the credit is not a fixed height. It wraps at a phone's width, and it
+     * wraps again on a body whose imagery carries an extra attribution: Phone's
+     * screenshot of the Moon showed a three-line credit straight through the
+     * status bar that had cleared it on Earth.
+     *
+     * `--attribution-height` is published by `attributionHeight.ts` from the
+     * credit as actually drawn, and re-published when it wraps. Everything in
+     * this stack is positioned from it, so one measurement moves all of them.
      */
-    bottom: 56px;
+    bottom: calc(var(--attribution-height, 44px) + 12px + env(safe-area-inset-bottom, 0px));
     gap: 6px 14px;
     padding: 8px 14px;
     font-size: 11.5px;
     /* The gradient has to reach the bottom of the screen even though the bar
        does not, or there is a bright seam under it. */
     background: linear-gradient(to top, rgba(5, 7, 13, 0.94) 56px, rgba(5, 7, 13, 0.9), transparent);
+    /* Reaches the bottom of the screen even though the bar does not. */
+    box-shadow: 0 12px 0 12px rgba(5, 7, 13, 0.72);
     padding-bottom: 8px;
     margin-bottom: 0;
   }
@@ -3514,8 +3576,27 @@ body {
    * 188 is the measured top of that stack plus a gap, not a guess. The panel
    * then runs 259-624, clear of the key pill at 128-172 (D180).
    */
-  .panel {
-    bottom: 188px;
+  /*
+   * The detail panel and the Moon's spacecraft list both sit above the whole
+   * bottom stack. **The Moon list was missed in D181** - it is the same
+   * `bottom: 44px` as the panel, on a different rule, and Phone's screenshot
+   * caught it running under the status bar with Chandrayaan-2 cut off the
+   * bottom of the screen.
+   */
+  .panel,
+  .moonlist {
+    bottom: calc(var(--attribution-height, 44px) + 148px + env(safe-area-inset-bottom, 0px));
+    /* Enough for its content or the room available, whichever is smaller: a
+       list of spacecraft that runs off the bottom of the screen is a list with
+       a spacecraft nobody can read. */
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+
+  .moonlist {
+    left: 12px;
+    right: 12px;
+    width: auto;
   }
 }
 

@@ -10777,3 +10777,64 @@ backend that kept restarting underneath us.
 Four tests, checked by making the endpoint sequential again: all four fail.
 
 836 backend tests, 1,099 frontend.
+
+## D182 - What a real phone showed that an emulated one did not
+
+Phone sent two screenshots from an actual handset. D180 had measured a mobile
+layout at 375 x 812 in a browser pane and found every pair of elements clear of
+every other. Three faults survived that, and each survived for the same reason:
+**the measurement was of one screen, showing one world, at one zoom.**
+
+### The header had no background, and never had
+
+Over a globe seen whole the top of the frame is empty space and the wordmark
+sits on black. Zoomed to a country it is daylight terrain. The screenshot over
+Thailand has "Orbital", "EARTH", "SIGN IN" and "ABOUT" in pale grey on green
+farmland, effectively unreadable.
+
+Nothing overlapped. Every box was where D180 put it. The defect was contrast,
+which is not a rectangle and so was not in the measurement. A scrim, not a bar:
+it inherits `pointer-events: none`, so it darkens the view without capturing a
+drag.
+
+### The world list ran off the right edge
+
+`.bodies__list` is `left: -8px; min-width: 250px`, written when the picker sat
+at the left of a wide header. The phone layout puts it in the right-hand group,
+so the list opened straight off the screen - "A star has no surface to st...",
+"radius 2,440...", cut mid-word.
+
+Right-anchoring it only moved the problem: the picker is the *first* of three
+controls in that group, so the list then started at **x -42**. There is no edge
+of that button a 300px list can hang from on a 375px screen. It hangs from the
+viewport instead.
+
+### The status bar covered the credit again - the third time
+
+34px in D178. 44 measured, 56 set, in D180. Both were right for the screen they
+were measured on and wrong on the Moon, whose imagery carries an extra
+attribution that wraps the credit to three lines.
+
+**So it stopped being a constant.** `attributionHeight.ts` measures the credit
+where it is drawn and publishes `--attribution-height`; the status bar, the
+layer bar, the detail panel and the Moon list are all positioned from it, plus
+`env(safe-area-inset-bottom)` for the browser chrome an emulator does not have.
+A wrap moves the whole stack the same frame it happens.
+
+This is a licence obligation, not tidiness. Crediting the wrong source is
+treated here as a licence fault (D120); burying the credit is the same family.
+
+### And the Moon list was simply missed
+
+`.moonlist` carries the same `bottom: 44px` as `.panel` on a different rule.
+D181 lifted the panel and did not grep for its siblings, so the list ran under
+the status bar with Chandrayaan-2 cut off the bottom of the screen.
+
+### The lesson
+
+**An emulated phone is a screenshot of a guess.** Six tests here, but the three
+faults were found by a person holding a device - a bright basemap, a body with a
+longer credit, and a browser with its own chrome at the bottom. None of those
+are conditions a viewport size reproduces.
+
+836 backend tests, 1,105 frontend.

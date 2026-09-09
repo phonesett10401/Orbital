@@ -23,6 +23,7 @@ import { config } from '../config';
 import { useOrbitalStore } from '../state/store';
 import { leaveCrossing } from '../journey';
 import { initialZoom } from '../initialZoom';
+import { trackAttributionHeight } from '../attributionHeight';
 import {
   AIRCRAFT_LABEL_LAYER,
   AIRCRAFT_LAYER,
@@ -497,6 +498,7 @@ export function PlanetView() {
       drawMoonLeader(map, state.moonCraft.find((c) => c.id === state.selectedMoonId));
     };
     let cleanUpResize: (() => void) | null = null;
+    let stopMeasuringCredit: (() => void) | null = null;
     let frame = 0;
     let stallTimer = 0;
 
@@ -649,6 +651,12 @@ export function PlanetView() {
           // `elementFromPoint` returned the status bar. The dev readout moves
           // down to make room, because it is the thing that can afford to.
           map.addControl(nightControl, 'top-right');
+
+          // The credit is now on screen, so its height can be published for the
+          // bars that have to stay above it. Measured rather than assumed:
+          // three fixed offsets in a row were wrong, because the credit wraps
+          // (D182).
+          stopMeasuringCredit = trackAttributionHeight(container, document.documentElement);
 
           // Both controls exist now, so the world underneath can have its
           // say. Matters on the first frame too: the body can arrive from
@@ -1311,6 +1319,7 @@ export function PlanetView() {
       cancelAnimationFrame(frame);
       unsubscribe?.();
       cleanUpResize?.();
+      stopMeasuringCredit?.();
       window.clearTimeout(stallTimer);
       diagnostics?.dispose();
       model?.dispose();
