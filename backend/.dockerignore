@@ -1,0 +1,36 @@
+# What never belongs in the image.
+#
+# The first entry is the important one: `.env` holds the OpenSky client secret
+# and the aisstream key, and `COPY app ./app` would not pick it up today - but
+# a future `COPY . .` would, and a secret baked into an image layer is a secret
+# published to everyone who can pull it. Excluding it here means that change
+# cannot quietly leak them.
+.env
+.env.*
+!.env.example
+
+# The virtualenv is Windows-built and would be wrong in a Linux image even if
+# it were small, which at several hundred megabytes it is not.
+.venv/
+venv/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Tests and their fixtures are not needed to serve traffic. They run in CI and
+# on a developer's machine, where the network is allowed to be absent.
+tests/
+
+# Whatever the accounts database happens to hold locally. The container makes
+# its own at `/srv/data`.
+*.db
+*.db-journal
+*.sqlite3
+data/
+
+.git/
+.gitignore
+*.md
