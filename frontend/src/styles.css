@@ -2848,3 +2848,363 @@ body {
   color: var(--text-dim);
   font-size: 11px;
 }
+
+
+/*
+ * ---- about the site (D177) ----
+ *
+ * Phone pointed at a studio site whose look is worth having: a very dark
+ * ground under a grid of registration crosshairs, tiny letterspaced labels
+ * against display type, and content that rolls in as you scroll.
+ *
+ * What is borrowed is that vocabulary. What is not borrowed is anything of
+ * theirs - no mark, no copy, no asset. The thing at the top of this page is
+ * **our** logo, built out of a globe, an orbit and a satellite, which is what
+ * it is a picture of and what the rest of the application draws from real
+ * data. The display face is the same system serif the solar page uses, so the
+ * two pages read as one product rather than as two references.
+ */
+
+.about {
+  position: absolute;
+  inset: 0;
+  z-index: 26;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #070b14;
+  color: var(--text);
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * The crosshair grid, generated rather than fetched.
+ *
+ * Fixed rather than scrolling with the content: it reads as the surface the
+ * page is printed on, and a grid that moved would read as another layer of
+ * content sliding past.
+ */
+.about__grid {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='104' height='104'%3E%3Cpath d='M52 46v12M46 52h12' stroke='%23e9ecee' stroke-opacity='0.16' stroke-width='1'/%3E%3C/svg%3E");
+  /* A wash that keeps the corners darker than the middle, so the grid fades
+     out at the edges instead of stopping at them. */
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 40%, #000 20%, transparent 78%);
+  mask-image: radial-gradient(120% 90% at 50% 40%, #000 20%, transparent 78%);
+}
+
+.about__grain {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='a'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23a)'/%3E%3C/svg%3E");
+}
+
+/* ---- the hero ---- */
+
+.about__hero {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 0 clamp(20px, 5vw, 72px);
+  text-align: center;
+}
+
+/*
+ * The mark, behind the words rather than above them.
+ *
+ * Large and low-contrast: it is the ground the sentence sits on. At the size
+ * a logo is usually shown it would be a badge, which is the one thing a page
+ * about the project should not open with.
+ */
+.about__mark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -54%);
+  width: min(760px, 92vw);
+  height: min(760px, 92vw);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.about__heroText {
+  position: relative;
+  max-width: 46ch;
+}
+
+.about__eyebrow {
+  margin: 0 0 18px;
+  font-size: 10px;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.about__title {
+  margin: 0;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Constantia,
+    'Book Antiqua', Georgia, serif;
+  font-weight: 500;
+  font-size: clamp(34px, 6vw, 68px);
+  line-height: 0.98;
+  letter-spacing: -0.015em;
+  color: #e9ecee;
+  /* The mark is behind this; without a shadow the serif loses its edges over
+     the bright limb. */
+  text-shadow: 0 2px 30px rgba(7, 11, 20, 0.85);
+}
+
+.about__lede {
+  margin: 22px auto 0;
+  max-width: 42ch;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: rgba(232, 236, 244, 0.78);
+  text-shadow: 0 1px 16px rgba(7, 11, 20, 0.9);
+}
+
+.about__scrollHint {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  margin: 0;
+  font-size: 9.5px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  animation: about-hint 2.4s ease-in-out infinite;
+}
+
+@keyframes about-hint {
+  0%, 100% { opacity: 0.35; transform: translate(-50%, 0); }
+  50% { opacity: 0.9; transform: translate(-50%, 5px); }
+}
+
+/* ---- the sections ---- */
+
+.about__section {
+  position: relative;
+  z-index: 2;
+  max-width: 940px;
+  margin: 0 auto;
+  padding: clamp(64px, 11vh, 120px) clamp(20px, 5vw, 48px);
+}
+
+.about__label {
+  margin: 0 0 34px;
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/*
+ * Rolling in.
+ *
+ * Once in, it stays in - a section that faded out again on the way back up
+ * would make scrolling feel like it was undoing something.
+ */
+.about__reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 700ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 800ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.about__reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---- the layers ---- */
+
+.about__layers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 34px;
+}
+
+.about__layers li {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 2.2fr;
+  gap: 6px 28px;
+  align-items: baseline;
+  padding-bottom: 26px;
+  border-bottom: 1px solid rgba(233, 236, 238, 0.1);
+}
+
+.about__count {
+  grid-row: span 2;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Constantia, Georgia, serif;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1;
+  color: #e9ecee;
+  font-variant-numeric: tabular-nums;
+}
+
+.about__layerName {
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.about__origin {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: rgba(232, 236, 244, 0.74);
+}
+
+.about__note {
+  margin: 30px 0 0;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(151, 163, 184, 0.66);
+}
+
+/* ---- label / value rows ---- */
+
+.about__rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.about__rows li {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.1fr) minmax(0, 1fr) minmax(140px, 1fr);
+  gap: 20px;
+  align-items: baseline;
+  padding: 17px 0;
+  border-bottom: 1px solid rgba(233, 236, 238, 0.1);
+}
+
+.about__rowName {
+  font-size: 15px;
+  color: #e9ecee;
+}
+
+.about__rowMid,
+.about__rowEnd {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.about__rowEnd {
+  text-align: right;
+}
+
+/* The build block has two columns rather than three. */
+.about__rows li:has(.about__rowEnd--wide) {
+  grid-template-columns: minmax(140px, 1fr) minmax(0, 2fr);
+}
+
+.about__rowEnd--wide {
+  text-align: right;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 13.5px;
+  color: rgba(232, 236, 244, 0.78);
+}
+
+/* ---- the refusals ---- */
+
+.about__refusals {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 30px;
+}
+
+.about__refusals li {
+  padding-left: 22px;
+  border-left: 1px solid rgba(233, 236, 238, 0.18);
+}
+
+.about__claim {
+  margin: 0 0 8px;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Constantia, Georgia, serif;
+  font-size: clamp(17px, 2.2vw, 22px);
+  line-height: 1.3;
+  /* Struck through, because the sentence is one the map refuses to make. */
+  color: rgba(232, 236, 244, 0.5);
+  text-decoration: line-through;
+  text-decoration-color: rgba(233, 236, 238, 0.3);
+}
+
+.about__reason {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: rgba(232, 236, 244, 0.82);
+}
+
+/* ---- the way out ---- */
+
+.about__close {
+  position: fixed;
+  left: clamp(20px, 3.4vw, 48px);
+  bottom: clamp(18px, 3vw, 38px);
+  z-index: 4;
+  padding: 0 0 5px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(233, 236, 238, 0.22);
+  border-radius: 0;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 220ms ease, border-color 220ms ease;
+}
+
+.about__close:hover,
+.about__close:focus-visible {
+  color: #e9ecee;
+  border-bottom-color: rgba(233, 236, 238, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about__reveal {
+    transition: none;
+  }
+  .about__scrollHint {
+    animation: none;
+  }
+}
+
+/* The way in to the About page, sized to sit under the wordmark (D177). */
+.app__about {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+
+.app__about:hover,
+.app__about:focus-visible {
+  color: var(--text);
+}

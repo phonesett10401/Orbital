@@ -22,6 +22,7 @@ import { AdSlot } from './components/AdSlot';
 import { PremiumPage } from './components/PremiumPage';
 import { SignInPage } from './components/SignInPage';
 import { JourneyScreen } from './components/JourneyScreen';
+import { AboutPage } from './components/AboutPage';
 import { SolarSystemPage } from './components/SolarSystemPage';
 import { WarpField } from './components/WarpField';
 import { MoonSatelliteList } from './components/MoonSatelliteList';
@@ -121,6 +122,15 @@ export function App() {
                 around it: an account is about the reader, not the body under
                 the camera (D148). */}
             <AccountMenu />
+            {/* Beside the account rather than in the layer bar: the layers are
+                about what is on the map, and this is about the map (D177). */}
+            <button
+              type="button"
+              className="app__about"
+              onClick={() => useOrbitalStore.getState().setOpenPage('about')}
+            >
+              About
+            </button>
           </div>
         </div>
         {onEarth && <SearchBar />}
@@ -153,6 +163,7 @@ export function App() {
       {/* Its own canvas and its own camera, over everything, only while open
           (D163). */}
       <SolarSystemPage />
+      <AboutPage />
     </div>
   );
 }

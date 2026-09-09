@@ -10438,3 +10438,73 @@ suite cannot run MapLibre. What it has instead is a reason written where the
 line is.
 
 832 backend tests, 1,080 frontend.
+
+## D177 - A page about the site, opening on the mark in three dimensions
+
+Phone asked for an About page in the manner of a studio site, corrected the
+brief once - *"I mean about the website, no need to introduce us"* - and then
+asked for the logo built in 3D at the top with the content rolling in on
+scroll.
+
+### The mark is the subject, not a badge
+
+`public/logo.svg` is a globe with an orbit wrapped round it and one satellite on
+the near arc. This application spends the rest of its time drawing globes,
+orbits and satellites from real geometry, so the About page builds the mark the
+same way rather than showing a picture of itself.
+
+The wrap is *real* in both, and that is the argument for doing it: in the SVG it
+took two arcs and a clip path drawn in a deliberate order, because SVG has no
+depth. Here the ring's radius simply exceeds the globe's and half of it passes
+behind.
+
+**Nothing is fetched.** The colour comes from `surfaceTexture`, the procedural
+latitude bands the solar page already uses for bodies with no mosaic - so the
+mark costs one request fewer than a logo image would and works offline like the
+rest of the app (D30).
+
+It is deliberately **dark**. The title sits over it, and a lit globe behind a
+serif is a globe with an unreadable sentence on it: the ring carries the
+brightness, the sphere carries the shape.
+
+### What it says is data
+
+`aboutFacts.ts` holds every claim and `aboutFacts.test.ts` checks them against
+the rest of the repository, because a page about the project is the easiest
+place in the application to write something flattering and untrue:
+
+- the three layers are checked against **the store's own registry**, so the page
+  cannot describe a layer the app does not serve;
+- every layer must declare whether its position was **observed or computed**,
+  which is the distinction the whole map is built on;
+- OpenSky must still say *non-commercial* and aisstream *unstated*, because
+  rounding either to "free" throws away the finding (D165) that constrains what
+  this could ever become.
+
+The counts are **asked of the running system** as the page loads. They move, and
+the last figures copied into a document were stale within three sessions and one
+of them was wrong the day it was written. `null` renders as an em dash rather
+than a zero: zero is a claim - it says the sky is empty.
+
+The most distinctive section is the one listing what the map **will not** say -
+each with the reason. Not a disclaimer: every line is a decision with a defect
+behind it, and a tracker's failure mode is drawing something confident where it
+has nothing.
+
+### A false alarm worth recording
+
+Driving the finished page, the scroll appeared to move on its own - I set it to
+1400 and it drifted to the bottom, oscillating. I nearly went looking for a
+layout thrash in the reveal transitions.
+
+Measured instead, from a clean load with no input: `scrollTop` stayed at 0 for
+four seconds, unchanged. **The drifting was momentum from my own wheel commands
+in the browser pane**, not the page.
+
+That is twice in one session - D176 was the same shape, where "the Earth is not
+centred" turned out to be a centred Earth at the wrong zoom. Both times the
+instrument was the problem and both times the fix was to stop interpreting and
+take a measurement. This project already has a memory about instrument error;
+this is two more entries for it.
+
+Thirteen tests on the claims. 832 backend, 1,093 frontend.
