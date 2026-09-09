@@ -58,6 +58,19 @@ HEADER_REMAINING = "X-Rate-Limit-Remaining"
 HEADER_RETRY_AFTER = "X-Rate-Limit-Retry-After-Seconds"
 
 
+#: How many times to ask for a token before giving up.
+#:
+#: Three, because the failure being covered is a connection that does not come
+#: up rather than a server that says no - and a second attempt a moment later is
+#: the cheapest thing that has ever fixed one.
+TOKEN_ATTEMPTS = 3
+
+#: Waits between those attempts, in seconds. Short: the poller is on a
+#: two-minute cycle and a token nobody has is worth a couple of seconds of
+#: waiting, not a minute of it.
+TOKEN_RETRY_BACKOFF_SECONDS = (0.5, 2.0)
+
+
 def describe(exc: BaseException) -> str:
     """An exception rendered so the log line says something.
 
@@ -144,18 +157,49 @@ class OpenSkyProvider(Provider):
             return await self._request_token()
 
     async def _request_token(self) -> str:
-        try:
-            response = await self._client.post(
-                self.token_url,
-                data={
-                    "grant_type": "client_credentials",
-                    "client_id": self.client_id,
-                    "client_secret": self.client_secret,
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-        except httpx.HTTPError as exc:
-            raise ProviderUnavailable(f"token request failed: {describe(exc)}") from exc
+        """Ask for a token, retrying a connection that does not come up.
+
+        **The failure this exists for is intermittent, not permanent.** In
+        production the token request began failing with `ConnectTimeout` -
+        London to Zurich, no route established inside twenty seconds - while
+        succeeding minutes earlier and minutes later. A single attempt turned a
+        transient network hiccup into the loss of every flight track until some
+        later poll happened to get through, because the token had expired and
+        nothing else would ask again for two minutes (D197).
+
+        Only transport errors are retried. A 400 from the auth server is an
+        answer, and asking again more slowly does not improve it.
+        """
+        last: httpx.TransportError | None = None
+        for attempt in range(TOKEN_ATTEMPTS):
+            try:
+                response = await self._client.post(
+                    self.token_url,
+                    data={
+                        "grant_type": "client_credentials",
+                        "client_id": self.client_id,
+                        "client_secret": self.client_secret,
+                    },
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+                break
+            except httpx.TransportError as exc:
+                last = exc
+                remaining = TOKEN_ATTEMPTS - attempt - 1
+                if not remaining:
+                    raise ProviderUnavailable(
+                        f"token request failed: {describe(exc)}"
+                    ) from exc
+                logger.info(
+                    "token request failed (%s), %d attempt(s) left",
+                    describe(exc),
+                    remaining,
+                )
+                await asyncio.sleep(TOKEN_RETRY_BACKOFF_SECONDS[attempt])
+            except httpx.HTTPError as exc:
+                raise ProviderUnavailable(f"token request failed: {describe(exc)}") from exc
+        else:  # pragma: no cover - the loop always breaks or raises
+            raise ProviderUnavailable(f"token request failed: {describe(last)}")
 
         if response.status_code != 200:
             raise ProviderUnavailable(

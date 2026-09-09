@@ -11507,3 +11507,50 @@ thrown away every track belonging to an aircraft that had gone quiet.
 Four tests, checked by disabling the guard: the one naming the fault fails.
 
 **856 backend tests**, 1,114 frontend.
+
+## D197 - ConnectTimeout, and a retry that had to earn it
+
+D195's fix worked and the log finally said what it had been hiding:
+
+```
+opensky failed this poll: token request failed: ConnectTimeout
+```
+
+**Not credentials, not quota, not our code.** London to Zurich, no TCP
+connection inside twenty seconds - and intermittent: the same pod authenticated
+happily from 17:50 to 17:59 and began failing at 18:02.
+
+A single attempt turned that hiccup into the loss of every flight track, because
+the token had expired, nothing else would ask for two minutes, and each poll
+made one attempt and gave up. So the token request is asked three times with
+half a second and two seconds between, and only for **transport** errors: a 400
+from the auth server is an answer, and asking again more slowly does not improve
+it.
+
+### A false alarm in the same screenshot
+
+The credit lines showed `last request cost 632`, `672`, `692` against a 4,000
+daily allowance, which reads like the account being drained in an hour. It is a
+reporting artifact. OpenSky returns a different rate-limit counter for different
+endpoints and this code keeps one variable for all of them, so `remaining`
+alternates between two series - about 2,970 and about 3,650 - and the "cost" is
+the difference between two unrelated buckets. The real cost is the `4` on every
+other line. Worth recording because the number is alarming and wrong, and
+somebody will read it again.
+
+### Two vacuous tests, one after the other
+
+The retry test for refusals asserted that a 400 is not retried - and passed
+against the mutation that retried everything, because **a 400 arrives as a
+response, not an exception**, and never reaches the retry loop at all. It was
+testing a path the change could not affect.
+
+Rewritten to raise a non-transport error, it then failed against the *correct*
+code, because `httpx.UnsupportedProtocol` **is** a `TransportError`. The premise
+was wrong twice before the test discriminated anything.
+
+The fix both times was to check rather than assume - the hierarchy printed, the
+mutation run - and the standing rule earns its keep again: **a test that has not
+been seen to fail is not yet evidence.**
+
+**860 backend tests**, 1,114 frontend.

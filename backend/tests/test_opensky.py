@@ -531,3 +531,113 @@ class TestTokenFailureNamesItself:
             with pytest.raises(ProviderError) as caught:
                 await provider._request_token()
             assert not str(caught.value).rstrip().endswith(":"), str(caught.value)
+
+
+async def _no_wait(_seconds: float) -> None:
+    """Retries without the waiting, so the suite stays fast."""
+
+
+class TestTokenRetry:
+    """A connection that does not come up is worth asking about twice (D197).
+
+    Production failed with `ConnectTimeout` - London to Zurich, no route inside
+    twenty seconds - while succeeding minutes either side. One attempt turned
+    that into the loss of every flight track until a later poll got lucky.
+    """
+
+    def _provider(self, handler):
+        import httpx
+
+        from app.providers.opensky import OpenSkyProvider
+
+        return OpenSkyProvider(
+            client_id="id",
+            client_secret="secret",
+            client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        )
+
+    @pytest.mark.anyio
+    async def test_a_transient_timeout_is_retried_and_succeeds(self, monkeypatch):
+        import httpx
+
+        from app.providers import opensky as module
+
+        monkeypatch.setattr(module.asyncio, "sleep", _no_wait)
+        calls = {"n": 0}
+
+        def flaky(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise httpx.ConnectTimeout("")
+            return httpx.Response(200, json={"access_token": "t", "expires_in": 1800})
+
+        token = await self._provider(flaky)._request_token()
+        assert token == "t"
+        assert calls["n"] == 2
+
+    @pytest.mark.anyio
+    async def test_it_gives_up_rather_than_asking_for_ever(self, monkeypatch):
+        import httpx
+
+        from app.providers import opensky as module
+        from app.providers.base import ProviderUnavailable
+
+        monkeypatch.setattr(module.asyncio, "sleep", _no_wait)
+        calls = {"n": 0}
+
+        def always_fails(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            raise httpx.ConnectTimeout("")
+
+        with pytest.raises(ProviderUnavailable) as caught:
+            await self._provider(always_fails)._request_token()
+
+        assert calls["n"] == module.TOKEN_ATTEMPTS
+        # And the message still names the exception, per D194/D195.
+        assert str(caught.value).rstrip().endswith("ConnectTimeout")
+
+    @pytest.mark.anyio
+    async def test_a_refusal_is_answered_once(self, monkeypatch):
+        # A 400 is an *answer*, and it comes back as a response rather than an
+        # exception - so it never reaches the retry loop at all. Asserted
+        # because "the auth server said no" must not look like "the network was
+        # busy".
+        import httpx
+
+        from app.providers import opensky as module
+        from app.providers.base import ProviderUnavailable
+
+        monkeypatch.setattr(module.asyncio, "sleep", _no_wait)
+        calls = {"n": 0}
+
+        def refuses(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            return httpx.Response(400, text="invalid_client")
+
+        with pytest.raises(ProviderUnavailable):
+            await self._provider(refuses)._request_token()
+        assert calls["n"] == 1
+
+    @pytest.mark.anyio
+    async def test_a_non_transport_error_is_not_retried(self, monkeypatch):
+        # **The distinction the retry rests on.** A transport error means the
+        # connection did not come up, which a second attempt can fix. Anything
+        # else is a fault in the request itself, and asking again more slowly
+        # does not improve a malformed one - it just spends the time.
+        import httpx
+
+        from app.providers import opensky as module
+        from app.providers.base import ProviderUnavailable
+
+        monkeypatch.setattr(module.asyncio, "sleep", _no_wait)
+        calls = {"n": 0}
+
+        def broken(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            # Not a TransportError - checked against the hierarchy rather than
+            # assumed, after `UnsupportedProtocol` turned out to be one.
+            raise httpx.TooManyRedirects("round and round")
+
+        with pytest.raises(ProviderUnavailable):
+            await self._provider(broken)._request_token()
+        assert calls["n"] == 1, "a non-transport failure was retried"
