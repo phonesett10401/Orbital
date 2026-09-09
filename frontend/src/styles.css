@@ -1291,108 +1291,6 @@ body {
   font-weight: 600;
 }
 
-/*
- * ---- the view options, behind one button (D188) ----
- *
- * The basemap cycle and the night toggle both live in the map's top-right
- * corner. Both are useful, neither is used often, and together they were two
- * buttons standing over the view all the time - most of the chrome down the
- * right-hand edge of a phone.
- *
- * `viewMenuControl.ts` adds a third button and toggles a class; everything
- * about what that means is here. The class lands on `.planet-map` - MapLibre's
- * own container, which is the element `map.getContainer()` returns - and not on
- * `.planet-view`, which is the wrapper around it. The two controls are not moved, reparented or
- * told anything - MapLibre still owns them and their order - so a fourth one
- * added later needs no change to either file.
- */
-
-/* Closed: only the menu button is on the map. */
-.planet-view .maplibregl-ctrl-top-right .maplibregl-ctrl-group:not(.orbital-view-menu) {
-  display: none;
-}
-
-.planet-map.is-view-open .maplibregl-ctrl-top-right .maplibregl-ctrl-group:not(.orbital-view-menu) {
-  display: block;
-}
-
-/*
- * Open: a panel, not two loose buttons.
- *
- * The group is laid out in reverse so the options rise *from* the button that
- * opened them rather than appearing above it in an order nobody chose - the
- * menu control is added last, so in reverse it comes first.
- */
-.planet-map.is-view-open .maplibregl-ctrl-top-right {
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: stretch;
-  gap: 4px;
-  padding: 6px;
-  background: var(--surface);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-}
-
-.planet-map.is-view-open .maplibregl-ctrl-top-right .maplibregl-ctrl-group {
-  margin: 0;
-  background: none;
-  border: 0;
-  box-shadow: none;
-}
-
-/*
- * **The labels come from the buttons' own `title` attributes.**
- *
- * Both already carry one, and both say what pressing will *do* rather than
- * what is currently on (D68) - which is exactly what a menu row should read.
- * Taking the text from there means the label cannot drift from the tooltip,
- * and neither control had to learn it has a menu.
- */
-/*
- * `.app` is on the front only to win a specificity tie.
- *
- * The touch rule that squares these buttons off at 44 x 44 (D178) has the same
- * weight as this one and comes later in the file, so it took the width and the
- * label was clipped at 44 against the 133 it needed. One more class settles it
- * without either rule needing `!important`.
- */
-.app .planet-map.is-view-open .maplibregl-ctrl-top-right button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  /* Sized by the label, with the touch floor kept as a minimum. */
-  width: auto;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 12px 0 0;
-  white-space: nowrap;
-  text-align: left;
-}
-
-.app .planet-map.is-view-open .maplibregl-ctrl-top-right .maplibregl-ctrl-group {
-  width: auto;
-}
-
-.planet-map.is-view-open .maplibregl-ctrl-top-right button::after {
-  content: attr(title);
-  font: inherit;
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  color: var(--text-dim);
-}
-
-.planet-map.is-view-open .maplibregl-ctrl-top-right button:hover::after {
-  color: var(--text);
-}
-
-/* The menu button keeps its glyph alone - its own title would label it twice. */
-.planet-map.is-view-open .maplibregl-ctrl-top-right .orbital-view-toggle::after {
-  content: none;
-}
-
 /* ---- detail panel ---- */
 
 .panel {
@@ -3648,12 +3546,15 @@ body {
   .planet-view .maplibregl-ctrl-top-right {
     /*
      * MapLibre puts a 10px margin on its control group, so the button's own box
-     * starts ten pixels below whatever this says. 118 + 10 lands its top on 128
-     * with the other two (D188). The menu button is MapLibre's own 29px rather
-     * than our 36, so it is nudged three further to put the three *centres* on
-     * a line rather than their tops.
+     * starts ten pixels below whatever this says.
+     *
+     * The three things on this line were 44, 36 and 44 tall and all began at
+     * y128 - they shared a top edge and nothing else, which is what read as
+     * crooked. This puts their *centres* on one line instead: 114 + 10 starts a
+     * 44px button at 124, centred on 146, where the 36px key pill and layer bar
+     * already are (D188).
      */
-    top: 121px;
+    top: 114px;
   }
 
   /* ---- the layer switcher, at the bottom where the thumb is ---- */

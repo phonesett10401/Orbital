@@ -138,7 +138,6 @@ import {
   createHatchImage,
 } from './coverageLayer';
 import { createModelLayer, modelTarget } from './modelLayer';
-import { createViewMenuControl } from './viewMenuControl';
 import { CUSTOM_LAYER_IDS } from './customLayers';
 import { type TerminatorControl, createTerminatorControl } from './terminatorControl';
 import { createTerminatorLayer } from './terminatorLayer';
@@ -652,10 +651,6 @@ export function PlanetView() {
           // `elementFromPoint` returned the status bar. The dev readout moves
           // down to make room, because it is the thing that can afford to.
           map.addControl(nightControl, 'top-right');
-
-          // Added last so MapLibre stacks it under the two it gathers, which
-          // is where a menu button belongs when its menu opens downward.
-          map.addControl(createViewMenuControl(), 'top-right');
 
           // The credit is now on screen, so its height can be published for the
           // bars that have to stay above it. Measured rather than assumed:

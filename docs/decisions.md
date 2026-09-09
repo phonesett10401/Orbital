@@ -11176,3 +11176,32 @@ note beside it. Bottom-left, 238 x 138 - **60% of the width and 20% of the
 height** - with the longest name still unclipped.
 
 836 backend tests, 1,109 frontend.
+
+## D189 - The popup is reverted
+
+D188 put the basemap cycle and the night toggle behind one button. Phone looked
+at it: *"rewind the popup one for them it's not cool."*
+
+Correct call, and the screenshot says why better than the reasoning did. Open,
+the panel was a wide dark slab that ran back over the layer bar - "Ships" ended
+up sitting inside it - with two full-width rows whose labels, taken from
+`title`, are sentences rather than menu items: *Show the plain map*, *Show
+night*. Written for a tooltip that appears next to a glyph, and far too long
+once they are the row.
+
+The reasoning behind it was sound in the abstract: two controls that are useful
+and rarely used, taking up most of the right-hand edge. What it did not account
+for is that **two glyph buttons in a corner are already the smallest form this
+can take.** Putting them behind a third button adds a control to remove two, and
+the menu that results is bigger than the thing it replaced. A popup earns its
+place when it holds more than fits, and two 44px squares always fit.
+
+Reverted entirely: `viewMenuControl.ts` deleted, the control unregistered, the
+stylesheet block removed. Nothing else from D188 is touched.
+
+**The alignment came out better for it.** With the menu button gone the top-right
+control is a 44px square again, so the offset is computed for that alone:
+measured, the key pill, the layer bar and the basemap button now share a centre
+at exactly **146** - where with the menu in the line it was 146, 146 and 143.
+
+836 backend tests, 1,109 frontend.
