@@ -11463,3 +11463,47 @@ about a vacuous measurement: assert on the thing you are shipping, not on the
 thing you are explaining.
 
 **852 backend tests**, 1,114 frontend.
+
+## D196 - A real track, of a real flight, that was not this one
+
+Phone put Orbital next to Flightradar24 for two aircraft and found the headings
+pointing the wrong way.
+
+| Flight | Actually flying | Orbital said |
+|---|---|---|
+| CSH832, Phuket to Shanghai | northeast | **232 deg SW** |
+| CES6018, Colombo to Shanghai | northeast | **247 deg WSW** |
+
+Both panels said *"from its track"* - the heading was derived, not reported - so
+the track was the thing to look at.
+
+### It was not reversed, it was the wrong flight
+
+CSH832's track ran **Guangdong to the Gulf of Thailand**, ending **3.5 hours
+before** the aircraft's own last report. CES6018's ended **6.7 hours** before it
+and 500 km away. Those are the *outbound* legs of the same journeys: the
+aircraft flew down, turned around, and is on its way back, and we were drawing
+the trip it had already finished. A heading taken from the last two points of
+that is the reverse of where it is going, which is exactly what showed on
+screen.
+
+**Nothing about the data was malformed, which is why it got this far.** It is a
+real track, of a real flight, by this airframe. It is simply not the one being
+watched. Asked for "this aircraft's track", the provider answers with the most
+recent one it holds, and after a turnaround that is the previous leg.
+
+### The measurement that set the threshold
+
+Across nine aircraft: **eight ended within one minute** of the position, the
+ninth at **134 minutes** and 518 km. Nothing in between. Two populations with a
+wide gap, so the threshold only has to land in it - fifteen minutes.
+
+Compared against the **aircraft's own last report**, not against the clock. An
+aircraft nobody has heard from for an hour, with a track ending at that same
+moment, is perfectly consistent; both are old together. The question is whether
+the two describe the same moment, and a rule written against `now` would have
+thrown away every track belonging to an aircraft that had gone quiet.
+
+Four tests, checked by disabling the guard: the one naming the fault fails.
+
+**856 backend tests**, 1,114 frontend.

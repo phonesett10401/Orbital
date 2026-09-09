@@ -41,6 +41,19 @@ logger = logging.getLogger(__name__)
 
 #: How long a fetched flight stays good.
 #:
+#: How far behind the aircraft's own position a provider track may end.
+#:
+#: **Not a freshness rule, an identity one.** A track that stops hours before
+#: the aircraft last reported is not a stale view of this flight; it is a
+#: complete view of a different one, and drawing it puts the aircraft at the end
+#: of a journey it is not on (D196).
+#:
+#: Fifteen minutes is generous against what a healthy answer looks like -
+#: measured across nine aircraft, eight ended within one minute of the position
+#: and the ninth was 134 minutes out. There is nothing between those two
+#: populations, so the threshold only has to fall in the gap.
+PROVIDER_TRACK_MAX_LAG_SECONDS = 15 * 60.0
+
 #: A track grows by one waypoint every few seconds, and the part of it that
 #: matters -- where the flight began -- does not change at all. Two minutes
 #: keeps a selected aircraft's line fresh enough to be honest while costing at
@@ -266,6 +279,35 @@ class FlightHistory:
         if flight is None or not flight.track:
             return detail
 
+        # **The track has to belong to the flight the aircraft is on now.**
+        #
+        # The provider is asked for "this aircraft's track" and answers with the
+        # last one it has, which after a turnaround is the *previous leg*. Two
+        # were caught on screen: CSH832, flying Phuket to Shanghai, drawn along
+        # a path from Guangdong to the Gulf of Thailand that ended 3.5 hours
+        # earlier - and CES6018 with one 6.7 hours old, 500 km from the
+        # aircraft. Both are outbound legs of the return journey, so the heading
+        # derived from their last two points pointed **the opposite way to the
+        # flight** (D196).
+        #
+        # Nothing about that answer is malformed, which is why it got this far:
+        # it is a real track, of a real flight, by this airframe. It is simply
+        # not the one being watched. Compared against the aircraft's own last
+        # report rather than against the clock, because the question is whether
+        # the two describe the same moment.
+        newest = _newest_point(flight.track)
+        if newest is None:
+            return detail
+        behind = (detail.last_seen - newest.timestamp).total_seconds()
+        if behind > PROVIDER_TRACK_MAX_LAG_SECONDS:
+            logger.info(
+                "provider track for %s ends %.0f min before the aircraft's own "
+                "position; keeping the observed track",
+                detail.id,
+                behind / 60,
+            )
+            return detail
+
         update: dict[str, object] = {
             "track": flight.track,
             "track_source": TrackSource.PROVIDER,
@@ -282,8 +324,9 @@ class FlightHistory:
         # (D138).
         #
         # A track point *is* a report, so the newest one wins.
-        newest = _newest_point(flight.track)
-        if newest is not None and _is_newer(newest.timestamp, detail.last_seen):
+        # `newest` was found above, when the track was checked for being this
+        # flight's at all.
+        if _is_newer(newest.timestamp, detail.last_seen):
             update["lat"] = newest.lat
             update["lon"] = newest.lon
             update["last_seen"] = newest.timestamp

@@ -562,3 +562,61 @@ class TestTheNewestPositionWins:
         enriched = await FlightHistory(StubProvider(None)).enrich(detail())
         assert (enriched.lat, enriched.lon) == (1.0, 2.0)
         assert enriched.last_seen == NOW
+
+
+class TestTrackBelongsToThisFlight:
+    """A provider track has to be *this* flight's, not the airframe's last one.
+
+    Asked for "this aircraft's track", the provider answers with the most recent
+    one it holds - which after a turnaround is the previous leg. Caught on
+    screen: CSH832 flying Phuket to Shanghai, drawn along a path from Guangdong
+    to the Gulf of Thailand that ended 3.5 hours earlier, with a heading derived
+    from it pointing the opposite way to the flight (D196).
+    """
+
+    @pytest.mark.anyio
+    async def test_a_track_from_the_previous_leg_is_refused(self):
+        # The real shape: a complete, well-formed track of the outbound flight,
+        # hours old, while the aircraft is somewhere else on the way back.
+        old_leg = (
+            point(24.1, 114.1, offset=-3 * 3600),
+            point(12.3, 101.1, offset=-2 * 3600),
+        )
+        history = FlightHistory(StubProvider(old_leg))
+        enriched = await history.enrich(detail())
+
+        assert enriched.track_source is TrackSource.OBSERVED
+        # And the aircraft keeps the heading it reported, rather than one
+        # derived from a journey it already finished.
+        assert enriched.heading == 90.0
+
+    @pytest.mark.anyio
+    async def test_a_current_track_is_still_used(self):
+        # The guard must not cost the feature it protects: eight of nine
+        # aircraft measured had tracks ending within a minute of the position.
+        current = (point(1.0, 2.0, offset=-120), point(1.1, 2.1, offset=-30))
+        history = FlightHistory(StubProvider(current))
+        enriched = await history.enrich(detail())
+
+        assert enriched.track_source is TrackSource.PROVIDER
+        assert enriched.track == current
+
+    @pytest.mark.anyio
+    async def test_the_boundary_is_the_lag_and_not_the_wall_clock(self):
+        # An aircraft that has not been heard from for an hour, whose track ends
+        # at the same moment, is perfectly consistent - both are simply old. The
+        # question is whether the two describe the same moment, not whether that
+        # moment was recent.
+        stale_but_matching = (point(1.0, 2.0, offset=-3660), point(1.1, 2.1, offset=-3600))
+        history = FlightHistory(StubProvider(stale_but_matching))
+        enriched = await history.enrich(detail_with(last_seen=NOW - timedelta(seconds=3600)))
+
+        assert enriched.track_source is TrackSource.PROVIDER
+
+    @pytest.mark.anyio
+    async def test_the_threshold_falls_in_the_gap_between_the_two_populations(self):
+        # Measured across nine aircraft: eight within one minute, one at 134.
+        # Nothing in between, so the guard only has to land in the gap.
+        from app.ingestion.flights import PROVIDER_TRACK_MAX_LAG_SECONDS
+
+        assert 60.0 < PROVIDER_TRACK_MAX_LAG_SECONDS < 134 * 60.0
