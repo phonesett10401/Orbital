@@ -85,3 +85,18 @@ frontend/public/data/
 # a 450 KB element blob the first time anyone used the launch config.
 backend/.cache/
 /.cache/
+
+# scroll-craft, vendored from github.com/nateherkai/scroll-craft (MIT).
+#
+# An agent skill for building scroll-driven landing pages: 441 KB of someone
+# else's design methodology, kept on this machine so the tooling can load it
+# and deliberately not committed. It is not part of Orbital, it would be the
+# largest thing in a repository submitted as our own work, and anyone who wants
+# it can install it from upstream in one command.
+#
+# `.claude/launch.json` stays tracked - only the skills directory is ignored.
+.claude/skills/
+
+# Its build workspace, which it creates beside the repository root. Generated
+# output with a third-party generator, and some of it is video.
+/scrollcraft/
