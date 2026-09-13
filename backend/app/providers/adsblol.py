@@ -396,6 +396,33 @@ class AdsbLolProvider(Provider):
     name = "adsblol"
     object_type = ObjectType.AIRCRAFT
 
+    #: What to call this feed in a log line or an error a reader might see.
+    label = "adsb.lol"
+
+    #: The largest circle this feed will answer, in nautical miles.
+    #:
+    #: **The services disagree, and the disagreement is a 400.** adsb.lol takes
+    #: the 3,000 nm circles the global sweep is built from; adsb.fi documents a
+    #: 250 nm ceiling and rejects anything past it. A supplement that 400s on
+    #: every wide viewport contributes nothing and says so only in a log line,
+    #: which is how it would have shipped unnoticed (D208).
+    max_radius_nm = VIEWPORT_MAX_RADIUS_NM
+
+    #: The key the aircraft array arrives under.
+    #:
+    #: adsb.lol and airplanes.live both follow the ADSBExchange v2 shape and
+    #: use ``ac``; adsb.fi serves the same rows under ``aircraft`` (D208).
+    aircraft_key = "ac"
+
+    def _point_url(self, lat: float, lon: float, radius_nm: int) -> str:
+        """Where this feed puts its point-and-radius query.
+
+        Overridden rather than templated, because the three services that share
+        this response shape do not share a path shape, and a format string with
+        four holes in it is harder to read than one line of arithmetic-free URL.
+        """
+        return f"{self.base_url}/point/{lat}/{lon}/{radius_nm}"
+
     def __init__(
         self,
         *,
@@ -469,7 +496,7 @@ class AdsbLolProvider(Provider):
         try:
             response = await self._client.get(url, follow_redirects=True)
         except httpx.HTTPError as exc:
-            raise ProviderUnavailable(f"adsb.lol trace request failed: {exc}") from exc
+            raise ProviderUnavailable(f"{self.label} trace request failed: {exc}") from exc
 
         # An aircraft nobody has traced is a 404, and that is an answer rather
         # than a fault: the caller keeps the track it observed itself.
@@ -477,15 +504,15 @@ class AdsbLolProvider(Provider):
             return None
         if response.status_code in (420, 429):
             raise ProviderRateLimited(
-                f"adsb.lol rate-limited the trace with {response.status_code}"
+                f"{self.label} rate-limited the trace with {response.status_code}"
             )
         if response.status_code >= 400:
-            raise ProviderUnavailable(f"adsb.lol trace returned {response.status_code}")
+            raise ProviderUnavailable(f"{self.label} trace returned {response.status_code}")
 
         try:
             payload = response.json()
         except ValueError as exc:
-            raise ProviderBadResponse(f"adsb.lol sent unparsable trace: {exc}") from exc
+            raise ProviderBadResponse(f"{self.label} sent unparsable trace: {exc}") from exc
 
         base = payload.get("timestamp")
         rows = payload.get("trace")
@@ -536,7 +563,9 @@ class AdsbLolProvider(Provider):
         """
         if bbox is not None:
             lat, lon, radius = _circle_for(bbox)
-            return await self._fetch_circle(lat, lon, radius)
+            # Clamped per feed. A supplement that cannot cover the whole
+            # viewport still covers the middle of it, which beats a 400.
+            return await self._fetch_circle(lat, lon, min(radius, self.max_radius_nm))
 
         merged: dict[str, TrackedObjectRecord] = {}
         failed: list[tuple[float, float]] = []
@@ -568,10 +597,11 @@ class AdsbLolProvider(Provider):
                 last_error = error
 
         if failed and not merged:
-            raise ProviderUnavailable(f"adsb.lol unreachable: {last_error}")
+            raise ProviderUnavailable(f"{self.label} unreachable: {last_error}")
         if failed:
             logger.warning(
-                "adsb.lol: %d of %d circles failed twice: %s",
+                "%s: %d of %d circles failed twice: %s",
+                self.label,
                 len(failed),
                 len(GLOBAL_SWEEP),
                 ", ".join(f"{lat},{lon}" for lat, lon in failed),
@@ -616,31 +646,31 @@ class AdsbLolProvider(Provider):
     async def _fetch_circle(
         self, lat: float, lon: float, radius_nm: int
     ) -> list[TrackedObjectRecord]:
-        url = f"{self.base_url}/point/{lat}/{lon}/{radius_nm}"
+        url = self._point_url(lat, lon, radius_nm)
         await self._wait_turn()
         try:
             response = await self._client.get(url)
         except httpx.HTTPError as exc:
-            raise ProviderUnavailable(f"adsb.lol request failed: {exc}") from exc
+            raise ProviderUnavailable(f"{self.label} request failed: {exc}") from exc
         # 420 is this service's rate limit -- "enhance your calm" -- and 429 is
         # the conventional one. Both mean stop asking, and the poller has a
         # backoff that understands that (D26).
         if response.status_code in (420, 429):
             raise ProviderRateLimited(
-                f"adsb.lol rate-limited us with {response.status_code}"
+                f"{self.label} rate-limited us with {response.status_code}"
             )
         if response.status_code >= 400:
-            raise ProviderUnavailable(f"adsb.lol returned {response.status_code}")
+            raise ProviderUnavailable(f"{self.label} returned {response.status_code}")
 
         try:
             payload = response.json()
         except ValueError as exc:
-            raise ProviderBadResponse(f"adsb.lol sent unparsable JSON: {exc}") from exc
-        aircraft = payload.get("ac")
+            raise ProviderBadResponse(f"{self.label} sent unparsable JSON: {exc}") from exc
+        aircraft = payload.get(self.aircraft_key)
         if aircraft is None:
             return []
         if not isinstance(aircraft, list):
-            raise ProviderBadResponse("'ac' was not a list")
+            raise ProviderBadResponse(f"{self.aircraft_key!r} was not a list")
 
         # **The feed's own clock, not ours.** `seen_pos` counts seconds back
         # from the `now` in the payload, so subtracting it from our wall clock

@@ -28,6 +28,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Mapping
 
 from app.providers.adsblol import AdsbLolProvider
+from app.providers.adsbfi import AdsbFiProvider, AirplanesLiveProvider
 from app.providers.base import Provider
 from app.providers.fixture import FixtureProvider
 from app.providers.opensky import OpenSkyProvider
@@ -61,6 +62,22 @@ def _build_adsblol(settings: "Settings") -> Provider:
     )
 
 
+def _build_adsbfi(settings: "Settings") -> Provider:
+    return AdsbFiProvider(
+        base_url=settings.adsbfi_base_url,
+        timeout_seconds=settings.adsblol_timeout_seconds,
+        user_agent=settings.adsblol_user_agent,
+    )
+
+
+def _build_airplaneslive(settings: "Settings") -> Provider:
+    return AirplanesLiveProvider(
+        base_url=settings.airplaneslive_base_url,
+        timeout_seconds=settings.adsblol_timeout_seconds,
+        user_agent=settings.adsblol_user_agent,
+    )
+
+
 def _build_satellites(settings: "Settings") -> Provider:
     """Positions computed from orbital elements, not fetched (D93).
 
@@ -75,11 +92,29 @@ def _build_satellites(settings: "Settings") -> Provider:
     )
 
 
+#: The feeds that may sit in the union's supplement slot.
+#:
+#: Not the whole registry: a supplement has to be an aircraft feed that can
+#: answer a bounding box, which rules out satellites, and pairing the primary
+#: with itself is a configuration mistake rather than a choice (D208).
+_SUPPLEMENTS: Mapping[str, Callable[["Settings"], Provider]] = {
+    "adsbfi": _build_adsbfi,
+    "opensky": _build_opensky,
+    "airplaneslive": _build_airplaneslive,
+}
+
+
 def _build_union(settings: "Settings") -> Provider:
-    """The free feed every poll, the metered one occasionally (D83)."""
+    """The primary every poll, the supplement occasionally (D83, D208)."""
+    build = _SUPPLEMENTS.get(settings.union_supplement)
+    if build is None:
+        raise ValueError(
+            f"unknown union supplement {settings.union_supplement!r}; "
+            f"choose one of {', '.join(sorted(_SUPPLEMENTS))}"
+        )
     return UnionProvider(
         primary=_build_adsblol(settings),
-        supplement=_build_opensky(settings),
+        supplement=build(settings),
         supplement_interval_seconds=settings.union_supplement_interval_seconds,
     )
 
@@ -91,6 +126,8 @@ _BUILDERS: Mapping[str, Callable[["Settings"], Provider]] = {
     "fixture": _build_fixture,
     "opensky": _build_opensky,
     "adsblol": _build_adsblol,
+    "adsbfi": _build_adsbfi,
+    "airplaneslive": _build_airplaneslive,
     "union": _build_union,
     "satellites": _build_satellites,
 }

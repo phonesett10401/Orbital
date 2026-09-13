@@ -216,6 +216,32 @@ class Settings(BaseSettings):
 
     #: adsb.lol needs no credentials at all, which is most of its appeal (D83).
     adsblol_base_url: str = "https://api.adsb.lol/v2"
+    #: adsb.fi, a second community aggregator on the same software.
+    #:
+    #: Measured against adsb.lol over seven circles on 2026-09-14: three per
+    #: cent more aircraft overall, and seven against one over Myanmar (D208).
+    #: The overall figure is low because the aggregators largely share feeders;
+    #: the Myanmar figure is why it is here at all.
+    adsbfi_base_url: str = "https://opendata.adsb.fi/api/v2"
+
+    #: airplanes.live, which answers a stranger with a 403 telling them to
+    #: write in. Registered so the switch exists the day access is granted;
+    #: until then it is a provider nobody can select usefully.
+    airplaneslive_base_url: str = "https://api.airplanes.live/v2"
+
+    #: Which feed fills the gaps the primary cannot see, when the provider is
+    #: `union`.
+    #:
+    #: **This was OpenSky until it stopped taking connections from data
+    #: centres** (D207). It is unreachable from Northflank and from Render
+    #: alike, while answering a home connection in 0.23 s, so the default that
+    #: works in the place this actually runs is adsb.fi. `opensky` still works
+    #: from a laptop and is one variable away.
+    union_supplement: str = Field(
+        default="adsbfi",
+        description="Which provider supplements the primary feed: adsbfi, opensky or airplaneslive.",
+    )
+
     adsblol_trace_base_url: str = Field(
         default="https://globe.adsb.lol/data/traces",
         description=(

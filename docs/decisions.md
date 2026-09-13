@@ -12064,3 +12064,74 @@ the escalation, the reset on recovery, and that the quieter log still lets a
 *different* failure through.
 
 **902 backend tests**, 1,118 frontend.
+
+## D208 - A second aerial network, and the ceiling that decides what it is worth
+
+With OpenSky unreachable from anywhere this deploys (D207), the union's
+supplement slot was empty. Phone asked what could fill it.
+
+### What exists, measured rather than listed
+
+Seven circles of 250 nm, against adsb.lol, on 2026-09-14:
+
+| | adsb.lol | adsb.fi | adsb.fi only |
+|---|---|---|---|
+| western Europe | 590 | 594 | 13 |
+| eastern United States | 1,110 | 1,121 | 29 |
+| south-east Asia | 27 | 27 | 1 |
+| **Myanmar** | **1** | **7** | **7** |
+| inland China | 0 | 0 | 0 |
+| South America | 10 | 10 | 0 |
+| Africa | 0 | 0 | 0 |
+| **total** | **1,738** | | **50, about 3%** |
+
+Three per cent, and the reason is `sdr-enthusiasts/docker-adsb-ultrafeeder`:
+one container, one aerial, feeding adsb.lol, adsb.fi, airplanes.live,
+ADSBExchange and four others simultaneously. **The community aggregators are
+largely the same volunteers seen through different front doors.** That is the
+finding, and it is why no aggregator swap replaces OpenSky, whose value came
+from being a different network of receivers entirely.
+
+The row that earns the work is Myanmar: one against seven.
+
+The others were checked and are not available. `airplanes.live` answers a
+stranger with a 403 whose body is an instruction to email them. `api.adsb.one`
+is behind a Cloudflare 403. ADSBExchange answers `402 Please purchase a key`.
+`theairtraffic` has no public endpoint responding.
+
+### The ceiling, which changed the answer
+
+All three usable feeds run the same software, so `AdsbLolProvider` was
+parameterised on the three things that actually differ - the path, the key the
+array arrives under, and the label in an error - and adsb.fi became a subclass
+of about thirty lines.
+
+Then a live call found what none of the unit tests could: **adsb.fi answers a
+250 nm circle and 400s on 500 and everything above.** Measured, not assumed;
+the 250 came originally from ADSB One's README and turned out to be right for a
+different reason.
+
+That matters more than the coverage table. The global tier sweeps with four
+circles of 6,000 nm, so adsb.fi cannot participate in it at all. Covering the
+planet in 250 nm circles is hundreds of requests against a feed that
+rate-limits at a burst of three.
+
+**So adsb.fi is not the thing OpenSky was.** OpenSky answered the whole world in
+one call. adsb.fi supplements the viewport tier and sits the global sweep out,
+returning an empty list rather than four failures - empty rather than raised,
+because a feed behaving exactly as documented is not a fault to log every poll.
+
+The union would have swallowed those four 400s by design and reported nothing
+but one warning line, so this would have shipped as a supplement that looked
+configured in the environment and contributed zero. That is the second time in
+two decisions that a silent degradation was the real bug.
+
+### Where it lands
+
+`ORBITAL_UNION_SUPPLEMENT` picks the second feed: `adsbfi` by default because
+it is the one that works where this deploys, `opensky` still correct on a
+laptop, `airplaneslive` waiting on an email. An unknown name is refused by name
+rather than falling back, because a typo in a deployment variable that silently
+picks a different feed is invisible until somebody counts aircraft.
+
+**915 backend tests**, 1,118 frontend.
