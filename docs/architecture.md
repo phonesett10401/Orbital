@@ -1,6 +1,7 @@
 # Orbital — Architecture
 
-**CSC480 team project. Live aircraft tracking on the Earth in a browser.**
+**CSC480 team project. Live aircraft, satellites and ships on the Earth in a
+browser.** Deployed at <https://orbital-liveview.vercel.app>.
 
 This document describes how Orbital is built and why. It is written to be read
 start to finish by someone who has not seen the code.
@@ -9,10 +10,17 @@ start to finish by someone who has not seen the code.
 
 ## 1. What Orbital does
 
-Orbital renders the Earth in the browser and plots live aircraft positions on
-it. A user can rotate and zoom, search for a flight by callsign or an airport
-by name or code, click an aircraft to see its details, and view the path that
-aircraft has been observed to fly.
+Orbital renders the Earth in the browser and plots live aircraft, satellite and
+ship positions on it. A user can rotate and zoom, search for a flight by
+callsign or an airport by name or code, click an object to see its details, and
+view the path an aircraft has flown. A solar-system view is reached from the
+globe, and the moon is drawn in its computed position.
+
+**The layers are not the same kind of thing, and the difference runs through
+the whole design.** Aircraft and ships are *observed* — a feed reports them,
+and the display is only ever as current as the last report. Satellites and the
+moon are *computed* from published elements, so they spend no quota, need no
+credentials, and keep working when every upstream is down.
 
 **One renderer**, `src/planet/`, drawing with MapLibre: a globe when you are
 far out, a street map when you are close in. A three.js globe (`src/globe/`)
@@ -20,9 +28,12 @@ came first and ran beside it through the migration; it was deleted once the map
 could do everything it did, including altitude as a real axis for satellites
 (D53, D54, D104).
 
-**Out of scope:** user accounts, native mobile apps, historical playback, and
-delay and disruption data — see §8, which also covers where the satellite layer
-stops. *Schedules* are a
+**Out of scope:** native mobile apps, historical playback, and delay and
+disruption data — see §8, which also covers where the satellite layer stops.
+*Accounts left that list*: there is sign-up, sign-in and a premium flag, and
+the accounts database is the one piece of state that does not rebuild itself
+after a restart. The app is also used from a phone, which is a responsive
+layout rather than a native app (D178–D195). *Schedules* are a
 qualified exception: the scheduled origin and destination for a callsign are
 looked up per selection (D88), because an aircraft does not transmit where it
 is going and the panel would otherwise have nothing to say. Nothing else about
@@ -228,10 +239,17 @@ small without anyone having to remember to strip fields.
 These are constraints we chose, not bugs. Each is defensible; each is recorded
 with its reasoning in [decisions.md](decisions.md).
 
-- **"Route" means the observed path, not the filed flight plan.** A state
-  vector contains no route information. We draw the path we have actually
-  watched the aircraft fly since it entered our polling window. An aircraft
-  seen thirty seconds ago has a thirty-second route.
+- **"Route" means the flown path, not the filed flight plan.** A state vector
+  contains no route information. It is no longer limited to what *we* watched,
+  though: adsb.lol publishes per-aircraft trace files covering the last 24
+  hours, so a track survives a restart and usually begins before we first saw
+  the aircraft (D200). A day-long trace holds several flights and is trimmed to
+  the leg in progress — which turned out to be the hardest thing in the
+  project, because a turnaround and a hole in receiver coverage are identical
+  in duration and can be identical in displacement too. The test that works
+  asks how much of a silence the aircraft *cannot account for* (D206). Where no
+  receiver heard it, the track begins mid-air and the panel says so rather than
+  naming a departure airport it cannot support.
 - **Where a flight is going is looked up; where it came from is inferred.**
   Neither is observed, and the panel keeps them apart on purpose (D88). The
   destination comes from what the *callsign* is published as flying, which can
@@ -251,8 +269,14 @@ with its reasoning in [decisions.md](decisions.md).
   building is smaller than a pixel. The map exists precisely to go past that
   zoom, and gets its buildings and imagery from a tile service rather than from
   a pipeline of ours — which is also the one place the app is not offline.
-- **Localhost only.** No Docker, no hosting. CORS is configured permissively
-  for local development and is flagged as the change point if that ever changes.
+- **Deployed, on two hosts.** The frontend is a static Vite build on Vercel;
+  the backend runs from `backend/Dockerfile` on Northflank and redeploys on a
+  push to `main`. **One worker, and not as a default to tune later:** this
+  process holds an AIS websocket open, polls on a schedule and answers from
+  memory, so a second worker would double the OpenSky bill and let two requests
+  disagree about where an aircraft is. `ORBITAL_CORS_ORIGINS` is the setting
+  that has to name the frontend's origin; the permissive local default covers
+  the Vite dev server only.
 - **There is one renderer.** The parity question that ran through several
   sessions is gone with the globe (D104): the map answers both "where is it"
   and "how high is it", so nothing has to be built twice.
@@ -309,6 +333,17 @@ were not, and D37's argument for why still holds:
    changing. The fixture provider that makes the whole project runnable offline
    (D8) is a registry entry too.
 
+**Ships are in scope as of September 2026** (D160–D171), and are the one layer
+whose coverage the UI has to state outright. Digitraffic covers the northern
+Baltic and needs no key; aisstream is global and needs one. Without a key the
+layer is honest about being Baltic-only rather than looking like an empty sea.
+Ships also arrive on a stream rather than a poll, which is why the store has a
+cap the other layers do not need — without it the count climbed past 27,000 and
+took the container's memory with it (D190).
+
+**The moon and the solar-system view** are computed like satellites: an
+ephemeris, no feed, no key.
+
 **Where the satellite layer stops**, each line guarded by a test:
 
 - **Debris and rocket bodies.** The catalogue holds around 100,000 objects and
@@ -349,18 +384,31 @@ orbital/
 │   │   │   ├── fixture.py   offline replay provider          (M1)
 │   │   │   ├── registry.py  name -> provider                 (M1)
 │   │   │   ├── opensky.py   the metered source               (M2)
-│   │   │   ├── adsblol.py   the free source, and its own rate gate (D83)
-│   │   │   └── union.py     both at once, free feed pacing   (D83)
+│   │   │   ├── adsblol.py   the free source, its rate gate, and the
+│   │   │   │                 trace files a flown path comes from (D83, D200)
+│   │   │   ├── union.py     both at once, free feed pacing   (D83)
+│   │   │   ├── satellites.py    SGP4 propagation, no feed    (D93, D94)
+│   │   │   ├── satellite_names.py  catalogue number -> name
+│   │   │   ├── digitraffic.py   the Baltic ship feed, no key (D165)
+│   │   │   ├── aisstream.py     global AIS over a websocket  (D171)
+│   │   │   ├── ais.py           the AIS message shapes
+│   │   │   ├── shipunion.py     both ship feeds, Baltic wins overlaps
+│   │   │   ├── lunar.py         the moon, computed
+│   │   │   └── horizons.py      ephemeris source for the solar system
 │   │   ├── ingestion/
 │   │   │   ├── store.py     object cache + track history     (M2)
 │   │   │   ├── poller.py    two-tier scheduling, backoff     (M2)
 │   │   │   ├── flights.py   the detail view's assembly
 │   │   │   └── flightroutes.py  scheduled route by callsign, cached (D88)
 │   │   ├── api/             REST endpoints                   (M3)
+│   │   │   ├── aircraft.py  list, search, and one with its track
+│   │   │   ├── satellites.py / ships.py / moon.py  the other layers
+│   │   │   ├── auth.py      sign-up, sign-in, the premium flag
 │   │   │   ├── search.py    one box, two lists: aircraft and airports (D89)
 │   │   │   └── etag.py      weak validators, so the polled endpoint can 304 (D47)
 │   │   ├── thinning.py      server-side marker reduction     (M3)
 │   │   └── logging_config.py  handler setup for app.* loggers
+│   ├── Dockerfile           the deployed image: one worker, non-root
 │   └── tests/
 │       └── fixtures/        committed sample data + generator
 └── frontend/                                                 (M4)

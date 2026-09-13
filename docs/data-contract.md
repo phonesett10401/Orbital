@@ -208,15 +208,36 @@ have". That is still true of `/flights/aircraft` — **30 credits a call, and
 404 for two of the three aircraft it was tried on** — and it is why the origin
 is read off the track instead (D78).
 
-Consequences a reader must understand:
-- The route is **lost when the backend restarts.** History lives in memory.
-- Track history is a **bounded ring buffer**, so a long-lived object's route is
-  truncated to the most recent N points.
-- The route is a **sampled** path at the poll interval, so it is a polyline of
-  observed points, not a smooth curve. Between two points we know nothing.
+**Since D200 there are two sources for a track, and which one you get matters.**
+When an aircraft is selected the backend asks adsb.lol for its trace file — a
+static per-aircraft record of the last 24 hours — and that is what the detail
+endpoint returns. Our own ring buffer is the fallback for when the trace is
+missing, refused or too slow.
 
-This is a documented product limitation, agreed deliberately. It is not a
-defect, and it should be stated plainly in the demo.
+| | Provider trace (D200) | Our observed history |
+|---|---|---|
+| Covers | up to 24 h, trimmed to the current leg | since the aircraft entered our polling window |
+| Survives a restart | **yes** — it is upstream, not ours | no, it lives in memory |
+| Length limit | the flight | a bounded ring buffer, most recent N points |
+| Used when | normally | the trace is unavailable or the budget runs out |
+
+A 24-hour trace holds several flights, so it is trimmed to the leg in progress
+(D201, D204–D206). That trimming is the subtle part: a turnaround and a hole in
+receiver coverage look identical in duration, and an aircraft that sat at Delhi
+for three hours can leave the two points either side of the stop 400 km apart.
+The rule that works is *time the aircraft cannot account for* — credit it a
+cruise, subtract the flying the distance could pay for, and weigh the
+remainder.
+
+Consequences that still hold, whichever source answered:
+- The route is a **sampled** path, so it is a polyline of observed points, not
+  a smooth curve. Between two points we know nothing.
+- **It shows only what a receiver heard.** Where coverage is absent the track
+  begins mid-air, `origin` is `null`, and the panel says the departure point is
+  unknown rather than guessing one.
+
+The gaps are a documented product limitation, agreed deliberately. They are not
+a defect, and should be stated plainly in the demo.
 
 ---
 

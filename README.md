@@ -1,26 +1,51 @@
 # Orbital
 
-Live aircraft and satellite positions plotted on the Earth in the browser.
-Rotate and zoom, search for a flight by callsign, an airport by name or code, or
-a satellite by name or catalogue number, click one for its details, and see the
-path it has been observed to fly.
+Live aircraft, satellite and ship positions plotted on the Earth in the
+browser. Rotate and zoom, search for a flight by callsign, an airport by name or
+code, or a satellite by name or catalogue number, click one for its details, and
+see the path it has been observed to fly.
+
+**It is deployed:** <https://orbital-liveview.vercel.app>
 
 The world is drawn with **MapLibre** on satellite imagery, as a globe when you
 are far out and a street map when you are close in. A second renderer — a
 three.js globe — existed alongside it during the migration and was deleted once
 the map could do everything it did (D104).
 
-**Two layers, one toggle.** *Aircraft* are observed: a feed reports where they
-are, and the display is only ever as current as the last report. *Satellites*
-are **computed**: published orbital elements are propagated to the instant you
-are looking, so that layer spends no quota, needs no credentials, and keeps
-working for days if every upstream goes down.
+**Three layers, one toggle**, and they are not the same kind of thing.
+*Aircraft* and *ships* are **observed**: a feed reports where they are, and the
+display is only ever as current as the last report. *Satellites* and the moon
+are **computed**: published orbital elements and an ephemeris are propagated to
+the instant you are looking, so those layers spend no quota, need no
+credentials, and keep working for days if every upstream goes down.
+
+There is also a solar-system view, reached from the globe.
 
 CSC480 team project.
 
 ---
 
-## Running it
+## Where it runs
+
+| | Host | Notes |
+|---|---|---|
+| Frontend | Vercel | Static Vite build. `VITE_API_BASE` points at the backend. |
+| Backend | Northflank | `backend/Dockerfile`, one worker. Redeploys on a push to `main`. |
+
+**One worker, deliberately.** The backend holds a websocket open to aisstream,
+polls on a schedule and answers every request from memory, so a second worker
+would open a second AIS socket, run its own poller and keep its own store — the
+OpenSky bill would double and two requests could disagree about where an
+aircraft is. Scale it by making the box bigger. The reasoning is in the
+Dockerfile, next to the `--workers 1` it explains.
+
+**A deployed backend needs two settings beyond the local ones:**
+`ORBITAL_CORS_ORIGINS` must name the frontend's origin or every browser request
+fails CORS, and `ORBITAL_ACCOUNTS_DB_PATH` should point at a mounted volume —
+accounts are the one piece of state that does not rebuild itself after a
+restart.
+
+## Running it locally
 
 Two processes: a FastAPI backend and a Vite dev server.
 
@@ -71,6 +96,15 @@ three live sources:
 fill in the aircraft adsb.lol's receiver network cannot see. The reasoning is
 D83; the pacing is D71.
 
+**Ships are a separate pair, merged the same way** (D165, D171). Digitraffic is
+the Finnish transport agency's operational feed — no key, no meter, about 37 KB
+a minute — and it covers the northern Baltic only. aisstream is a global
+websocket that needs a key; half of what it sees is the Baltic anyway, so
+Digitraffic stays the authority where they overlap. Set
+`ORBITAL_SHIP_GLOBAL_ENABLED=false` the day aisstream starts charging.
+
+**Satellites and the moon need nothing at all.** No key, no feed, no quota.
+
 Read [docs/decisions.md](docs/decisions.md) D21 before touching poll intervals.
 OpenSky's free tier is small enough that a careless interval exhausts a day's
 credits before lunch. The backend refuses to start if the configured intervals
@@ -91,8 +125,8 @@ cd backend && .venv/Scripts/python -m pytest
 cd frontend && npm test
 ```
 
-Everything runs offline. No test in either suite touches the network or spends
-an API credit.
+**895 backend, 1,118 frontend.** Everything runs offline: no test in either
+suite touches the network or spends an API credit.
 
 ## Documentation
 
@@ -114,6 +148,19 @@ the project's life and deliberately so; the reversal is recorded rather than
 quietly applied, and the tests that guarded the old boundary were re-aimed at
 the new one rather than deleted. What stays out: debris and rocket bodies, and
 any prediction of conjunctions, collisions or re-entry.
+
+**Ships are built** (D160–D171, D190), and the moon and a solar-system view with
+them. Ships are the one layer with a coverage caveat the UI states plainly:
+without an aisstream key it is the northern Baltic only.
+
+**It is deployed and has been used from a phone**, which is where a run of
+layout decisions came from (D178–D195). Sign-in works same-origin; across
+origins it does not yet.
+
+**Aircraft tracks took five decisions to get right** (D196, D200–D202, D204–D206)
+and are the part of this project most worth reading about. The short version is
+in the next section; the long version is the best worked example in
+[decisions.md](docs/decisions.md) of a defect that survived four fixes.
 
 ## Performance
 
@@ -137,10 +184,19 @@ cd backend && .venv/Scripts/python benchmarks/bench_backend.py
 
 ## Things worth knowing up front
 
-- **"Route" means the path we have observed**, not a filed flight plan. It
-  begins when an aircraft entered our polling window and is lost when the
-  backend restarts. This is a deliberate limitation, explained in the data
-  contract and stated in the UI.
+- **"Route" means the path the aircraft has flown**, not a filed flight plan.
+  It no longer begins when the aircraft entered *our* polling window: adsb.lol
+  publishes per-aircraft trace files covering the last 24 hours, so a track
+  survives a restart and can begin hours before we first saw it (D200). What it
+  cannot do is show what no receiver heard, and the panel says so when a track
+  begins mid-air rather than at an airport.
+- **A 24-hour trace holds several flights, and only one of them is now.** The
+  backend trims it to the leg in progress. Telling a turnaround from a gap in
+  coverage is harder than it sounds — the two look identical in duration, and
+  an aircraft that sat at Delhi for three hours can leave its two ends 400 km
+  apart. The rule that works is *time the aircraft cannot account for*: credit
+  it a cruise, subtract the flying the distance could pay for, and see what is
+  left (D206).
 - **Where a flight is going is looked up, not observed.** An aircraft does not
   transmit its destination, so that comes from what its callsign is *scheduled*
   to fly, which is occasionally wrong. Where it came *from* is inferred instead:
