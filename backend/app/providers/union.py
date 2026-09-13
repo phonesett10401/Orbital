@@ -188,11 +188,42 @@ class UnionProvider(Provider):
                 await closer()
 
 
+#: How often to repeat a warning about a failure that has not changed.
+#:
+#: **A sustained outage should be one line and then quiet, not a line per
+#: poll.** OpenSky was unreachable from the London container for hours, and at
+#: a poll every two minutes that filled the log with the same sentence 289
+#: times, which is how a real second fault would get missed (D207). Half an
+#: hour is often enough to prove the outage is still running and rare enough
+#: to read.
+REPEAT_WARNING_SECONDS = 1800.0
+
+#: The last failure logged per provider: the message, and when it was warned
+#: about. Module level because the union is constructed per process and this
+#: is about the log rather than about a poll.
+_last_failure: dict[str, tuple[str, float]] = {}
+
+
 def _records_or_none(
     result: list[TrackedObjectRecord] | BaseException,
     name: str,
 ) -> list[TrackedObjectRecord] | None:
     if isinstance(result, BaseException):
-        logger.warning("%s failed this poll: %s", name, result)
+        message = str(result)
+        now = time.monotonic()
+        previous = _last_failure.get(name)
+        # Loud when it starts, when it changes, and every half hour it persists.
+        # Quiet in between, so a *different* failure arriving is still visible.
+        if (
+            previous is None
+            or previous[0] != message
+            or now - previous[1] >= REPEAT_WARNING_SECONDS
+        ):
+            logger.warning("%s failed this poll: %s", name, message)
+            _last_failure[name] = (message, now)
+        else:
+            logger.debug("%s failed this poll: %s", name, message)
         return None
+    if _last_failure.pop(name, None) is not None:
+        logger.info("%s is answering again", name)
     return result

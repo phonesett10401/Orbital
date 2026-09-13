@@ -742,3 +742,116 @@ class TestTokenCooldown:
             await provider._get_token()
         with pytest.raises(ProviderUnavailable):
             await provider._get_token()
+
+class TestSustainedOutage:
+    """What changes when the host is not down for a minute but for a day (D207).
+
+    OpenSky went unreachable from the London container: every token request a
+    `ConnectTimeout`, for hours, while adsb.lol on the same egress answered
+    normally. The retry and cooldown built for a blip (D197, D198) were still
+    correct, and still spent a minute of every poll cycle and filled the log.
+    """
+
+    def _provider(self, handler, **kw):
+        import httpx
+
+        from app.providers.opensky import OpenSkyProvider
+
+        return OpenSkyProvider(
+            client_id="id",
+            client_secret="secret",
+            client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+            **kw,
+        )
+
+    @pytest.mark.anyio
+    async def test_the_token_request_does_not_wait_the_full_read_timeout_to_connect(self):
+        """A handshake that has not completed in five seconds is not coming.
+
+        Twenty seconds is the right patience for a slow *answer* and the wrong
+        patience for a connection to a host that is not there: three attempts
+        of it is a minute of every two-minute cycle. The working handshake to
+        Zurich takes under a quarter of a second.
+        """
+        import httpx
+
+        from app.providers import opensky as module
+
+        seen: dict[str, object] = {}
+
+        def capture(request: httpx.Request) -> httpx.Response:
+            seen["timeout"] = request.extensions.get("timeout")
+            return httpx.Response(200, json={"access_token": "t", "expires_in": 1800})
+
+        provider = self._provider(capture)
+        await provider._request_token()
+
+        assert seen["timeout"]["connect"] == module.TOKEN_CONNECT_TIMEOUT_SECONDS
+        assert seen["timeout"]["read"] > module.TOKEN_CONNECT_TIMEOUT_SECONDS, (
+            "the read budget should stay generous; only the handshake is impatient"
+        )
+
+    @pytest.mark.anyio
+    async def test_each_failed_round_waits_longer_than_the_last(self, monkeypatch):
+        """A fixed cooldown against a permanent outage is knocking forever.
+
+        Five minutes is a blip's pause. Against a host unreachable for hours it
+        means a round of attempts every six minutes for the rest of the day.
+        """
+        import httpx
+
+        from app.providers import opensky as module
+        from app.providers.base import ProviderUnavailable
+
+        monkeypatch.setattr(module.asyncio, "sleep", _no_wait)
+
+        def always_times_out(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectTimeout("")
+
+        provider = self._provider(always_times_out)
+        clock = {"t": 0.0}
+
+        class Loop:
+            def time(self):
+                return clock["t"]
+
+        monkeypatch.setattr(module.asyncio, "get_running_loop", lambda: Loop())
+
+        waits = []
+        for _ in range(4):
+            with pytest.raises(ProviderUnavailable):
+                await provider._get_token()
+            waits.append(provider._token_cooldown_until - clock["t"])
+            clock["t"] = provider._token_cooldown_until  # skip to the far side
+
+        assert waits == sorted(waits) and waits[0] < waits[-1], (
+            f"cooldown never grew: {waits}"
+        )
+        assert waits[-1] <= module.TOKEN_COOLDOWN_MAX_SECONDS
+
+    @pytest.mark.anyio
+    async def test_a_token_that_finally_arrives_clears_the_escalation(self, monkeypatch):
+        """Recovery has to be complete, or the next blip starts at an hour."""
+        import httpx
+
+        from app.providers import opensky as module
+        from app.providers.base import ProviderUnavailable
+
+        monkeypatch.setattr(module.asyncio, "sleep", _no_wait)
+        state = {"fail": True}
+
+        def flaky(request: httpx.Request) -> httpx.Response:
+            if state["fail"]:
+                raise httpx.ConnectTimeout("")
+            return httpx.Response(200, json={"access_token": "t", "expires_in": 1800})
+
+        provider = self._provider(flaky)
+        with pytest.raises(ProviderUnavailable):
+            await provider._get_token()
+        assert provider._token_failures > 0
+
+        state["fail"] = False
+        provider._token_cooldown_until = 0.0
+        assert await provider._get_token() == "t"
+        assert provider._token_failures == 0, "a good token left the escalation running"
+

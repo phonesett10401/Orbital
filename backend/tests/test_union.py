@@ -278,3 +278,87 @@ class TestCredits:
         primary = Fake("adsblol", [])
         primary.remaining_credits = 12
         assert UnionProvider(primary, Fake("opensky", [])).remaining_credits is None
+
+class TestRepeatedFailureIsQuiet:
+    """One line and then quiet, not a line per poll (D207).
+
+    OpenSky was unreachable from the container for hours. At a poll every two
+    minutes that put the same sentence in the log 289 times, which is exactly
+    how a *different* fault arriving in the middle of it gets missed.
+    """
+
+    def _kept(self, exc_or_records, name="opensky"):
+        from app.providers.union import _records_or_none
+
+        return _records_or_none(exc_or_records, name)
+
+    def _reset(self):
+        from app.providers import union as module
+
+        module._last_failure.clear()
+
+    def test_the_same_failure_is_warned_once_then_dropped_to_debug(self, caplog):
+        import logging
+
+        from app.providers.base import ProviderUnavailable
+
+        self._reset()
+        with caplog.at_level(logging.WARNING, logger="app.providers.union"):
+            for _ in range(12):
+                self._kept(ProviderUnavailable("token request failed: ConnectTimeout"))
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1, f"logged {len(warnings)} warnings for one outage"
+
+    def test_a_different_failure_still_gets_through(self, caplog):
+        """The quieting must not hide a second, new fault."""
+        import logging
+
+        from app.providers.base import ProviderUnavailable
+
+        self._reset()
+        with caplog.at_level(logging.WARNING, logger="app.providers.union"):
+            for _ in range(5):
+                self._kept(ProviderUnavailable("token request failed: ConnectTimeout"))
+            self._kept(ProviderUnavailable("rate limited: 429"))
+            for _ in range(5):
+                self._kept(ProviderUnavailable("rate limited: 429"))
+
+        messages = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(messages) == 2, messages
+        assert "429" in messages[-1]
+
+    def test_recovery_says_so(self, caplog):
+        import logging
+
+        from app.providers.base import ProviderUnavailable
+
+        self._reset()
+        with caplog.at_level(logging.INFO, logger="app.providers.union"):
+            self._kept(ProviderUnavailable("token request failed: ConnectTimeout"))
+            kept = self._kept([])
+
+        assert kept == []
+        assert any("answering again" in r.getMessage() for r in caplog.records)
+
+    def test_a_long_outage_is_re_stated_so_it_is_not_forgotten(self, caplog, monkeypatch):
+        """Quiet is not silent: an outage still running must still be visible."""
+        import logging
+
+        from app.providers import union as module
+        from app.providers.base import ProviderUnavailable
+
+        self._reset()
+        clock = {"t": 0.0}
+        monkeypatch.setattr(module.time, "monotonic", lambda: clock["t"])
+
+        with caplog.at_level(logging.WARNING, logger="app.providers.union"):
+            self._kept(ProviderUnavailable("same"))
+            clock["t"] += module.REPEAT_WARNING_SECONDS / 2
+            self._kept(ProviderUnavailable("same"))
+            clock["t"] += module.REPEAT_WARNING_SECONDS
+            self._kept(ProviderUnavailable("same"))
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 2, f"expected first and the half-hour restatement, got {len(warnings)}"
+

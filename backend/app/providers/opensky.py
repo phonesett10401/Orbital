@@ -82,6 +82,26 @@ TOKEN_ATTEMPTS = 3
 #: waiting, not a minute of it.
 TOKEN_RETRY_BACKOFF_SECONDS = (0.5, 2.0)
 
+#: How long to wait for the TCP handshake on a token request, specifically.
+#:
+#: The client's own timeout covers a slow *answer*, and twenty seconds is right
+#: for that. It is far too long to wait for a connection that is never coming
+#: up: three attempts at twenty seconds is a minute of every poll cycle spent
+#: holding a socket open to a host that is not there (D207). Measured against
+#: the working case, the handshake to Zurich completes in under a quarter of a
+#: second, so five seconds is roughly twenty times the observed cost of
+#: success and still saves forty-five seconds of the failure.
+TOKEN_CONNECT_TIMEOUT_SECONDS = 5.0
+
+#: The ceiling the cooldown escalates to while failures continue.
+#:
+#: **A fixed five minutes is a blip's cooldown, not an outage's.** Against a
+#: host that has been unreachable for hours it means knocking every six minutes
+#: forever, which neither helps nor stops. Each consecutive failed round
+#: doubles the wait to this cap, so a real blip still costs one round while a
+#: sustained outage settles down to hourly and the log stops scrolling.
+TOKEN_COOLDOWN_MAX_SECONDS = 3600.0
+
 
 def describe(exc: BaseException) -> str:
     """An exception rendered so the log line says something.
@@ -124,6 +144,7 @@ class OpenSkyProvider(Provider):
         self.base_url = base_url.rstrip("/")
         self.token_url = token_url
         # Injectable so tests can drive a mock transport rather than the network.
+        self._timeout_seconds = timeout_seconds
         self._client = client or httpx.AsyncClient(timeout=timeout_seconds)
         self._owns_client = client is None
 
@@ -131,6 +152,7 @@ class OpenSkyProvider(Provider):
         self._token_expires_at: float = 0.0
         #: Loop time before which no further token request will be made.
         self._token_cooldown_until: float = 0.0
+        self._token_failures: int = 0
         self._token_lock = asyncio.Lock()
 
         #: Last observed X-Rate-Limit-Remaining, or None before the first poll.
@@ -183,9 +205,14 @@ class OpenSkyProvider(Provider):
             try:
                 return await self._request_token()
             except ProviderUnavailable:
-                self._token_cooldown_until = (
-                    asyncio.get_running_loop().time() + TOKEN_COOLDOWN_SECONDS
+                # Each consecutive failed round waits twice as long as the last,
+                # up to the cap. Reset the moment a token comes back.
+                self._token_failures += 1
+                wait = min(
+                    TOKEN_COOLDOWN_SECONDS * (2 ** (self._token_failures - 1)),
+                    TOKEN_COOLDOWN_MAX_SECONDS,
                 )
+                self._token_cooldown_until = asyncio.get_running_loop().time() + wait
                 raise
 
     async def _request_token(self) -> str:
@@ -207,6 +234,9 @@ class OpenSkyProvider(Provider):
             try:
                 response = await self._client.post(
                     self.token_url,
+                    timeout=httpx.Timeout(
+                        self._timeout_seconds, connect=TOKEN_CONNECT_TIMEOUT_SECONDS
+                    ),
                     data={
                         "grant_type": "client_credentials",
                         "client_id": self.client_id,
@@ -247,6 +277,7 @@ class OpenSkyProvider(Provider):
 
         self._token = token
         self._token_cooldown_until = 0.0
+        self._token_failures = 0
         self._token_expires_at = asyncio.get_running_loop().time() + max(
             0.0, expires_in - TOKEN_REFRESH_MARGIN_SECONDS
         )

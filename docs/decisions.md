@@ -11998,3 +11998,69 @@ short ones are aircraft that took off two to nine minutes ago, where the last
 ground reading is minutes old and a short track is the truth.
 
 **895 backend tests**, 1,118 frontend.
+
+## D207 - The retry was built for a blip, and this is an outage
+
+Phone sent the Northflank log filtered to `opensky`: 289 lines, all failures,
+`token request failed (ConnectTimeout)` over and over for the best part of an
+hour.
+
+### What is actually wrong, and where it is not
+
+Measured rather than assumed:
+
+| | From this machine | From the London container |
+|---|---|---|
+| `auth.opensky-network.org` | connects in 0.23 s, answers 401 | ConnectTimeout, every attempt, for hours |
+| `opensky-network.org/api` | connects in 0.23 s, answers 200 | never reached, the token gates it |
+| `api.adsb.lol` | fine | fine, 38 polls, 0 failures |
+
+**Both OpenSky hostnames resolve to the same address, 194.209.200.34.** So this
+is not an auth problem with an API-shaped workaround behind it: the whole of
+OpenSky is unreachable from that egress while adsb.lol on the same egress is
+not. No code change reaches a host the network cannot reach, and there is no
+anonymous fallback to reach for, because anonymous requests go to the same IP.
+
+Also worth stating plainly: **nothing is broken for a reader.** The union
+degrades exactly as designed, the global job reports 38 successes and 0
+failures, and 7,954 aircraft are on the map from adsb.lol alone. What is lost is
+the supplementary coverage OpenSky adds where adsb.lol has no receivers.
+
+### What was fixable, and was
+
+The retry (D197) and the cooldown (D198) were both written for a *transient*
+failure, and both are still right for one. Against a permanent one they were
+costing real time and burying the log.
+
+**A handshake gets five seconds, not twenty.** The client timeout is the budget
+for a slow answer and twenty seconds is right for that. It is the wrong budget
+for a connection that is never coming up: three attempts at twenty seconds is
+sixty-two seconds of every two-minute cycle spent holding a socket open to a
+host that is not there. The working handshake takes 0.23 s, so five seconds is
+twenty times the observed cost of success.
+
+**Each failed round waits twice as long as the last, to an hour.** A fixed five
+minutes is a blip's pause; against a host down for a day it is knocking every
+six minutes until midnight. A real blip still costs one round.
+
+**A sustained failure is logged once, then every half hour.** 289 identical
+lines is how a second, different fault gets missed. The union now warns on the
+first failure, on any change of message, and every thirty minutes while it
+persists, and says so when the provider answers again.
+
+### Where that leaves the deployment
+
+The noise and the waste are fixed. The unreachability is not, and cannot be
+from here. Three real options, in Phone's hands:
+
+- Leave it. The map is complete from adsb.lol; the log is quiet now.
+- Set `ORBITAL_PROVIDER=adsblol` on Northflank. Identical data today, no waste
+  at all, and the union is one environment variable away when it is wanted.
+- The Render move Phone already intended. Different egress, and it may simply
+  work; there is no way to know from here without trying it.
+
+Four tests, each checked against the behaviour it replaced: the connect budget,
+the escalation, the reset on recovery, and that the quieter log still lets a
+*different* failure through.
+
+**902 backend tests**, 1,118 frontend.
