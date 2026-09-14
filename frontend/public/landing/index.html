@@ -1,0 +1,1299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orbital · the sky is not empty</title>
+<meta name="description" content="Live aircraft, satellites and ships on the Earth in your browser. Zoom out far enough and the whole solar system is there. The sky looks empty. It is not.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2305070d'/><circle cx='16' cy='16' r='7' fill='none' stroke='%23ffd166' stroke-width='2'/><ellipse cx='16' cy='16' rx='13' ry='5' fill='none' stroke='%23ffd166' stroke-width='1.6' opacity='.7' transform='rotate(-24 16 16)'/></svg>">
+<link rel="stylesheet" href="scrollcraft.css">
+<style>
+  :root {
+    --sc-canvas:     #05070d;
+    --sc-surface:    #0e1421;
+    --sc-ink:        #f2f5fa;
+    --sc-ink-soft:   #8d9ab2;
+    --sc-accent:     #ffd166;
+    --sc-accent-ink: #05070d;
+    --sc-font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, Constantia, Georgia, serif;
+    --sc-font-text: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --sc-font-mono: ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+
+    /* The divider position. The whole page in one number: it holds at 50% for
+       five acts and travels to the edge at the collapse. */
+    --divide: 50%;
+    --page: 0;
+
+    /* One rhythm for the page. Arriving decelerates, leaving accelerates, and
+       leaving is quicker than arriving: `easing`, `exit-faster-than-enter`
+       and `motion-consistency` from the UI/UX Pro Max rule set. Before this
+       every transition here was ease-out at a duration picked by hand. */
+    --t-enter: 420ms;
+    --t-exit:  260ms;                        /* 62% of enter */
+    --e-enter: cubic-bezier(.16, 1, .3, 1);  /* decelerate into place */
+    --e-exit:  cubic-bezier(.7, 0, .84, 0);  /* accelerate away */
+  }
+
+  html { background: var(--sc-canvas); }
+  body { color: var(--sc-ink); font-family: var(--sc-font-text); }
+
+  .vh { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--sc-accent); outline-offset: 3px; border-radius: 2px; }
+
+  /* ---------------------------------------------------------------- chrome --
+     No bar. The divider is the chrome: it carries the label for each side and
+     the progress of the argument, and its departure is the ending. */
+  .rule { position: fixed; top: 0; bottom: 0; left: var(--divide); width: 0;
+          z-index: 60; pointer-events: none; opacity: var(--rule-o, 1); }
+  .rule::before {
+    content: ''; position: absolute; top: 0; bottom: 0; left: -0.5px; width: 1px;
+    background: linear-gradient(to bottom, rgba(141,154,178,0) 0%, rgba(141,154,178,.34) 12%,
+      rgba(141,154,178,.34) 88%, rgba(141,154,178,0) 100%);
+  }
+  .rule__mark {
+    position: absolute; top: 26px; left: 0; transform: translateX(-50%);
+    font-family: var(--sc-font-display); font-size: 1.05rem;
+    background: var(--sc-canvas); padding: 0 .7rem; white-space: nowrap;
+  }
+  .rule__mark small {
+    display: block; font-family: var(--sc-font-mono); font-size: .52rem;
+    letter-spacing: .22em; text-transform: uppercase; color: var(--sc-ink-soft);
+    text-align: center; margin-top: .25rem;
+  }
+  .rule__side {
+    position: absolute; top: 72px; font-family: var(--sc-font-mono); font-size: .62rem;
+    letter-spacing: .17em; text-transform: uppercase; color: var(--sc-ink-soft);
+    white-space: nowrap; opacity: var(--sides-o, 1);
+    transition: opacity var(--t-exit) var(--e-exit);
+  }
+  .rule__side--l { right: 18px; text-align: right; }
+  .rule__side--r { left: 18px; }
+  .rule__prog {
+    position: absolute; left: -2.5px; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--sc-accent); top: calc(96px + (100% - 160px) * var(--page));
+    box-shadow: 0 0 0 3px rgba(255,209,102,.14);
+  }
+
+  /* ------------------------------------------------------------------ duo -- */
+  .duo { display: grid; grid-template-columns: var(--divide) 1fr; align-items: stretch; }
+  .sc-stage.duo { height: 100vh; height: 100svh; }
+  /* A flow section takes its height from its copy, and its copy is three
+     lines. On a 900-tall window that reads as a band; on a 1080-tall one it is
+     a 375px letterbox with the aircraft capture sliced through the middle and
+     two thirds of the screen empty under it. The panes are the picture, so
+     they get a floor tied to the window rather than to the text inside. */
+  .sc-section .duo { min-height: 74svh; }
+  .sc-section.quiet .duo { min-height: 0; }
+  .pane { position: relative; overflow: hidden; display: flex; align-items: center; }
+  .pane__in { position: relative; z-index: 3; padding: 0 clamp(1.4rem, 4vw, 4rem); max-width: 34rem; }
+  .pane--l .pane__in { margin-left: auto; text-align: right; }
+  .pane--r .pane__in { margin-right: auto; }
+  .pane--media .pane__in { max-width: 27rem; text-shadow: 0 1px 24px rgba(3,5,10,.9); }
+  /* Body copy over a photograph needs a lighter tint than body copy on the
+     flat ground: measured at 4.13:1 against the brightest frame, under the
+     4.5:1 floor, and this clears it without touching the display type. */
+  .pane--media .body { color: #b3bdcf; }
+  .pane--dark { background: #04060a; }
+
+  .pane img { position: absolute; inset: 0; width: 100%; height: 100%;
+              object-fit: cover; object-position: center; }
+  /* track.webp is a wide capture whose right-hand third is the app's own
+     detail panel — the whole reason the shot exists. Centre-cropping into a
+     tall pane throws it away, so this one holds its right edge. */
+  .pane--r img[src$="track.webp"] { object-position: 100% 50%; }
+  /* Anything that travels gets extra height, so the drift never exposes an edge. */
+  .pane img.par { top: -11%; height: 122%; bottom: auto; }
+  .scrim-r {
+    position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    background: linear-gradient(100deg, rgba(4,6,10,.97) 0%, rgba(4,6,10,.93) 30%,
+      rgba(4,6,10,.74) 52%, rgba(4,6,10,.18) 70%, rgba(4,6,10,0) 82%);
+  }
+  .scrim-l {
+    position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    background:
+      linear-gradient(to top, rgba(4,6,10,.85) 0%, rgba(4,6,10,.35) 22%, rgba(4,6,10,0) 46%),
+      linear-gradient(260deg, rgba(4,6,10,.96) 0%, rgba(4,6,10,.9) 32%,
+        rgba(4,6,10,.6) 56%, rgba(4,6,10,0) 84%);
+  }
+
+  h2.d, h3.d { font-family: var(--sc-font-display); font-weight: 400; line-height: 1.02; text-wrap: balance; }
+  .d--xl { font-size: clamp(2.6rem, 5.4vw, 5.2rem); letter-spacing: -.022em; }
+  .d--lg { font-size: clamp(2rem, 3.6vw, 3.4rem); letter-spacing: -.016em; }
+  .d--md { font-size: clamp(1.5rem, 2.3vw, 2.1rem); letter-spacing: -.01em; }
+  .body { font-size: clamp(.94rem, 1.05vw, 1.06rem); line-height: 1.62; color: var(--sc-ink-soft);
+          max-width: 46ch; text-wrap: pretty; margin-top: 1.1rem; }
+  .pane--l .body { margin-left: auto; }
+  .tag { font-family: var(--sc-font-mono); font-size: .6rem; letter-spacing: .2em;
+         text-transform: uppercase; color: var(--sc-accent); display: block; margin-bottom: 1.1rem; }
+
+  .facts { list-style: none; padding: 0; margin: 1.6rem 0 0; }
+  .facts li {
+    display: flex; gap: 1.2rem; justify-content: space-between;
+    font-family: var(--sc-font-mono); font-size: .74rem; padding: .5rem 0;
+    border-top: 1px solid rgba(141,154,178,.16); color: var(--sc-ink-soft);
+  }
+  .facts li b { color: var(--sc-ink); font-weight: 500; }
+  .pane--l .facts li { flex-direction: row-reverse; }
+
+  /* --------------------------------------------- the signature move, act 3 --
+     A route line drawn on nothing reads as a scribble, which is what the first
+     two attempts were. The altitude profile of the same flight is the same data
+     with a shape the eye already knows how to read, and the holes in it are the
+     point of the act rather than a defect in the picture. */
+  .ribbon { position: absolute; inset: 0; z-index: 1; overflow: hidden;
+            display: grid; place-items: center; padding: 10vh 6% 8vh; }
+  .ribbon svg { width: 100%; height: auto; overflow: visible; }
+  /* The body group is scaled vertically, so the stroke has to opt out of it
+     or the line thickens with the stretch. */
+  .ribbon__line { fill: none; stroke: url(#altStroke); stroke-width: 2.6;
+                  stroke-linecap: round; stroke-linejoin: round;
+                  vector-effect: non-scaling-stroke; }
+  .ribbon__area { fill: url(#altFill); }
+  .ribbon__bridge { fill: none; stroke: var(--sc-accent); stroke-width: 2.4;
+                    stroke-dasharray: 5 9; stroke-linecap: round; opacity: .85; }
+  .ribbon__grid { stroke: rgba(141,154,178,.16); stroke-width: 1; }
+  .ribbon__tick { font-family: var(--sc-font-mono); font-size: 15px; fill: #7c8aa3; letter-spacing: .1em; }
+  .ribbon__hole { opacity: 0; }
+  .ribbon__hole text { font-family: var(--sc-font-mono); font-size: 17px; fill: var(--sc-accent);
+                       letter-spacing: .12em; text-anchor: middle; }
+  .ribbon__cap {
+    position: absolute; left: 0; right: 0; bottom: 2.2vh; text-align: center;
+    font-family: var(--sc-font-mono); font-size: .62rem; letter-spacing: .15em;
+    text-transform: uppercase; color: var(--sc-ink-soft);
+  }
+  /* A tonal step up from the canvas rather than type floating on the ground.
+     `color-dark-mode` asks for lighter tonal variants; the reference palettes
+     all carry a background / card / border scale and this page had none. */
+  .sum {
+    list-style: none; padding: .4rem 1.1rem .9rem; margin: 1.8rem 0 0;
+    background: var(--sc-surface);
+    border: 1px solid rgba(141, 154, 178, .14);
+    border-radius: 6px;
+  }
+  .sum li {
+    display: grid; grid-template-columns: 1fr auto; gap: 1.4rem; align-items: baseline;
+    font-family: var(--sc-font-mono); font-size: .78rem; padding: .62rem 0;
+    border-top: 1px solid rgba(141,154,178,.16); color: var(--sc-ink-soft);
+    opacity: 0; transform: translateY(6px);
+    transition: opacity var(--t-enter) var(--e-enter), transform var(--t-enter) var(--e-enter);
+  }
+  .sum li.on { opacity: 1; transform: none; }
+  .sum li b { color: var(--sc-ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .sum li.verdict { border-top-color: rgba(255,209,102,.4); }
+  .sum li.verdict, .sum li.verdict b { color: var(--sc-accent); }
+  /* ---------------------------------------- act 4b, the orrery ------------
+     The one act where the scroll stops going down. The stage pins and eight
+     worlds are shown one at a time, dead centre, name curved over the top and
+     the facts underneath. What carries you from one to the next is a rod:
+
+       a white line rises out of the page divider until its top end is at the
+       centre of the world you are looking at, with the NEXT world hanging
+       inverted off its bottom end; the whole assembly then rotates half a turn
+       clockwise, so the next world arrives upright in the centre and the one
+       you have finished with is left hanging upside down beneath it; then the
+       rod sinks back down and takes it away.
+
+     The rod is deliberately the page's own divider brightening and detaching.
+     That line has held the window in two since the first screen, and this is
+     the only act that borrows it as a mechanism rather than as chrome. It goes
+     back where it came from before act five, and the collapse in act six is
+     still the only time it leaves.
+
+     Geometry lives in JS (`railTo`), because the rod's length depends on the
+     two disc sizes and those differ by a factor of two across the rail. */
+  #rail { z-index: 61; }        /* the worlds occlude the divider, not vice versa */
+  .railstage { --cy: 42%; }
+  .orrery { list-style: none; margin: 0; padding: 0;
+            position: absolute; z-index: 3; inset: 0; opacity: 0; }
+  .world { position: absolute; inset: 0; }
+
+  /* A zero-size anchor. Everything inside is centred on it, so the transform
+     JS writes is simply "put this world's centre here, at this angle". */
+  .orb { position: absolute; left: 0; top: 0; width: 0; height: 0;
+         will-change: transform; }
+  .orb > * { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); }
+
+  /* Above the worlds, not behind them: the line is the cut, so the incoming
+     dome must not paint over it. */
+  .rod {
+    position: absolute; z-index: 6; left: 0; top: 0; height: 2px; width: 0; margin-top: -1px;
+    transform-origin: 50% 50%; background: #fff; border-radius: 2px;
+    /* A tighter bloom than before. The same glow across two thousand pixels of
+       line is a haze over the whole window rather than a light on a rule. */
+    box-shadow: 0 0 10px rgba(255, 255, 255, .26), 0 0 2px rgba(255, 255, 255, .85);
+    opacity: 0; will-change: transform, width;
+  }
+
+  /* The name, set on an arc over the crown of its own world. It is an <h3>,
+     so it is still a heading in the reading order; the SVG carries the text
+     and JS sizes the arc to whichever disc it belongs to. */
+  .orb__name { margin: 0; font-weight: 400; pointer-events: none; }
+  /* The engine's reset sets `svg { max-width: 100% }`, and the anchor these
+     hang off is a zero-width box, so 100% resolves to nothing and the name
+     collapses to a sliver at the left edge of the stage. */
+  .orb__name svg { display: block; overflow: visible; max-width: none; }
+  .orb__name text {
+    font-family: var(--sc-font-display); fill: var(--sc-ink);
+    /* Caps on an arc. Mixed case puts descenders through the curve and the
+       baseline shift reads as a mistake; caps sit on it. */
+    text-transform: uppercase; letter-spacing: .13em;
+  }
+
+  /* ---- the worlds ---- */
+  .disc { will-change: clip-path; }
+  .disc {
+    position: relative; display: block; border-radius: 50%;
+    width: var(--d); height: var(--d);
+    background: radial-gradient(circle at 31% 30%, var(--hi) 0%, var(--mid) 44%, var(--lo) 76%, #05070d 100%);
+    box-shadow: inset -0.9vh -0.4vh 3.4vh rgba(3, 5, 10, .7);
+  }
+  /* The capture is scaled inside the disc, so the disc's own border-radius
+     cannot be the clip: a transform scales the rounding with it. */
+  .disc__win { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; }
+  .disc__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .disc__night {
+    position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle at 27% 29%, rgba(5,7,13,0) 34%, rgba(5,7,13,.3) 62%, rgba(5,7,13,.86) 100%);
+  }
+
+  /* Logarithmically scaled against Earth, on the same compression as the
+     distance line at the foot of the act, and both places say so. True
+     diameter puts Mercury at nine pixels beside a Jupiter that does not fit;
+     equal circles would be a lie in the other direction; square root — tried
+     first — still left Mars too small to read the names Viking put on it.
+     The real number is printed on every card. */
+  .disc--mercury { --d: 14.7vh; --hi: #b3a99a; --mid: #857c71; --lo: #4a453f; }
+  .disc--venus   { --d: 19.0vh; --hi: #f6e2b4; --mid: #d9b877; --lo: #7d663d; }
+  .disc--earth   { --d: 19.1vh; }
+  .disc--mars    { --d: 16.2vh; }
+  .disc--jupiter { --d: 30.0vh; --hi: #e3cbaa; --mid: #c19a72; --lo: #6d5540; }
+  .disc--saturn  { --d: 29.2vh; --hi: #efdcaf; --mid: #cbae76; --lo: #6f5d3e;
+                   background: none; box-shadow: none; }
+  .disc--uranus  { --d: 25.4vh; --hi: #b9ecec; --mid: #86c9cd; --lo: #3f6a70; }
+  .disc--neptune { --d: 25.3vh; --hi: #8ea9ee; --mid: #4a6fd0; --lo: #22346b; }
+
+  .disc--earth .disc__img { transform: scale(1.705) translateY(-1.6%); }
+  .disc--mars  .disc__img { transform: scale(1.02); }
+  /* Both captures already carry the world's own terminator. A second one
+     painted over it is mud, and on Mars it buries the labels. */
+  .disc--earth .disc__night, .disc--mars .disc__night { display: none; }
+
+  /* Jupiter is banded, and the banding is the only thing anyone has ever seen
+     of it. One flat colour on a sphere reads as a beach ball. */
+  .disc--jupiter {
+    background:
+      repeating-linear-gradient(to bottom,
+        rgba(255,255,255,.055) 0 2.1%, rgba(0,0,0,.07) 2.1% 4.4%,
+        rgba(255,255,255,.02) 4.4% 7.2%, rgba(0,0,0,.045) 7.2% 9.6%),
+      radial-gradient(circle at 31% 30%, var(--hi) 0%, var(--mid) 44%, var(--lo) 76%, #05070d 100%);
+  }
+  /* Saturn is the one that needs real DOM: the ring passes behind the planet
+     and then in front of it, and no single box can be on both sides of itself. */
+  .disc--saturn .ball {
+    position: absolute; inset: 0; border-radius: 50%;
+    background:
+      repeating-linear-gradient(to bottom, rgba(255,255,255,.045) 0 3.4%, rgba(0,0,0,.05) 3.4% 7%),
+      radial-gradient(circle at 31% 30%, var(--hi) 0%, var(--mid) 44%, var(--lo) 76%, #05070d 100%);
+    box-shadow: inset -0.9vh -0.4vh 3.4vh rgba(3,5,10,.7);
+  }
+  .disc--saturn .ring {
+    position: absolute; left: 50%; top: 50%; width: 200%; height: 56%;
+    transform: translate(-50%, -50%) rotate(-14deg);
+    border-radius: 50%; border: .8vh solid rgba(214,188,133,.46);
+    box-shadow: 0 0 0 .45vh rgba(214,188,133,.12);
+  }
+  .disc--saturn .ring--b { clip-path: inset(0 0 50% 0); }
+  .disc--saturn .ring--f { clip-path: inset(50% 0 0 0); }
+
+  /* The Moon rides with the Earth rather than taking a stop of its own: it is
+     at the same distance from the Sun, and a rail ordered by distance that
+     gave it its own stop would be ordered by something else. It is attached,
+     so it turns with the Earth when the rig does. */
+  .moon {
+    position: absolute; z-index: 3; left: 112%; top: 62%;
+    width: 3.1vh; height: 3.1vh; border-radius: 50%;
+    background: radial-gradient(circle at 33% 33%, #d6d2c9 0%, #9a958c 52%, #3b3935 100%);
+  }
+
+  /* ---- the facts, under the world ---- */
+  .brief {
+    position: absolute; left: 50%; bottom: 8vh; width: min(46rem, 84vw);
+    transform: translateX(-50%); text-align: center;
+    opacity: 0; transition: opacity var(--t-exit) var(--e-exit);
+  }
+  .brief.on { opacity: 1; transition: opacity var(--t-enter) var(--e-enter) 60ms; }
+  .brief .tag { margin-bottom: .9rem; }
+  .brief .body { margin: 0 auto; max-width: 44rem; text-wrap: pretty; }
+  .brief .facts { display: flex; justify-content: center; gap: clamp(1.2rem, 3.4vw, 3.2rem);
+                  margin-top: 1.4rem; border-top: 1px solid rgba(141,154,178,.16); padding-top: 1rem; }
+  .brief .facts li { display: block; border: 0; padding: 0; text-align: center; }
+  .brief .facts li span { display: block; font-size: .56rem; letter-spacing: .18em;
+                          text-transform: uppercase; color: #6d798f; margin-bottom: .35rem; }
+  .brief .facts li b { font-size: .82rem; }
+  .land {
+    display: inline-block; margin: 1.3rem 0 0; padding: .5rem .95rem;
+    border: 1px solid rgba(141,154,178,.24); border-radius: 3px;
+    font-family: var(--sc-font-mono); font-size: .66rem; line-height: 1.7;
+    letter-spacing: .03em; color: var(--sc-ink-soft); text-align: left;
+  }
+  .land b { font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
+  .land--yes { border-color: rgba(255,209,102,.42); }
+  .land--yes b { color: var(--sc-accent); }
+
+  /* ---- the title card, before the first world ---- */
+  .railintro { position: absolute; inset: 0; }
+  .railintro__in {
+    position: absolute; left: 50%; top: var(--cy); transform: translate(-50%, -50%);
+    width: min(40rem, 82vw); text-align: center;
+  }
+  .railintro .body { margin: 1.2rem auto 0; }
+  .limb {
+    position: absolute; left: -74vh; top: 50%; margin-top: -50vh;
+    width: 100vh; height: 100vh; border-radius: 50%;
+    background: radial-gradient(circle at 18% 50%, #fff3d3 0%, #ffd166 26%, #e08b2a 54%, #7c3f10 78%, #180e05 100%);
+  }
+
+  /* ---- the chrome: a true logarithmic distance scale ---- */
+  .scale, .railhint { transition: opacity var(--t-exit) var(--e-exit); }
+  .scale { position: absolute; z-index: 8; left: 6vw; right: 6vw;
+           bottom: clamp(1.9rem, 4.4vh, 3.2rem); height: 1px; background: rgba(141,154,178,.2); }
+  .scale__t { position: absolute; top: -3px; width: 1px; height: 7px; background: rgba(141,154,178,.38); }
+  .scale__dot {
+    position: absolute; top: 50%; left: 0; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px;
+    border-radius: 50%; background: var(--sc-accent); box-shadow: 0 0 0 4px rgba(255,209,102,.13);
+  }
+  .scale__read {
+    position: absolute; bottom: 1rem; transform: translateX(-50%); white-space: nowrap;
+    font-family: var(--sc-font-mono); font-size: .58rem; letter-spacing: .15em;
+    text-transform: uppercase; color: var(--sc-accent); font-variant-numeric: tabular-nums;
+  }
+  .scale__cap {
+    position: absolute; left: 0; top: .95rem; font-family: var(--sc-font-mono);
+    font-size: .52rem; letter-spacing: .16em; text-transform: uppercase; color: #6d798f;
+  }
+  .railhint {
+    position: absolute; z-index: 8; right: 6vw; bottom: clamp(.6rem, 1.6vh, 1.2rem); margin: 0;
+    font-family: var(--sc-font-mono); font-size: .55rem; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--sc-ink-soft);
+  }
+  /* ------------------------------------------------------------- act 5, 6 -- */
+  .num { font-family: var(--sc-font-display); font-size: clamp(2.6rem, 5vw, 4.4rem);
+         line-height: 1; letter-spacing: -.02em; display: block; }
+  .num + .cap { font-family: var(--sc-font-mono); font-size: .64rem; letter-spacing: .18em;
+                text-transform: uppercase; color: var(--sc-ink-soft); display: block; margin-top: .8rem; }
+  .quiet { padding: clamp(5rem, 12vh, 9rem) 0; }
+
+  /* The peak. A radial scrim behind centred copy put the Earth out entirely,
+     which is the one thing this act exists to show, so the copy moves off the
+     planet instead: anchored low and left, with a scrim only under itself. */
+  .close__in {
+    position: absolute; z-index: 4; left: clamp(1.6rem, 6vw, 6rem);
+    bottom: clamp(6rem, 17vh, 11rem); max-width: 33rem; text-align: left; margin: 0;
+  }
+  .close__in .body { margin-inline: 0 !important; }
+  .close-scrim {
+    position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    background: linear-gradient(to top, rgba(4,6,10,.92) 0%, rgba(4,6,10,.62) 26%, rgba(4,6,10,0) 54%),
+                linear-gradient(85deg, rgba(4,6,10,.8) 0%, rgba(4,6,10,.3) 34%, rgba(4,6,10,0) 62%);
+  }
+  .cta {
+    display: inline-block; margin-top: 2rem; padding: .95rem 2rem;
+    background: var(--sc-accent); color: var(--sc-accent-ink);
+    font-family: var(--sc-font-mono); font-size: .76rem; letter-spacing: .14em;
+    text-transform: uppercase; text-decoration: none; border-radius: 3px;
+    transition: transform var(--t-exit) var(--e-enter), filter var(--t-exit) var(--e-enter);
+  }
+  @media (hover: hover) and (pointer: fine) { .cta:hover { transform: translateY(-2px); filter: brightness(1.06); } }
+  .foot {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+    display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; justify-content: center;
+    padding: 1.4rem; font-family: var(--sc-font-mono); font-size: .58rem;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--sc-ink-soft);
+  }
+  .foot a { text-decoration: none; border-bottom: 1px solid rgba(141,154,178,.34); padding-bottom: 1px; }
+
+  /* ------------------------------------------------------------- mobile ---
+     The split is a desktop format. On a phone the two sides stack and the
+     divider becomes a seam carrying the same two labels, so the argument
+     survives even though the geometry cannot. */
+  @media (max-width: 860px) {
+    .rule { display: none; }
+    .duo { grid-template-columns: 1fr; }
+    .sc-stage.duo { height: auto; position: static; }
+    [data-sc-act="pin"] { height: auto !important; }
+    /* The close pane is the only one with two children in flow, and a row
+       flex put the footer links beside the copy in half a phone each. */
+    .pane { min-height: 74svh; flex-direction: column; justify-content: center;
+            align-items: stretch; }
+    .pane--l .pane__in { text-align: left; margin-left: 0; }
+    .pane--l .body { margin-left: 0; }
+    .pane--l .facts li { flex-direction: row; }
+    .pane__in { padding: 3.2rem 1.4rem; max-width: none; }
+    .pane img.par { top: 0; height: 100%; }
+    .seam {
+      display: flex; justify-content: space-between; gap: 1rem; padding: .8rem 1.4rem;
+      border-block: 1px solid rgba(141,154,178,.2); font-family: var(--sc-font-mono);
+      font-size: .56rem; letter-spacing: .16em; text-transform: uppercase;
+      color: var(--sc-ink-soft); background: var(--sc-canvas); position: sticky; top: 0; z-index: 40;
+    }
+    .trace { position: relative; height: 54svh; padding: 1rem; }
+
+    /* The rig is the one act that keeps its geometry on a phone: it was
+       always vertical, so it only has to be smaller. */
+    .railstage { --cy: 30%; }
+    /* The cap is set by the names, not the discs: at the halfway point of the
+       turn the composite is split vertically and the two arcs stick out left
+       and right. 42vw is the widest disc whose name still fits a 390px phone.
+       It flattens the size range for the outer four; the true diameter is on
+       every card and the distance line keeps the scale honest. */
+    .disc { width: min(var(--d), 42vw); height: min(var(--d), 42vw); }
+    .brief { bottom: 11vh; width: 92vw; }
+    /* Four facts will not sit on one 390px line without shrinking past the
+       12px floor, and three-then-one reads as a mistake. Two by two. */
+    .brief .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.2rem; }
+    .brief .body { font-size: .9rem; }
+    .land { font-size: .6rem; }
+    .limb { left: -44vh; width: 60vh; height: 60vh; margin-top: -30vh; }
+    .moon { width: 2.4vh; height: 2.4vh; }
+    .scale { left: 4vw; right: 4vw; }
+    .scale__cap { font-size: .48rem; }
+    .capmore { display: none; }   /* wraps onto the hint at this width */
+    .railhint { right: 4vw; }
+
+    /* Stacked, the copy sits across the middle of its own image, so the
+       desktop side-gradients scrim the wrong half of the frame. Measured at
+       2.35:1 on the close headline. A vertical band puts the darkness where
+       the words actually are, and leaves the top and bottom of the picture.
+       (This rule was lost in an edit on 2026-09-14 and the harness caught it.) */
+    .scrim-l, .scrim-r, .close-scrim {
+      background: linear-gradient(to bottom,
+        rgba(4,6,10,.3) 0%, rgba(4,6,10,.62) 16%, rgba(4,6,10,.9) 34%,
+        rgba(4,6,10,.9) 82%, rgba(4,6,10,.5) 100%);
+    }
+    /* A static child of a flex pane shrink-to-fits: the close copy was laying
+       itself out in a 202px column on a 390px phone. */
+    /* `static` drops them out of the z-order and the scrim, at z-index 2,
+       paints over the copy and the button. `relative` is in flow and still
+       stackable. */
+    .close__in { position: relative; z-index: 4; width: 100%; max-width: none;
+                 padding: 3.2rem 1.4rem 1rem; }
+    .foot { position: relative; z-index: 5; }
+  }
+  @media (min-width: 861px) { .seam { display: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .sum li { transition-duration: .01ms; }
+    /* The collapse travels the full width of the window, which is exactly the
+       motion someone asking for less does not want. It still resolves, it just
+       does not travel: reduced means fewer and gentler, not absent. */
+    .rule { transition: none; }
+    /* The rig IS the navigation here. Freezing its transforms would leave
+       one world on the screen and seven unreachable, so the act unpins and
+       becomes eight plain blocks in the same order: world, name, facts. The
+       curved type goes with it — an arc drawn around a disc that is no longer
+       underneath it is just a ring of letters. */
+    #rail { height: auto !important; z-index: auto; }
+    #rail [data-sc-stage] { position: static; height: auto; overflow: visible; }
+    .orrery { position: static; opacity: 1 !important; }
+    .world { position: static; display: block; padding: 7vh 0; }
+    .orb { position: static; width: auto; height: auto; display: flex;
+           flex-direction: column; align-items: center;
+           transform: none !important; visibility: visible !important; }
+    /* `static` here is wrong and the failure is spectacular: the disc stops
+       being a containing block, so the capture inside it — position absolute,
+       inset 0 — lays itself out against the viewport and the Earth renders as
+       a full-width ellipse. `relative` puts it back in flow AND keeps it a
+       containing block. */
+    .orb > * { position: relative; left: auto; top: auto; transform: none !important; }
+    .orb__name svg { display: none; }
+    .orb__name .vh {
+      position: static; width: auto; height: auto; margin: 0 0 1.6rem;
+      clip: auto; overflow: visible; white-space: normal;
+      font-family: var(--sc-font-display); font-size: clamp(2rem, 3.6vw, 3.4rem);
+      line-height: 1;
+    }
+    .brief { position: static; transform: none; opacity: 1 !important;
+             margin: 2.4rem auto 0; }
+    .railintro { position: static; opacity: 1 !important; visibility: visible !important;
+                 padding: 9vh 0 1vh; }
+    .railintro__in { position: static; transform: none; margin: 0 auto; }
+    .rod, .limb, .scale, .railhint { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<span data-sc-progress></span>
+<div class="sc-grain" aria-hidden="true"></div>
+
+<div class="rule">
+  <span class="rule__mark">Orbital<small>live</small></span>
+  <span class="rule__side rule__side--l">What you can see</span>
+  <span class="rule__side rule__side--r">What is actually there</span>
+  <span class="rule__prog"></span>
+</div>
+<div class="seam" aria-hidden="true"><span>What you can see</span><span>What is actually there</span></div>
+
+<main id="top">
+  <h1 class="vh">Orbital: live aircraft, satellites, ships and the solar system, on the Earth in your browser.</h1>
+
+  <!-- 1 · UNEASE · pin + kinetic -------------------------------------------- -->
+  <section class="act" data-sc-act="pin" data-sc-span="1.8">
+    <div data-sc-stage class="duo">
+      <div class="pane pane--l">
+        <img class="par" src="assets/sky.webp" alt="An empty night sky over a flat dark horizon, a scattering of faint stars and nothing else." width="1100" height="1456" data-sc-parallax="0.07">
+        <div class="scrim-l" aria-hidden="true"></div>
+        <div class="pane__in">
+          <h2 class="d d--xl" data-sc-cue="0 0.92 0" data-sc-kinetic="lines">Look up.</h2>
+          <p class="body" data-sc-cue="0.04 0.92 0">On a clear night, away from a city, you might pick out six moving lights in an hour. Most people never look, and the sky reads as empty.</p>
+        </div>
+      </div>
+      <div class="pane pane--r pane--media">
+        <img class="par" src="assets/globe.webp" alt="A dark globe seen from space with hundreds of small aircraft symbols over Asia and Australia, coloured from amber to cyan by altitude." width="1800" height="1125" data-sc-parallax="-0.06">
+        <div class="scrim-r" aria-hidden="true"></div>
+        <div class="pane__in">
+          <h2 class="d d--xl" data-sc-cue="0.06 0.94 0" data-sc-kinetic="lines">Look again.</h2>
+          <p class="body" data-sc-cue="0.1 0.94 0">Seven thousand two hundred and five aircraft were in the air over this hemisphere at the moment the picture was taken. Not a simulation of them. Them.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · RECOGNITION · flow + reveal + in ----------------------------------- -->
+  <section class="act sc-section" data-sc-act="flow">
+    <div class="duo">
+      <div class="pane pane--l">
+        <img src="assets/light.webp" alt="A single small aircraft light with a red navigation strobe crossing high above a star field, far too high to make out any shape." width="1100" height="1456">
+        <div class="scrim-l" aria-hidden="true"></div>
+        <div class="pane__in" data-sc-in data-sc-stagger="40">
+          <span class="tag">From the ground</span>
+          <h2 class="d d--lg">A light, moving.</h2>
+          <p class="body">Too high to hear. Too far to make out a shape. You cannot tell a widebody from a regional jet, or a departure from something eight hours into a crossing.</p>
+          <ul class="facts">
+            <li><span>What it is</span><b>unknown</b></li>
+            <li><span>Where it came from</span><b>unknown</b></li>
+            <li><span>Where it is going</span><b>unknown</b></li>
+          </ul>
+        </div>
+      </div>
+      <div class="pane pane--r pane--media">
+        <img src="assets/track.webp" alt="Orbital's detail panel for flight BOV776 over Portugal, listing an Airbus A332, registration CP-3208, altitude 12,192 metres, with a dashed observed path running back towards the Atlantic." width="1800" height="810" data-sc-reveal="left" data-sc-reveal-at="0.12 0.58">
+        <div class="scrim-r" aria-hidden="true"></div>
+        <div class="pane__in" data-sc-in data-sc-stagger="40">
+          <span class="tag">The same aircraft</span>
+          <h2 class="d d--lg">BOV776.</h2>
+          <p class="body">An Airbus A330, registered CP-3208, at 12,192 metres and 879 kilometres an hour. Santa Cruz to Madrid. Orbital has watched 778 positions of it over eight and a half hours, most of them over open ocean.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · FASCINATION · pin + the signature move ----------------------------- -->
+  <section class="act" id="trim" data-sc-act="pin" data-sc-span="2.4">
+    <div data-sc-stage class="duo">
+      <div class="pane pane--l pane--dark">
+        <div class="ribbon" aria-hidden="true">
+          <svg id="ribbonSvg" viewBox="0 0 1000 660" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <linearGradient id="altStroke" x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0"   stop-color="#ff9f45"/>
+                <stop offset=".5"  stop-color="#e2dd6b"/>
+                <stop offset="1"   stop-color="#7ad7f0"/>
+              </linearGradient>
+              <linearGradient id="altFill" x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0"   stop-color="#ff9f45" stop-opacity=".02"/>
+                <stop offset=".55" stop-color="#9fd4b8" stop-opacity=".14"/>
+                <stop offset="1"   stop-color="#7ad7f0" stop-opacity=".30"/>
+              </linearGradient>
+              <clipPath id="ribbonWipe"><rect id="ribbonWipeRect" x="0" y="-60" width="0" height="780"/></clipPath>
+            </defs>
+            <g id="ribbonGrid"></g>
+            <g clip-path="url(#ribbonWipe)">
+              <!-- The recorded path is baked against a 1000x446 box (see
+                   ribbon.json). Rather than re-bake every coordinate, the
+                   geometry is stretched into the taller box here and the
+                   labels are drawn straight into the new one, so no text
+                   is ever inside a non-uniform scale. -->
+              <g id="ribbonBody" transform="matrix(1 0 0 1.4502 0 -10.8)"></g>
+            </g>
+            <g id="ribbonHole" class="ribbon__hole"></g>
+          </svg>
+          <span class="ribbon__cap" id="ribbonCap"></span>
+        </div>
+      </div>
+      <div class="pane pane--r">
+        <div class="pane__in">
+          <span class="tag">The hard part</span>
+          <h2 class="d d--lg" data-sc-cue="0 1 0 0" data-sc-kinetic="lines">The record has holes.</h2>
+          <p class="body" data-sc-cue="0.02 1 0.02 0" id="ribbonIntro"></p>
+          <ul class="sum" id="sum">
+            <li data-at="0.36"><span>Silence in the record</span><b data-k="silenceMin" data-unit=" min"></b></li>
+            <li data-at="0.46"><span>Distance across it</span><b data-k="distanceKm" data-unit=" km"></b></li>
+            <li data-at="0.56"><span>Which averages</span><b data-k="impliedKmh" data-unit=" km/h"></b></li>
+            <li data-at="0.66"><span>Flight that distance needs</span><b data-k="neededMin" data-unit=" min"></b></li>
+            <li data-at="0.76" class="verdict"><span>Time it cannot account for</span><b data-k="unexplained"></b></li>
+          </ul>
+          <p class="body" id="verdictLine" data-sc-cue="0.8 1 0.06 0"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 · WONDER · pin + parallax · zoom out until the Earth is one of eight -- -->
+  <section class="act" id="solar" data-sc-act="pin" data-sc-span="2.2">
+    <div data-sc-stage class="duo">
+      <div class="pane pane--l">
+        <img class="par" src="assets/sky.webp" alt="The same empty night sky." width="1100" height="1456" data-sc-parallax="0.09">
+        <div class="scrim-l" aria-hidden="true"></div>
+        <div class="pane__in">
+          <span class="tag">From the ground</span>
+          <h2 class="d d--lg" data-sc-cue="0 0.9 0" data-sc-kinetic="lines">Mars is up tonight.</h2>
+          <p class="body" data-sc-cue="0.04 0.9 0">It is in that photograph somewhere, and you would never pick it out. At this distance a planet and a star are the same thing: a dot that does not blink.</p>
+        </div>
+      </div>
+      <div class="pane pane--r pane--media">
+        <img class="par" src="assets/solar.webp" alt="Orbital's solar system view: the sun with the orbits of eight planets drawn as fine ellipses, each planet labelled, and Earth marked YOU ARE HERE." width="1800" height="1125" data-sc-parallax="-0.05">
+        <div class="scrim-r" aria-hidden="true"></div>
+        <div class="pane__in">
+          <span class="tag">Keep zooming out</span>
+          <h2 class="d d--lg" data-sc-cue="0.06 0.94 0" data-sc-kinetic="lines">The Earth becomes one of eight.</h2>
+          <p class="body" data-sc-cue="0.12 0.94 0">Pull back far enough on the globe and the map stops being a map. The sun, eight planets and the moon, every one of them computed for the moment you are looking. Now stop going down, and go outwards instead.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4b · CURIOSITY · the orrery · the page stops going down ---------------- -->
+  <section class="act" id="rail" data-sc-act="pan" data-sc-span="10.6"
+           aria-label="The eight planets, in order outwards from the Sun">
+    <div data-sc-stage class="railstage">
+
+      <div class="railintro" id="railintro">
+        <span class="limb" aria-hidden="true"></span>
+        <div class="railintro__in">
+          <span class="tag">Stop going down</span>
+          <h3 class="d d--xl">Eight, in order.</h3>
+          <p class="body">Everything from here out is computed rather than heard: no receiver on a hill reports a planet. The positions are arithmetic, run for the moment you are reading this.</p>
+        </div>
+      </div>
+
+      <span class="rod" id="rod" aria-hidden="true"></span>
+
+      <ol class="orrery" id="orrery">
+
+        <li class="world" data-mkm="57.9">
+          <div class="orb">
+            <h3 class="orb__name"><svg aria-hidden="true"><path fill="none"/><text><textPath startOffset="50%" text-anchor="middle">Mercury</textPath></text></svg><span class="vh">Mercury</span></h3>
+            <span class="disc disc--mercury" aria-hidden="true"><span class="disc__night"></span></span>
+          </div>
+          <div class="brief">
+            <span class="tag">First out</span>
+            <p class="body">Small, airless and scarred. It very nearly did not make it into the app at all: it is absent from the tile server's own index and only turned up by guessing the URL.</p>
+            <ul class="facts">
+              <li><span>Across</span><b>4,879 km</b></li>
+              <li><span>From the Sun</span><b>57.9 M km</b></li>
+              <li><span>Sunlight takes</span><b>3.2 min</b></li>
+              <li><span>Moons</span><b>0</b></li>
+            </ul>
+            <p class="land land--yes"><b>Landable.</b> MESSENGER's mosaic, down to zoom 5.</p>
+          </div>
+        </li>
+
+        <li class="world" data-mkm="108.2">
+          <div class="orb">
+            <h3 class="orb__name"><svg aria-hidden="true"><path fill="none"/><text><textPath startOffset="50%" text-anchor="middle">Venus</textPath></text></svg><span class="vh">Venus</span></h3>
+            <span class="disc disc--venus" aria-hidden="true"><span class="disc__night"></span></span>
+          </div>
+          <div class="brief">
+            <span class="tag">Second out</span>
+            <p class="body">The interesting absence. Magellan mapped the whole of it by radar through the cloud, so the ground is known in detail — it just is not published in a projection this map can read.</p>
+            <ul class="facts">
+              <li><span>Across</span><b>12,104 km</b></li>
+              <li><span>From the Sun</span><b>108.2 M km</b></li>
+              <li><span>Sunlight takes</span><b>6.0 min</b></li>
+              <li><span>Moons</span><b>0</b></li>
+            </ul>
+            <p class="land"><b>Not landable.</b> Mapped by radar through the cloud, but not as tiles we can use.</p>
+          </div>
+        </li>
+
+        <li class="world" data-mkm="149.6">
+          <div class="orb">
+            <h3 class="orb__name"><svg aria-hidden="true"><path fill="none"/><text><textPath startOffset="50%" text-anchor="middle">Earth</textPath></text></svg><span class="vh">Earth</span></h3>
+            <span class="disc disc--earth">
+              <span class="disc__win"><img class="disc__img" src="assets/globe.webp" alt="Orbital's night-side globe of the Earth, live aircraft drawn over Asia and Australia." width="1800" height="1125"></span>
+              <span class="moon" aria-hidden="true"></span>
+            </span>
+          </div>
+          <div class="brief">
+            <span class="tag">Third out</span>
+            <p class="body">The only one on this rail with traffic over it. Everywhere else is a position; this is a position with twelve thousand aircraft, fourteen thousand ships and a shell of satellites on top of it.</p>
+            <ul class="facts">
+              <li><span>Across</span><b>12,742 km</b></li>
+              <li><span>From the Sun</span><b>149.6 M km</b></li>
+              <li><span>Sunlight takes</span><b>8.3 min</b></li>
+              <li><span>Moons</span><b>1</b></li>
+            </ul>
+            <p class="land land--yes"><b>Landable.</b> To zoom 19, and so is the Moon beside it.</p>
+          </div>
+        </li>
+
+        <li class="world" data-mkm="228.0">
+          <div class="orb">
+            <h3 class="orb__name"><svg aria-hidden="true"><path fill="none"/><text><textPath startOffset="50%" text-anchor="middle">Mars</textPath></text></svg><span class="vh">Mars</span></h3>
+            <span class="disc disc--mars">
+              <span class="disc__win"><img class="disc__img" src="assets/mars.webp" alt="Mars rendered as a globe in Orbital, with Valles Marineris and Chryse Planitia labelled." width="880" height="880"></span>
+            </span>
+          </div>
+          <div class="brief">
+            <span class="tag">Fourth out</span>
+            <p class="body">Viking's mosaic with the names left on it. Valles Marineris runs four thousand kilometres and you can scroll the length of it, over ground with nothing at all flying above it.</p>
+            <ul class="facts">
+              <li><span>Across</span><b>6,779 km</b></li>
+              <li><span>From the Sun</span><b>228.0 M km</b></li>
+              <li><span>Sunlight takes</span><b>12.7 min</b></li>
+              <li><span>Moons</span><b>2</b></li>
+            </ul>
+            <p class="land land--yes"><b>Landable.</b> Viking MDIM21, down to zoom 8.</p>
+          </div>
+        </li>
+
+        <li class="world" data-mkm="778.5">
+          <div class="orb">
+            <h3 class="orb__name"><svg aria-hidden="true"><path fill="none"/><text><textPath startOffset="50%" text-anchor="middle">Jupiter</textPath></text></svg><span class="vh">Jupiter</span></h3>
+            <span class="disc disc--jupiter" aria-hidden="true"><span class="disc__night"></span></span>
+          </div>
+          <div class="brief">
+            <span class="tag">Fifth out</span>
+            <p class="body">Eleven Earths across, and the jump in the scale below is the real one: everything before this was crowded into the first third of the line.</p>
+            <ul class="facts">
+              <li><span>Across</span><b>139,822 km</b></li>
+              <li><span>From the Sun</span><b>778.5 M km</b></li>
+              <li><span>Sunlight takes</span><b>43 min</b></li>
+              <li><span>Moons</span><b>95</b></li>
+            </ul>
+            <p class="land"><b>Not landable.</b> No solid surface — cloud all the way down.</p>
+          </div>
+        </li>
+
+        <li class="world" data-mkm="1432.0">
+          <div class="orb">
+            <h3 class="orb__name"><svg aria-hidden="true"><path fill="none"/><text><textPath startOffset="50%" text-anchor="middle">Saturn</textPath></text></svg><span class="vh">Saturn</span></h3>
+            <span class="disc disc--saturn" aria-hidden="true">
+              <span class="ring ring--b"></span><span class="ball"></span><span class="ring ring--f"></span>
+            </span>
+          </div>
+          <div class="brief">
+            <span class="tag">Sixth out</span>
+            <p class="body">Less dense than water. The rings are two hundred thousand kilometres across and a few tens of metres thick, which is why they vanish edge-on.</p>
+            <ul class="facts">
+              <li><span>Across</span><b>116,464 km</b></li>
+              <li><span>From the Sun</span><b>1,432 M km</b></li>
+              <li><span>Sunlight takes</span><b>1 h 20 min</b></li>
+              <li><span>Moons</span><b>146</b></li>
+            </ul>
+            <p class="land"><b>Not landable.</b> No solid surface — cloud all the way down.</p>
+          </div>
+        </li>
+
+        <li class="world" data-mkm="2867.0">
+          <div class="orb">
+            <h3 class="orb__name"><svg aria-hidden="true"><path fill="none"/><text><textPath startOffset="50%" text-anchor="middle">Uranus</textPath></text></svg><span class="vh">Uranus</span></h3>
+            <span class="disc disc--uranus" aria-hidden="true"><span class="disc__night"></span></span>
+          </div>
+          <div class="brief">
+            <span class="tag">Seventh out</span>
+            <p class="body">Tipped over onto its side, so its poles take the sunlight and its equator takes the night. A season there lasts twenty-one years.</p>
+            <ul class="facts">
+              <li><span>Across</span><b>50,724 km</b></li>
+              <li><span>From the Sun</span><b>2,867 M km</b></li>
+              <li><span>Sunlight takes</span><b>2 h 39 min</b></li>
+              <li><span>Moons</span><b>28</b></li>
+            </ul>
+            <p class="land"><b>Not landable.</b> No solid surface — cloud all the way down.</p>
+          </div>
+        </li>
+
+        <li class="world" data-mkm="4515.0">
+          <div class="orb">
+            <h3 class="orb__name"><svg aria-hidden="true"><path fill="none"/><text><textPath startOffset="50%" text-anchor="middle">Neptune</textPath></text></svg><span class="vh">Neptune</span></h3>
+            <span class="disc disc--neptune" aria-hidden="true"><span class="disc__night"></span></span>
+          </div>
+          <div class="brief">
+            <span class="tag">Last one</span>
+            <p class="body">Four and a half billion kilometres out. Sunlight takes four hours to arrive, so nothing anyone has ever known about this place was less than four hours old when they learned it.</p>
+            <ul class="facts">
+              <li><span>Across</span><b>49,244 km</b></li>
+              <li><span>From the Sun</span><b>4,515 M km</b></li>
+              <li><span>Sunlight takes</span><b>4 h 11 min</b></li>
+              <li><span>Moons</span><b>16</b></li>
+            </ul>
+            <p class="land"><b>Not landable.</b> No solid surface — cloud all the way down.</p>
+          </div>
+        </li>
+
+      </ol>
+
+      <div class="scale" id="scale" aria-hidden="true">
+        <span class="scale__dot" id="scaleDot"></span>
+        <span class="scale__read" id="scaleRead">at the Sun</span>
+        <span class="scale__cap">Distance from the Sun · logarithmic<span class="capmore"> · discs on the same compression, true sizes on the cards</span></span>
+      </div>
+      <p class="railhint" id="railhint">Keep scrolling</p>
+    </div>
+  </section>
+
+  <!-- 5 · UNDERSTANDING · flow + count · the quiet act before the peak -------- -->
+  <section class="act sc-section quiet" data-sc-act="flow">
+    <div class="duo">
+      <div class="pane pane--l pane--dark">
+        <div class="pane__in" data-sc-in data-sc-stagger="45">
+          <span class="tag">Observed</span>
+          <h3 class="d d--md">Aircraft and ships are heard, not known.</h3>
+          <p class="body">Volunteers on the ground run receivers. Where nobody is listening, over most of an ocean or all of western China, an aircraft genuinely vanishes and comes back on the far side. Orbital draws the gap instead of guessing across it.</p>
+        </div>
+      </div>
+      <div class="pane pane--r pane--media">
+        <img src="assets/satellites.webp" alt="The globe with 1,430 satellites drawn as a shell of small squares around it, low orbit in blue and geostationary in amber far out at the edges." width="1800" height="1125" data-sc-reveal="up" data-sc-reveal-at="0.1 0.5">
+        <div class="scrim-r" aria-hidden="true"></div>
+        <div class="pane__in" data-sc-in data-sc-stagger="45">
+          <span class="tag">Computed</span>
+          <span class="num" data-sc-count="0 1,430" data-sc-count-at="0.1 0.6">1,430</span>
+          <span class="cap">satellites, positions calculated not fetched</span>
+          <p class="body">Nobody watches these. Their positions come from published orbital elements, propagated to the instant you are looking. That layer costs nothing, needs no account, and keeps working for days after every upstream has gone down.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 · AWE · pin · the collapse. The peak, and the last element on the page. -->
+  <section class="act" id="close" data-sc-act="pin" data-sc-span="3.6">
+    <div data-sc-stage class="duo">
+      <div class="pane pane--l">
+        <img class="par" src="assets/sky.webp" alt="" width="1100" height="1456" data-sc-parallax="0.05">
+        <div class="scrim-l" aria-hidden="true"></div>
+        <div class="pane__in">
+          <p class="body" data-sc-cue="0 0.28 0.1">So: the sky you can see, and the sky as it is.</p>
+        </div>
+      </div>
+      <div class="pane pane--r pane--media">
+        <img src="assets/globe-close.webp" alt="Orbital's globe filling the frame, aircraft scattered across the night side of the Earth." width="1800" height="1125">
+        <div class="close-scrim" aria-hidden="true"></div>
+        <div class="close__in">
+          <h2 class="d d--xl" data-sc-cue="0.44" data-sc-kinetic="lines">Open the window.</h2>
+          <p class="body" style="margin-inline:auto" data-sc-cue="0.48">Aircraft, satellites, ships, the moon and eight planets, on one Earth you can turn. No account, nothing to install.</p>
+          <a class="cta" href="https://orbital-liveview.vercel.app" data-sc-cue="0.52" data-sc-rise="0">Open Orbital</a>
+        </div>
+        <footer class="foot">
+          <span>A CSC480 project</span>
+          <span>Aircraft from adsb.lol and OpenSky</span>
+          <span>Orbits from CelesTrak and SatNOGS</span>
+          <span>Vessels from Digitraffic and aisstream</span>
+          <a href="https://orbital-liveview.vercel.app">orbital-liveview.vercel.app</a>
+        </footer>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script id="ribbonData" type="application/json">{"callsign": "QTR76X", "hex": "06a0b7", "aircraft": "B788", "origin": "Copenhagen", "destination": "Doha", "originIata": "CPH", "destIata": "DOH", "points": 3494, "minutes": 181, "maxAltM": 12497, "coveredPct": 88, "segments": [{"line": "M0.0 445.5L2.0 438.9L4.3 429.3L7.6 416.6L12.9 405.7L16.6 393.5L19.3 380.6L24.9 357.7L31.5 338.2L39.6 320.9L43.5 308.8L50.0 291.8L59.2 265.4L67.6 244.3L73.9 229.6L78.6 219.0L81.7 211.6L85.9 203.2L89.0 198.2L92.0 193.1L97.7 184.7L101.5 177.9L105.8 170.0L109.0 162.7L111.4 157.1L113.2 153.3L115.2 149.0L116.7 145.7L119.5 138.6L121.2 132.2L122.9 126.4L125.5 118.5L127.4 113.2L130.6 107.6L133.6 101.5L138.3 91.1L141.7 84.3L145.7 75.9L150.0 70.6L152.0 70.6L153.8 70.6L155.8 70.6L158.9 70.6L163.6 70.6L168.1 70.6L173.3 70.6L176.4 70.8L179.1 70.6L182.5 70.6L190.1 70.8L196.9 70.6L202.9 70.6L205.2 70.8L211.9 70.8L214.3 70.8L216.2 70.8L218.4 70.6L219.8 70.8L222.3 70.6L224.6 70.8L227.3 70.6L231.7 70.6L234.4 70.8L236.2 70.6L238.6 70.6L240.5 70.6L244.3 70.6L247.2 70.8L250.1 70.8L252.9 70.8L255.6 70.6L257.8 70.6L261.0 70.6L264.6 70.6L268.3 70.8L274.0 70.6L277.2 70.6L280.0 70.6L283.5 70.8L286.2 70.6L288.9 70.8L290.7 70.6L294.4 70.8L298.3 70.8L302.1 70.6L305.6 70.6L309.8 70.6L313.7 70.6L317.5 70.6L321.6 70.6L324.2 70.6L328.8 70.8L332.2 70.6L334.9 70.6L338.5 70.8L341.1 70.8L342.7 70.6L345.6 70.8L347.1 70.6L349.2 70.6L353.1 70.8L354.9 70.6L356.3 70.6L358.7 70.6L361.2 70.8L362.7 70.8L365.8 70.6L370.0 70.6L371.9 70.8L373.2 70.6L374.8 70.8L376.6 70.6L378.3 70.6L381.3 70.6L384.3 70.8L385.8 70.8L388.0 70.6L390.4 70.8L391.9 70.8L394.3 70.8L397.5 70.6L400.2 70.6L403.8 70.6L406.5 70.8L409.0 70.8L412.1 70.8L415.8 70.6L417.5 70.8L419.5 70.6L423.0 70.6L425.1 70.6L427.3 68.0L430.2 65.8L432.7 60.7L436.6 56.4L438.8 54.4L443.5 50.3L446.7 50.5L449.6 50.3L454.1 50.3L458.2 50.3L462.5 50.5L465.4 50.3L468.9 50.3L474.7 50.3L479.0 50.3L482.2 50.5L484.7 50.3L487.2 50.5L489.8 50.5L494.7 50.5L501.0 50.3L506.4 50.5L512.6 50.3L516.1 50.5L518.6 50.3L521.2 50.3L523.8 50.3L525.7 50.5L529.0 50.3L534.2 50.3L538.0 50.3L541.8 50.5L545.7 50.5L548.7 50.3L553.3 50.5L556.9 50.3L561.3 50.5L572.1 50.3L579.6 50.3L586.9 50.3L593.0 50.5L599.6 50.5L605.1 50.5L612.4 50.3L625.3 50.5L634.4 50.5L637.0 50.3L660.0 50.3L673.8 50.3L679.9 50.3L685.3 50.5L689.4 50.5L692.7 50.3L697.8 50.5L706.3 50.5L767.5 50.3L777.3 50.3L788.5 50.3L798.7 50.3", "area": "M0.0 445.5L2.0 438.9L4.3 429.3L7.6 416.6L12.9 405.7L16.6 393.5L19.3 380.6L24.9 357.7L31.5 338.2L39.6 320.9L43.5 308.8L50.0 291.8L59.2 265.4L67.6 244.3L73.9 229.6L78.6 219.0L81.7 211.6L85.9 203.2L89.0 198.2L92.0 193.1L97.7 184.7L101.5 177.9L105.8 170.0L109.0 162.7L111.4 157.1L113.2 153.3L115.2 149.0L116.7 145.7L119.5 138.6L121.2 132.2L122.9 126.4L125.5 118.5L127.4 113.2L130.6 107.6L133.6 101.5L138.3 91.1L141.7 84.3L145.7 75.9L150.0 70.6L152.0 70.6L153.8 70.6L155.8 70.6L158.9 70.6L163.6 70.6L168.1 70.6L173.3 70.6L176.4 70.8L179.1 70.6L182.5 70.6L190.1 70.8L196.9 70.6L202.9 70.6L205.2 70.8L211.9 70.8L214.3 70.8L216.2 70.8L218.4 70.6L219.8 70.8L222.3 70.6L224.6 70.8L227.3 70.6L231.7 70.6L234.4 70.8L236.2 70.6L238.6 70.6L240.5 70.6L244.3 70.6L247.2 70.8L250.1 70.8L252.9 70.8L255.6 70.6L257.8 70.6L261.0 70.6L264.6 70.6L268.3 70.8L274.0 70.6L277.2 70.6L280.0 70.6L283.5 70.8L286.2 70.6L288.9 70.8L290.7 70.6L294.4 70.8L298.3 70.8L302.1 70.6L305.6 70.6L309.8 70.6L313.7 70.6L317.5 70.6L321.6 70.6L324.2 70.6L328.8 70.8L332.2 70.6L334.9 70.6L338.5 70.8L341.1 70.8L342.7 70.6L345.6 70.8L347.1 70.6L349.2 70.6L353.1 70.8L354.9 70.6L356.3 70.6L358.7 70.6L361.2 70.8L362.7 70.8L365.8 70.6L370.0 70.6L371.9 70.8L373.2 70.6L374.8 70.8L376.6 70.6L378.3 70.6L381.3 70.6L384.3 70.8L385.8 70.8L388.0 70.6L390.4 70.8L391.9 70.8L394.3 70.8L397.5 70.6L400.2 70.6L403.8 70.6L406.5 70.8L409.0 70.8L412.1 70.8L415.8 70.6L417.5 70.8L419.5 70.6L423.0 70.6L425.1 70.6L427.3 68.0L430.2 65.8L432.7 60.7L436.6 56.4L438.8 54.4L443.5 50.3L446.7 50.5L449.6 50.3L454.1 50.3L458.2 50.3L462.5 50.5L465.4 50.3L468.9 50.3L474.7 50.3L479.0 50.3L482.2 50.5L484.7 50.3L487.2 50.5L489.8 50.5L494.7 50.5L501.0 50.3L506.4 50.5L512.6 50.3L516.1 50.5L518.6 50.3L521.2 50.3L523.8 50.3L525.7 50.5L529.0 50.3L534.2 50.3L538.0 50.3L541.8 50.5L545.7 50.5L548.7 50.3L553.3 50.5L556.9 50.3L561.3 50.5L572.1 50.3L579.6 50.3L586.9 50.3L593.0 50.5L599.6 50.5L605.1 50.5L612.4 50.3L625.3 50.5L634.4 50.5L637.0 50.3L660.0 50.3L673.8 50.3L679.9 50.3L685.3 50.5L689.4 50.5L692.7 50.3L697.8 50.5L706.3 50.5L767.5 50.3L777.3 50.3L788.5 50.3L798.7 50.3L798.7 446.0L0.0 446.0Z"}, {"line": "M916.7 30.3L917.9 30.0L919.6 30.0L921.3 30.0L922.1 30.3L926.0 30.0L927.9 30.3L928.7 30.3L930.4 30.3L932.2 30.3L933.2 30.0L934.9 30.3L936.0 30.0L937.2 30.0L937.7 30.0L939.2 30.0L939.3 30.0L940.4 30.0L941.3 30.3L942.2 30.3L943.8 30.0L945.1 30.3L946.7 30.3L948.0 30.3L949.3 30.0L950.9 30.3L952.6 30.3L953.8 30.0L955.3 30.3L957.1 30.0L958.8 30.0L959.9 30.0L960.3 30.0L961.1 30.3L961.7 30.3L963.1 30.0L964.2 30.3L966.1 30.0L966.2 30.0L966.3 30.0L966.5 30.0L966.6 30.3L968.4 30.0L970.1 30.3L970.2 30.0L971.9 30.0L973.5 30.0L974.1 30.3L974.6 30.0L975.2 30.0L976.0 30.3L976.4 30.0L976.5 30.3L976.8 30.0L978.6 30.3L978.6 30.0L978.7 30.0L980.4 30.0L980.7 30.3L981.1 30.0L981.8 30.0L981.9 30.3L982.7 30.0L983.3 30.0L984.7 30.3L985.1 30.0L985.2 30.0L985.3 30.3L986.0 30.0L986.7 30.0L986.8 30.0L988.6 30.3L988.8 30.3L989.2 30.3L989.4 30.0L989.6 30.0L990.3 30.3L991.5 30.0L993.0 30.0L994.9 30.3L994.9 30.3L995.3 30.0L996.2 30.0L996.6 30.3L996.6 30.3L997.1 30.0L997.8 30.0L998.4 30.3L998.5 30.3L998.5 30.3L999.6 30.3L999.7 30.3L1000.0 30.0", "area": "M916.7 30.3L917.9 30.0L919.6 30.0L921.3 30.0L922.1 30.3L926.0 30.0L927.9 30.3L928.7 30.3L930.4 30.3L932.2 30.3L933.2 30.0L934.9 30.3L936.0 30.0L937.2 30.0L937.7 30.0L939.2 30.0L939.3 30.0L940.4 30.0L941.3 30.3L942.2 30.3L943.8 30.0L945.1 30.3L946.7 30.3L948.0 30.3L949.3 30.0L950.9 30.3L952.6 30.3L953.8 30.0L955.3 30.3L957.1 30.0L958.8 30.0L959.9 30.0L960.3 30.0L961.1 30.3L961.7 30.3L963.1 30.0L964.2 30.3L966.1 30.0L966.2 30.0L966.3 30.0L966.5 30.0L966.6 30.3L968.4 30.0L970.1 30.3L970.2 30.0L971.9 30.0L973.5 30.0L974.1 30.3L974.6 30.0L975.2 30.0L976.0 30.3L976.4 30.0L976.5 30.3L976.8 30.0L978.6 30.3L978.6 30.0L978.7 30.0L980.4 30.0L980.7 30.3L981.1 30.0L981.8 30.0L981.9 30.3L982.7 30.0L983.3 30.0L984.7 30.3L985.1 30.0L985.2 30.0L985.3 30.3L986.0 30.0L986.7 30.0L986.8 30.0L988.6 30.3L988.8 30.3L989.2 30.3L989.4 30.0L989.6 30.0L990.3 30.3L991.5 30.0L993.0 30.0L994.9 30.3L994.9 30.3L995.3 30.0L996.2 30.0L996.6 30.3L996.6 30.3L997.1 30.0L997.8 30.0L998.4 30.3L998.5 30.3L998.5 30.3L999.6 30.3L999.7 30.3L1000.0 30.0L1000.0 446.0L916.7 446.0Z"}], "gaps": [{"fromT": 0.7986698283088435, "toT": 0.9166756381483965, "min": 21, "km": 330}], "biggestGap": {"fromT": 0.7986698283088435, "toT": 0.9166756381483965, "min": 21, "km": 330}, "viewBox": "0 0 1000 446"}</script>
+<script src="motion.js"></script>
+<script src="scrollcraft.js"></script>
+<script>
+ScrollCraft.mount(document.body);
+
+(function () {
+  var root = document.documentElement;
+  var docEl = root;
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---- the signature move: one flight's altitude, holes and all -------------
+  // Real data: every altitude BOX500 reported on a Hong Kong to Cincinnati
+  // freight run. Scroll wipes the profile in from the left. The empty stretch
+  // in the middle is not a rendering fault, it is the Pacific: nobody lives
+  // under it, so no receiver heard the aircraft for seven and a half hours.
+  // The arithmetic beside it proves that gap was flight rather than a stop,
+  // which is the rule Orbital uses to decide whether to join the line.
+  var D = JSON.parse(document.getElementById('ribbonData').textContent);
+  var CRUISE = 800;                                   // km/h we credit an airliner
+  var gap = D.biggestGap;
+  var needed = Math.round(gap.km / CRUISE * 60);      // minutes that distance costs
+  var unexplained = Math.max(0, gap.min - Math.min(gap.min, needed));
+
+  var body = document.getElementById('ribbonBody');
+  var grid = document.getElementById('ribbonGrid');
+  var hole = document.getElementById('ribbonHole');
+  var wipe = document.getElementById('ribbonWipeRect');
+  var cap = document.getElementById('ribbonCap');
+  var trimAct = document.getElementById('trim');
+  var rows = [].slice.call(document.querySelectorAll('#sum li'));
+  var NS = 'http://www.w3.org/2000/svg';
+  var mk = function (n, at) { var e = document.createElementNS(NS, n);
+    for (var k in at) e.setAttribute(k, at[k]); return e; };
+
+  // The tall box the geometry is stretched into. TOP and GROUND are where the
+  // profile's own 24 and 446 land, so anything drawn here in these terms sits
+  // on the line without going through the matrix.
+  var VB_H = 660, VB_TOP = 24, VB_GROUND = 636;
+
+  // altitude rules, so the shape is readable as a measurement and not a swoosh
+  [0, 6000, 12000].forEach(function (m) {
+    if (m > D.maxAltM * 1.05) return;
+    var y = VB_GROUND - (m / D.maxAltM) * (VB_GROUND - VB_TOP);
+    grid.appendChild(mk('line', { x1: 0, y1: y, x2: 1000, y2: y, class: 'ribbon__grid' }));
+    var t = mk('text', { x: 4, y: y - 9, class: 'ribbon__tick' });
+    t.textContent = m === 0 ? 'ground' : (m / 1000) + ' km';
+    grid.appendChild(t);
+  });
+
+  D.segments.forEach(function (sg) {
+    body.appendChild(mk('path', { d: sg.area, class: 'ribbon__area' }));
+    body.appendChild(mk('path', { d: sg.line, class: 'ribbon__line' }));
+  });
+
+  // the dashed bridge across the hole, and its label
+  var bx0 = gap.fromT * 1000, bx1 = gap.toT * 1000;
+  // Put the dashed span at the altitude it actually spans. Orbital's rule is
+  // that it joins the line straight across a hole it can account for, so the
+  // drawing should be that line and not a caption floating in the middle of
+  // the frame. Read the two real endpoints out of the record and average them,
+  // then push them through the same stretch the geometry gets.
+  var lastY = parseFloat(D.segments[0].line.split('L').pop().split(' ')[1]);
+  var nextY = parseFloat(D.segments[1].line.slice(1).split('L')[0].split(' ')[1]);
+  var toBox = function (y) { return y * 1.4502 - 10.8; };
+  var by = Math.round((toBox(lastY) + toBox(nextY)) / 2);
+  var bridge = mk('path', { d: 'M' + bx0.toFixed(1) + ' ' + by + 'L' + bx1.toFixed(1) + ' ' + by,
+                            class: 'ribbon__bridge', id: 'ribbonBridge' });
+  hole.appendChild(bridge);
+  // End stops. A dashed rule alone reads as a stray gridline; two ticks make it
+  // a measured span, which is what it is.
+  [bx0, bx1].forEach(function (bx) {
+    hole.appendChild(mk('path', { d: 'M' + bx.toFixed(1) + ' ' + (by - 9) + 'L' + bx.toFixed(1) + ' ' + (by + 9),
+                                  class: 'ribbon__bridge' }));
+  });
+  var lab = mk('text', { x: ((bx0 + bx1) / 2).toFixed(1), y: by + 40 });
+  lab.textContent = gap.min + ' MINUTES UNHEARD  ·  ' + gap.km.toLocaleString('en-GB') + ' KM';
+  hole.appendChild(lab);
+
+  document.getElementById('ribbonIntro').textContent =
+    'A ' + D.aircraft + ' from ' + D.origin + ' to ' + D.destination + ': ' + D.points.toLocaleString('en-GB') +
+    ' positions across ' + (D.minutes / 60).toFixed(1) + ' hours, of which ' + D.coveredPct + ' per cent was '
+    + 'heard by somebody on the ground. The notch near the end is the part that was not, and it is the question '
+    + 'Orbital answers every time: did the aircraft stop there, or did nobody hear it?';
+
+  var vals = { silenceMin: gap.min, distanceKm: gap.km,
+               impliedKmh: Math.round(gap.km / (gap.min / 60)), neededMin: needed,
+               unexplained: unexplained === 0 ? 'none' : unexplained + ' min' };
+  Array.prototype.forEach.call(document.querySelectorAll('#sum b[data-k]'), function (bEl) {
+    var v = vals[bEl.getAttribute('data-k')];
+    bEl.textContent = typeof v === 'number' ? v.toLocaleString('en-GB') + (bEl.getAttribute('data-unit') || '') : v;
+  });
+  document.getElementById('verdictLine').textContent =
+    'The distance needs more flying time than the silence even lasted, so there is nothing left over: it was '
+    + 'in the air for every minute of it. That hole is the listening failing, not the flight stopping, so '
+    + 'Orbital joins the line straight across it. When the arithmetic comes out the other way, it cuts.';
+
+  var clamp = function (v) { return v < 0 ? 0 : v > 1 ? 1 : v; };
+  var span = function (p, a, b) { return clamp((p - a) / (b - a)); };
+  var ease = function (t) { return t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; };
+  // Arriving decelerates; the turn itself wants weight at both ends.
+  var easeOut = function (t) { return 1 - Math.pow(1 - clamp(t), 3); };
+
+  function paint(p) {
+    wipe.setAttribute('width', (span(p, 0.04, 0.62) * 1000).toFixed(1));
+    // The bridge is inside the hole group, whose opacity is the cue.
+    hole.style.opacity = String(span(p, 0.30, 0.44));
+    for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('on', p >= parseFloat(rows[i].getAttribute('data-at')));
+    cap.textContent = D.callsign + ' · ' + D.originIata + ' to ' + D.destIata + ' · altitude, every position reported';
+  }
+
+  // ---- act 4b: the orrery --------------------------------------------------
+  // The page stops going down here. Eight worlds are shown one at a time, dead
+  // centre, and what carries you between them is a rod that rises out of the
+  // divider, takes the next world up with it hanging upside down, turns half a
+  // turn clockwise so that world arrives the right way up, and sinks away with
+  // the one you have finished with.
+  //
+  // Four phases per slot, and the numbers below are the fractions of a slot
+  // each one owns. The hold is the largest because the hold is the act; the
+  // rest is how you get to the next one.
+  var railAct = document.getElementById('rail');
+  var stage = railAct.querySelector('[data-sc-stage]');
+  var orrery = document.getElementById('orrery');
+  var railIntro = document.getElementById('railintro');
+  var rod = document.getElementById('rod');
+  var scaleEl = document.getElementById('scale');
+  var scaleDot = document.getElementById('scaleDot');
+  var scaleRead = document.getElementById('scaleRead');
+  var railHint = document.getElementById('railhint');
+
+  var LEAD = 0.055;                    // the title card, before the first world
+  var TAIL = 0.09;                     // Neptune's own hold, after the last turn
+  var HOLD = 0.40, RISE = 0.64, SPIN = 0.88;
+
+  var worlds = [].slice.call(orrery.children).map(function (li, k) {
+    var svg = li.querySelector('.orb__name svg');
+    var arc = svg.querySelector('path');
+    var tp = svg.querySelector('textPath');
+    // textPath needs an id to point at, and the ids have to be unique per
+    // world, so they are minted here rather than hand-numbered in the markup.
+    arc.setAttribute('id', 'arc' + k);
+    tp.setAttribute('href', '#arc' + k);
+    tp.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#arc' + k);
+    return {
+      el: li, orb: li.querySelector('.orb'), disc: li.querySelector('.disc'),
+      svg: svg, arc: arc, text: svg.querySelector('text'),
+      brief: li.querySelector('.brief'),
+      mkm: parseFloat(li.getAttribute('data-mkm')) || 0, d: 0
+    };
+  });
+  var SLOTS = worlds.length - 1;
+  var cx = 0, cy = 0, briefIdx = -2, railRuleO = 1;
+
+  // The scale under the act is logarithmic because the solar system is: on a
+  // linear line the four rocky worlds are one smudge against the left margin
+  // and the act's own subject, distance, becomes unreadable.
+  var LO = Math.log10(40), HI = Math.log10(5200);
+  var posFor = function (d) { return d <= 0 ? 0 : clamp((Math.log10(d) - LO) / (HI - LO)) * 100; };
+  worlds.forEach(function (w) {
+    var t = document.createElement('span');
+    t.className = 'scale__t';
+    t.style.left = posFor(w.mkm).toFixed(2) + '%';
+    scaleEl.insertBefore(t, scaleDot);
+  });
+
+  function measureRail() {
+    var h = stage.clientHeight || innerHeight;
+    var frac = parseFloat(getComputedStyle(stage).getPropertyValue('--cy')) || 42;
+    cx = stage.clientWidth / 2;
+    cy = h * frac / 100;
+    worlds.forEach(function (w) {
+      w.d = w.disc.offsetWidth || 1;
+      // The name is set on an arc over the crown of its own world, so the arc
+      // radius has to be measured from the disc that is actually rendered —
+      // the discs differ by a factor of two and the phone caps them again.
+      var cap = Math.max(26, Math.min(58, w.d * 0.20));
+      var R = w.d / 2 + cap * 0.85;
+      var box = Math.ceil((R + cap + 14) * 2);
+      var c = box / 2;
+      w.svg.setAttribute('viewBox', '0 0 ' + box + ' ' + box);
+      w.svg.setAttribute('width', box);
+      w.svg.setAttribute('height', box);
+      w.svg.style.width = box + 'px';
+      w.svg.style.height = box + 'px';
+      // Sweep flag 1 runs clockwise on screen, which from nine o'clock is up
+      // and over the top. Reversed, the name reads inside out.
+      w.arc.setAttribute('d', 'M ' + (c - R) + ' ' + c + ' A ' + R + ' ' + R +
+                              ' 0 0 1 ' + (c + R) + ' ' + c);
+      w.text.setAttribute('font-size', cap.toFixed(1));
+    });
+  }
+
+  function place(w, x, y, deg) {
+    w.orb.style.visibility = 'visible';
+    w.orb.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) +
+                            'px,0) rotate(' + deg.toFixed(2) + 'deg)';
+  }
+
+  function paintScale(i, t) {
+    var a = worlds[i].mkm, b = worlds[Math.min(i + 1, worlds.length - 1)].mkm;
+    var lp = posFor(a) + (posFor(b) - posFor(a)) * t;
+    var d = a + (b - a) * t;
+    scaleDot.style.left = lp.toFixed(2) + '%';
+    scaleRead.style.left = lp.toFixed(2) + '%';
+    // Centred on the dot, except at the two ends, where centring would hang
+    // the label off the edge of its own scale.
+    scaleRead.style.transform = 'translateX(' + (lp < 7 ? '0' : lp > 93 ? '-100%' : '-50%') + ')';
+    scaleRead.textContent = (d >= 1000 ? Math.round(d).toLocaleString('en-GB') : d.toFixed(1)) + ' million km';
+  }
+
+  // How much of a disc, measured down from its own top edge, stays visible.
+  // The insets run past the box on three sides because Saturn's rings hang
+  // half a disc-width outside it and a plain inset() would shear them off.
+  function cut(w, k) {
+    w.disc.style.clipPath = k >= 99.5 ? 'none'
+      : 'polygon(-160% -70%, 260% -70%, 260% ' + k.toFixed(2) + '%, -160% ' + k.toFixed(2) + '%)';
+  }
+
+  function railTo(p) {
+    if (!cx) return;
+
+    // The title card holds, then dissolves as the first world fades up.
+    var into = clamp((p - LEAD * 0.45) / (LEAD * 0.55));
+    railIntro.style.opacity = (1 - into).toFixed(3);
+    railIntro.style.visibility = into >= 1 ? 'hidden' : 'visible';
+    orrery.style.opacity = into.toFixed(3);
+
+    var q = clamp((p - LEAD) / (1 - LEAD - TAIL));
+    var u = q * SLOTS;
+    var i = Math.min(Math.floor(u), SLOTS - 1);
+    var f = q >= 1 ? 1 : u - i;
+
+    var A = worlds[i], B = worlds[i + 1];
+    var H = stage.clientHeight || innerHeight;
+    var rA = A.d / 2, rB = B.d / 2;
+    var want = -1, lineY = H * 2, lineRot = 0, lineOp = 1, travel = 0;
+
+    for (var k = 0; k < worlds.length; k++) {
+      if (k !== i && k !== i + 1) worlds[k].orb.style.visibility = 'hidden';
+    }
+
+    if (f < HOLD) {
+      place(A, cx, cy, 0); cut(A, 100);
+      B.orb.style.visibility = 'hidden';
+      lineOp = 0;
+      want = i;
+
+    } else if (f < RISE) {
+      // The line rises from under the page carrying the next world's own top
+      // half, which hangs below it because that world is already turned over.
+      // Where the line crosses the world above, that world stops: by the time
+      // the line is on its equator its bottom half is gone and the next one's
+      // dome is in its place. One circle, two worlds, a rule across the middle.
+      var t1 = easeOut((f - HOLD) / (RISE - HOLD));
+      var start = H + B.d + 40;
+      lineY = start + (cy - start) * t1;
+      place(A, cx, cy, 0);
+      cut(A, clamp((lineY - (cy - rA)) / A.d) * 100);
+      place(B, cx, lineY, 180);
+      cut(B, 50);
+
+    } else if (f < SPIN) {
+      // Half a turn about the line's own middle, which is also both worlds'
+      // centre, so nothing has to translate: the two halves simply trade ends.
+      var t2 = ease((f - RISE) / (SPIN - RISE));
+      var deg = 180 * t2;
+      lineY = cy; lineRot = deg; travel = t2;
+      place(A, cx, cy, deg); cut(A, 50);
+      place(B, cx, cy, 180 + deg); cut(B, 50);
+
+    } else {
+      // The line drops back out of frame. The finished world rides down with
+      // it, and the new one's missing half fills in behind it as it goes.
+      var t3 = easeOut((f - SPIN) / (1 - SPIN));
+      var end = H + A.d + 40;
+      lineY = cy + (end - cy) * t3;
+      lineRot = 180; travel = 1;
+      place(B, cx, cy, 0);
+      cut(B, clamp((lineY - (cy - rB)) / B.d) * 100);
+      place(A, cx, lineY, 180); cut(A, 50);
+      lineOp = 1 - clamp((t3 - 0.55) / 0.45);
+      if (t3 > 0.75) want = i + 1;
+    }
+
+    // Long enough to leave the window at any angle, from wherever it happens
+    // to be: the corner distance from its own midpoint, doubled. The stage
+    // clips, so the overhang costs nothing and the line always runs edge to
+    // edge — horizon at the start of the turn, meridian halfway through it.
+    var lineLen = 2 * Math.sqrt(
+      Math.pow(Math.max(cx, stage.clientWidth - cx), 2) +
+      Math.pow(Math.max(lineY, H - lineY), 2));
+    rod.style.width = lineLen.toFixed(1) + 'px';
+    rod.style.opacity = lineOp.toFixed(3);
+    railRuleO = 1 - lineOp * 0.88;
+    rod.style.transform = 'translate3d(' + (cx - lineLen / 2).toFixed(1) + 'px,' +
+                          lineY.toFixed(1) + 'px,0) rotate(' + lineRot.toFixed(2) + 'deg)';
+
+    if (want !== briefIdx) {
+      for (var m = 0; m < worlds.length; m++) worlds[m].brief.classList.toggle('on', m === want);
+      briefIdx = want;
+    }
+    paintScale(i, travel);
+    // The scale and the hint belong to the hold. Left up through the turn, the
+    // incoming world's inverted name lands straight on top of them at the
+    // bottom of the frame — and the number is worth more when it has plainly
+    // changed while you were travelling than when you watch it tick.
+    var chrome = (want >= 0 && into >= 1) ? '1' : '0';
+    scaleEl.style.opacity = chrome;
+    railHint.style.opacity = chrome;
+    railHint.textContent = p > 1 - TAIL * 0.6 ? '↓ back to the vertical' : 'Keep scrolling';
+  }
+
+  // ---- the collapse: the divider leaves and one column wins -----------------
+  var closeAct = document.getElementById('close');
+
+  // **The divider is leaving, so it accelerates.** It used the same
+  // ease-in-out as everything else, which reads as the page hesitating at the
+  // exact moment it is supposed to open. `easing`: decelerate arriving,
+  // accelerate leaving.
+  var easeIn = function (t) { return t * t * t; };
+
+  // Two things dim the divider now, so neither writes the property directly.
+  var closeRuleO = 1;
+
+  function collapse(p) {
+    var t = easeIn(span(p, 0.06, 0.44));
+    root.style.setProperty('--divide', (50 - 50 * t).toFixed(2) + '%');
+    closeRuleO = 1 - t;
+  }
+
+  var readP = function (el) { return parseFloat(getComputedStyle(el).getPropertyValue('--sc-p')) || 0; };
+  var wide = matchMedia('(min-width: 861px)');
+
+  if (!reduce) {
+    measureRail();
+    addEventListener('resize', function () { measureRail(); briefIdx = -2; }, { passive: true });
+  }
+
+  function frame() {
+    paint(reduce ? 1 : readP(trimAct));
+    if (!reduce) railTo(readP(railAct));
+    if (!wide.matches) root.style.setProperty('--divide', '50%');
+    else if (reduce) {
+      // Resolved, not travelled. The ending still happens; it just does not
+      // sweep the full width of the window at somebody who asked for less.
+      var done = readP(closeAct) > 0.2;
+      root.style.setProperty('--divide', done ? '0%' : '50%');
+      closeRuleO = done ? 0 : 1;
+    } else collapse(readP(closeAct));
+    // Halfway through a turn the cutting line is vertical, dead centre and
+    // full height — straight through the wordmark sitting on the divider. The
+    // divider stands down while its own line is away doing the work.
+    root.style.setProperty('--rule-o', (closeRuleO * railRuleO).toFixed(3));
+    var h = document.documentElement.scrollHeight - innerHeight;
+    var pg = h > 0 ? scrollY / h : 0;
+    root.style.setProperty('--page', pg.toFixed(4));
+    root.style.setProperty('--sides-o', (1 - span(pg, 0.10, 0.17)).toFixed(3));
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---- Motion, for the two things a scroll curve cannot express ------------
+  // The scrollcraft engine owns everything driven by scroll position. Motion
+  // owns the discrete moments, where `spring-physics` asks for a curve with
+  // weight rather than a cubic guess, and where `scale-feedback` asks for a
+  // press to answer.
+  if (window.Motion && !reduce) {
+    var animate = window.Motion.animate;
+    var inView = window.Motion.inView;
+
+    // The Moon arrives with mass. An iris wipe alone reads as a graphic
+    // appearing; a settle reads as a body coming to rest.
+    var moon = document.querySelector('.moon');
+    if (moon && inView) {
+      inView(moon, function () {
+        animate(moon, { scale: [0.9, 1] },
+          { type: 'spring', stiffness: 180, damping: 20, mass: 0.9 });
+        return function () {};
+      }, { amount: 0.4 });
+    }
+
+    // The CTA answers a press. `scale-feedback` wants 0.95 to 1.05 on tap and
+    // a restore on release, and a spring is what makes the restore feel like
+    // a release rather than a second animation.
+    var cta = document.querySelector('.cta');
+    if (cta) {
+      var press = function (to) {
+        animate(cta, { scale: to }, { type: 'spring', stiffness: 420, damping: 26 });
+      };
+      cta.addEventListener('pointerdown', function () { press(0.96); });
+      ['pointerup', 'pointerleave', 'pointercancel', 'blur'].forEach(function (e) {
+        cta.addEventListener(e, function () { press(1); });
+      });
+    }
+  }
+})();
+</script>
+</body>
+</html>

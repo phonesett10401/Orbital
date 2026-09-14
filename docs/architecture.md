@@ -423,10 +423,13 @@ orbital/
 └── frontend/                                                 (M4)
     ├── scripts/
     │   ├── copy-textures.mjs    Earth imagery out of node_modules  (D30)
+    │   ├── fetch-cloud-textures.mjs  the gas giants' plates        (D193)
+    │   ├── sync-landing.mjs     republish the landing page         (D195)
     │   └── build-airlines.mjs   ICAO designator lookup             (D46)
     ├── public/
     │   ├── textures/            generated, gitignored
-    │   └── data/                generated, gitignored
+    │   ├── data/                generated, gitignored
+    │   └── landing/             the landing page, committed, served at /landing (D195)
     └── src/
         ├── airlines.ts          callsign -> airline, in the client (D46)
         ├── wingspan.ts          ICAO type -> wingspan and draw scale (D90)
@@ -459,7 +462,9 @@ orbital/
 
 Two asset directories under `public/` are generated rather than committed:
 `npm install` brings the source data, `npm run assets` reduces it, and both
-run before `npm run dev` and `npm run build`. Nothing in them is fetched from
+run before `npm run dev` and `npm run build`. The third, `landing/`, is the
+exception in both directions - it is committed, and it is republished only when
+somebody runs `npm run landing` (D195). Nothing in them is fetched from
 a third party at runtime. **The basemap tiles are**, so the frontend is no
 longer offline the way the globe was; the backend still is, on the fixture
 provider. That trade was made when the map became the only renderer (D104) and

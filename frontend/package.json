@@ -6,6 +6,7 @@
   "scripts": {
     "textures": "node scripts/copy-textures.mjs",
     "airlines": "node scripts/build-airlines.mjs",
+    "landing": "node scripts/sync-landing.mjs",
     "clouds": "node scripts/fetch-cloud-textures.mjs",
     "assets": "npm run textures && npm run clouds && npm run airlines",
     "predev": "npm run assets",

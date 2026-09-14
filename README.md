@@ -36,6 +36,15 @@ CSC480 team project.
 |---|---|---|
 | Frontend | Vercel | Static Vite build. `VITE_API_BASE` points at the backend. |
 | Backend | Northflank | `backend/Dockerfile`, one worker. Redeploys on a push to `main`. |
+| Landing page | Vercel | `/landing`, the same deployment. Static files, no build step. |
+
+**The landing page is a path, not a second project.** The application routes by
+hash, so it occupies `/` alone and a sibling directory cannot collide with it.
+`frontend/public/landing/` is copied into `dist/` verbatim by Vite and served
+from there: one Vercel project, one domain, one deploy, and a visitor who never
+opens it downloads none of its 904 KB. It is written in a scroll-craft
+workspace that is not part of this repository, and `npm run landing --prefix
+frontend` republishes it from there when that workspace is present.
 
 **One worker, deliberately.** The backend holds a websocket open to aisstream,
 polls on a schedule and answers every request from memory, so a second worker

@@ -12429,3 +12429,61 @@ for the real one couples it to a choice that was always going to change.
 gas giants' plates. A fresh clone no longer needs to be told.
 
 **1,146 frontend tests**, 915 backend.
+
+## D195 - The landing page ships as a path, not as a second deployment
+
+The scroll-driven landing page had been built and was on one machine only.
+`/scrollcraft/` is ignored in full, so the commit that deployed every planet
+contained not one byte of it: nothing to deploy, and nothing in the submission
+either.
+
+The obvious move is a second Vercel project, and it is the wrong one. It buys
+a second dashboard, a second deploy to remember and a second domain, so the
+page that exists to introduce the application would live at a different address
+from it.
+
+**It is a static directory, so it can simply be part of the build that already
+happens.** Vite copies `public/` into `dist/` untransformed; Vercel serves what
+is in `dist/`. `frontend/public/landing/index.html` therefore arrives at
+`/landing` on the existing deployment with no configuration at all - no second
+project, no `vercel.json`, no rewrite rule.
+
+Two properties made that free rather than merely possible, and both were
+checked rather than assumed:
+
+- **The application routes by hash** (D153), so every page of it is at `/`.
+  There is no history router to collide with and no SPA rewrite to carve an
+  exemption out of. A sibling path is simply unoccupied.
+- **The page has no root-absolute references.** Every `src` and `href` in it is
+  relative - counted, not glanced at - so it runs at any depth unedited.
+
+### The workspace is not the artefact
+
+`scrollcraft/builds/orbital/` is 454 MB. The page inside it is 904 KB; the
+other 453 MB is `lab/`, screenshots from the verification harness, beside a
+brief, four shoot scripts and a `.env` holding a generation API key.
+
+So `scripts/sync-landing.mjs` copies **twelve named files** rather than the
+directory. A recursive copy with exclusions fails open: whatever is added to
+that workspace later travels by default, and the one that would hurt is the
+credential. An allowlist fails closed - a new plate has to be added to the list
+deliberately, and nothing can arrive by accident.
+
+It is deliberately **not** wired into `prebuild` beside the textures, though it
+would be a harmless no-op on Vercel where the workspace does not exist. Run
+locally it would overwrite `public/landing/` from the workspace on every build,
+so an edit to the committed copy would vanish at the next `npm run dev` with no
+message at all. The workspace is the source, the script is the publisher, and
+publishing is a decision rather than a side effect of building.
+
+### The binaries are a stated exception to D30
+
+Eight WebP plates, 636 KB, are now committed - the first binaries in the
+repository that a script cannot re-fetch. D30 keeps generated assets out of git
+*because a script can fetch them again*: the Earth texture comes from
+`node_modules`, the cloud tops from their publisher. These were generated once
+through a paid image model and are not reproducible on demand, so the rule's
+reason does not reach them. Recorded here rather than left to look like an
+oversight.
+
+**1,146 frontend tests**, 915 backend.

@@ -27,6 +27,20 @@
         "8000"
       ],
       "port": 8000
+    },
+    {
+      "name": "orbital-dist",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "preview",
+        "--prefix",
+        "frontend",
+        "--",
+        "--port",
+        "4173"
+      ],
+      "port": 4173
     }
   ]
 }
