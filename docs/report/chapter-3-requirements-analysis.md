@@ -43,7 +43,7 @@ that tier under all configurations.
 | Bhone Pyae Hein | 6708381 | System Analysis, Co-Developer |
 | Han Phyo Htet | 6708463 | Quality Assurance, Business Analysis, Co-Tester |
 | Nyan Lin Htet | 6708397 | Technical Engineer, Tester |
-| Pyae Phyo Maung | 6708170 | To be confirmed |
+| Pyae Phyo Maung | 6708170 | Co-Tester, Co-Quality Assurance and Analysis |
 
 ## 3.2 Functional Requirements
 
@@ -181,40 +181,7 @@ becomes untrustworthy. No tier can exceed it.
 
 ## 3.4 Use Case Diagram
 
-```
-                       ORBITAL - SYSTEM BOUNDARY
-  +-----------------------------------------------------------------+
-  |                                                                 |
-  |   +----------------------+     +---------------------------+    |
-  |   | UC-01 View the map   |     | UC-07 Poll a data source  |    |
-  |   +----------------------+     +---------------------------+    |
-  |   +----------------------+     +---------------------------+    |
-  |   | UC-02 Switch layer   |     | UC-08 Refresh elements    |    |
-  |   +----------------------+     +---------------------------+    |
-  |   +----------------------+     +---------------------------+    |
-  |   | UC-03 Select object  |     | UC-09 Maintain AIS stream |    |
-  |   +----------------------+     +---------------------------+    |
-  |   +----------------------+     +---------------------------+    |
-  |   | UC-04 Search         |     | UC-10 Evict stale objects |    |
-  |   +----------------------+     +---------------------------+    |
-  |   +----------------------+     +---------------------------+    |
-  |   | UC-05 Register       |     | UC-11 Promote to admin    |    |
-  |   +----------------------+     +---------------------------+    |
-  |   +----------------------+                                      |
-  |   | UC-06 Past instant   |                                      |
-  |   +----------------------+                                      |
-  +-----------------------------------------------------------------+
-        |            |             |               |            |
-   +---------+  +----------+  +---------+   +------------+ +---------+
-   |Anonymous|  |Registered|  | Premium |   |  External  | | System  |
-   | Viewer  |  |   User   |  |  User   |   |   Feeds    | |  Admin  |
-   +---------+  +----------+  +---------+   +------------+ +---------+
-        ^____________|             |         secondary actor
-             |____________________|
-
-   Registered User is an Anonymous Viewer with an identity.
-   Premium User is a Registered User with a wider entitlement.
-```
+![Figure 3.1 — Use case diagram. Eleven use cases, five actors, one system boundary.](figures/3-1-use-case-diagram.png){width=6.5in}
 
 UC-03 includes UC-01. UC-06 extends UC-01 when an instant is chosen, if that
 instant lies within the actor's entitlement window. UC-07 to UC-10 are started

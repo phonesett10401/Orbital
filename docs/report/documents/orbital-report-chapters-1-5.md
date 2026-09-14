@@ -7,7 +7,7 @@ author:
   - "Han Phyo Htet (6708463)"
   - "Nyan Lin Htet (6708397)"
   - "Pyae Phyo Maung (6708170)"
-date: "CSC480 --- 7 September 2026"
+date: "CSC480 --- 15 September 2026"
 lang: en-GB
 ---
 # Chapter 1: Introduction
@@ -390,7 +390,7 @@ that tier under all configurations.
 | Bhone Pyae Hein | 6708381 | System Analysis, Co-Developer |
 | Han Phyo Htet | 6708463 | Quality Assurance, Business Analysis, Co-Tester |
 | Nyan Lin Htet | 6708397 | Technical Engineer, Tester |
-| Pyae Phyo Maung | 6708170 | To be confirmed |
+| Pyae Phyo Maung | 6708170 | Co-Tester, Co-Quality Assurance and Analysis |
 
 ## 3.2 Functional Requirements
 
@@ -534,40 +534,7 @@ becomes untrustworthy. No tier can exceed it.
 
 ## 3.4 Use Case Diagram
 
-```
-                       ORBITAL - SYSTEM BOUNDARY
-  +-----------------------------------------------------------------+
-  |                                                                 |
-  |   +----------------------+     +---------------------------+    |
-  |   | UC-01 View the map   |     | UC-07 Poll a data source  |    |
-  |   +----------------------+     +---------------------------+    |
-  |   +----------------------+     +---------------------------+    |
-  |   | UC-02 Switch layer   |     | UC-08 Refresh elements    |    |
-  |   +----------------------+     +---------------------------+    |
-  |   +----------------------+     +---------------------------+    |
-  |   | UC-03 Select object  |     | UC-09 Maintain AIS stream |    |
-  |   +----------------------+     +---------------------------+    |
-  |   +----------------------+     +---------------------------+    |
-  |   | UC-04 Search         |     | UC-10 Evict stale objects |    |
-  |   +----------------------+     +---------------------------+    |
-  |   +----------------------+     +---------------------------+    |
-  |   | UC-05 Register       |     | UC-11 Promote to admin    |    |
-  |   +----------------------+     +---------------------------+    |
-  |   +----------------------+                                      |
-  |   | UC-06 Past instant   |                                      |
-  |   +----------------------+                                      |
-  +-----------------------------------------------------------------+
-        |            |             |               |            |
-   +---------+  +----------+  +---------+   +------------+ +---------+
-   |Anonymous|  |Registered|  | Premium |   |  External  | | System  |
-   | Viewer  |  |   User   |  |  User   |   |   Feeds    | |  Admin  |
-   +---------+  +----------+  +---------+   +------------+ +---------+
-        ^____________|             |         secondary actor
-             |____________________|
-
-   Registered User is an Anonymous Viewer with an identity.
-   Premium User is a Registered User with a wider entitlement.
-```
+![Figure 3.1 — Use case diagram. Eleven use cases, five actors, one system boundary.](figures/3-1-use-case-diagram.png){width=6.5in}
 
 UC-03 includes UC-01. UC-06 extends UC-01 when an instant is chosen, if that
 instant lies within the actor's entitlement window. UC-07 to UC-10 are started
@@ -798,3 +765,601 @@ Eighteen defects are recorded as having been invisible to the tests at the time
 they existed, each found by running the application and looking at it. In every
 case the code was correct and the wiring was absent or mismatched. Unit tests
 verify code; only running the system verifies wiring.
+
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+# Chapter 4: Project Planning
+
+## 4.1 Project Charter
+
+### Purpose
+
+Orbital exists to put aircraft, ships and satellites on one map, in a browser,
+for free, with no account required. The three kinds of object are already
+tracked publicly and separately; nothing assembles them into a single view a
+person can simply open.
+
+### Objectives
+
+| # | Objective | How it will be judged |
+|---|---|---|
+| O1 | One map showing all three object types | All three layers render live data from the deployed system |
+| O2 | No account and no cost to look | The default view requires no sign-in and no payment |
+| O3 | Upstream failure degrades, never breaks | With a feed disabled, the map still draws, labelled stale |
+| O4 | A new object type costs one module | Adding a type requires no change to the API or the frontend |
+| O5 | Honest reporting of what is shown | Sampling, staleness and source are stated in the interface |
+
+### Scope
+
+**In scope.** Ingestion from free public feeds; normalisation to one shared
+shape; a read-only REST API; a browser client rendering the three layers on a
+map; object selection and detail; search; accounts with a free and a premium
+entitlement window; the Moon, the eight planets and the solar system view.
+
+**Out of scope.** Writing to any upstream; historical archiving beyond the
+retention window; native mobile applications; flight booking, ticketing or any
+transaction; real-time alerting or push notification; an administrator
+interface.
+
+### Deliverables
+
+The deployed application, the source repository with its test suites, this
+report, a decision record, a test plan, and a demonstration.
+
+### Constraints
+
+| Constraint | Consequence for the plan |
+|---|---|
+| Free data sources only | Rate limits, not money, are the budget (§4.4) |
+| No commercial licence on one feed | The revenue model cannot use OpenSky (§2.2) |
+| One backend worker | Vertical scaling only; a second worker would double upstream cost |
+| Five part-time students | Parallel work must be separable, or it serialises |
+| One semester | Scope is fixed by phase boundaries rather than by deadline pressure |
+
+### Assumptions
+
+That the public feeds remain available and free; that their terms do not change
+mid-project; that free hosting tiers remain sufficient for a demonstration
+workload. **The first of these did not hold** — OpenSky became unreachable from
+every cloud host partway through — and §4.6 treats it as the realised risk it
+turned out to be rather than as an assumption that was merely unlucky.
+
+### Authority
+
+The Project Manager owns scope and phase boundaries and decides what is in the
+current phase and what is explicitly out. Every significant decision is written
+to the decision record with its alternatives and its reasoning, so that a choice
+can be defended, or reversed, on the evidence that produced it.
+
+---
+
+## 4.2 Work Breakdown Structure
+
+The work is broken down to the level at which one person owns one deliverable.
+Decomposing further produces a task list that is stale within a week;
+decomposing less leaves nobody accountable for anything.
+
+![Figure 4.1 — Work breakdown structure. Six work packages, each decomposed to a deliverable with a named owner.](figures/4-1-work-breakdown.png){width=6.4in}
+
+| WBS | Work package | Primary owner | Key deliverable |
+|---|---|---|---|
+| 1 | Project Management | Phone Sett Paing Kyaw | Decision record, phase boundaries, handover |
+| 2 | Requirements and Analysis | Han Phyo Htet, Bhone Pyae Hein | Requirements, data contract, API specification |
+| 3 | Backend Development | Phone Sett Paing Kyaw, Bhone Pyae Hein | Providers, poller, store, REST API, accounts |
+| 4 | Frontend Development | Phone Sett Paing Kyaw | Map renderer, object layers, search, detail |
+| 5 | Quality and Testing | Han Phyo Htet, Nyan Lin Htet, Pyae Phyo Maung | Test plan, suites, defect log, UAT |
+| 6 | Environment and Delivery | Nyan Lin Htet | Build, feeds and keys, deployment, report |
+
+**Package 3 is decomposed by phase rather than by component**, which is not the
+conventional choice. A component breakdown — "the ingestion layer", "the API" —
+would describe the architecture rather than the work, and would hide the fact
+that most later packages touch the ingestion layer only by adding one file to
+it. Breaking it down by delivered phase makes the actual shape of the effort
+visible: each new object type is one provider module and one registry entry.
+
+---
+
+## 4.3 Project Schedule
+
+![Figure 4.2 — Planned schedule. Twelve weeks, six work packages, three milestones.](figures/4-2-gantt-chart.png){width=6.6in}
+
+**This is the plan, not the log.** The bars are what the team undertook to do
+and the order the dependencies allow. What was actually delivered, phase by
+phase, is recorded in §2.4, and Chapter 8 is where the two are compared. Keeping
+them apart matters: a Gantt chart redrawn after the fact to match what happened
+is not a plan and cannot be used to judge whether planning worked.
+
+### Milestones
+
+| Milestone | Week | Condition for passing |
+|---|---|---|
+| M1 Requirements signed off | 3 | Data contract and API specification agreed by all three layers |
+| M2 Feature complete | 8 | All three object layers render live; accounts and entitlements work |
+| M3 Report and demonstration | 11 | Deployed system, report, test results, demonstration rehearsed |
+
+### The critical path
+
+Requirements → data contract → the first provider → the poller and store → the
+API → the map renderer → the first layer on screen. Everything after that first
+vertical slice is parallel: the satellite layer, the ship layer and the accounts
+work each touch a different provider or a different route, and none of them
+blocks another.
+
+**That is a designed property, not a fortunate one.** The shared data shape was
+specified before any provider was written precisely so that the second and third
+object types would not sit behind the first. The measured evidence that it
+worked is in §2.4: the ship layer cost the same as the satellite layer four
+months later, and the polling logic was not modified for either.
+
+### Scheduling assumption
+
+The window is twelve weeks from **25 August 2026**, the date of the first
+commit. If the module's submission date differs, the plan shifts with it — the
+dependencies and durations do not change, only the calendar they are laid
+against.
+
+---
+
+## 4.4 Cost Estimation
+
+### Direct cost
+
+| Category | Cost |
+|---|---|
+| Data sources | 0 |
+| Map imagery and tiles | 0 |
+| Libraries and tooling | 0 |
+| Hosting, development and demonstration | 0 |
+| **Total cash cost** | **0** |
+
+Every input is a free public service or an open-source library, and both hosts
+run on free tiers. This is not an accident of a student budget: §2.2 records
+that free sources were a requirement, because a tracker that costs money per
+viewer cannot be free to look at.
+
+### The real budget is quota, not currency
+
+No money changes hands, so the constraint that behaves like money is the
+upstream request allowance. It was budgeted like money:
+
+| Resource | Allowance | Planned use | Headroom |
+|---|---|---|---|
+| OpenSky daily credits | 4,000 | 3,072 (77%) | 928, for user-triggered lookups |
+| adsb.lol request rate | Burst 4, then ~5/min | Within the measured limit | Enforced by a gate, not by convention |
+| Celestrak / SatNOGS | Courtesy limits | Refreshed every six hours, cached to disk | Falls back to cache on failure |
+| Ships (Digitraffic, aisstream) | No metered limit | Continuous websocket | — |
+
+The startup refuses a configuration projected to exceed 85% of the OpenSky
+allowance. A budget that is only written down is a budget nobody keeps; one the
+program will not start without is a budget that holds.
+
+### Labour, as a notional replacement cost
+
+The project's only real cost is effort. Stated as what it would cost to buy,
+under assumptions that are stated rather than implied:
+
+| Item | Assumption |
+|---|---|
+| Team | 5 members |
+| Duration | 12 weeks |
+| Effort per member per week | 8 hours |
+| **Total effort** | **480 person-hours** |
+
+At a notional junior developer rate of **£25 per hour**, that is **£12,000** of
+labour delivered at zero cash cost. The rate is an assumption for comparison
+only; the hours are the figure worth arguing about, and they are an estimate,
+not a measurement. The project did not keep timesheets, and inventing precise
+ones here would be exactly the kind of invented number this report declines to
+produce elsewhere.
+
+---
+
+## 4.5 Resource Planning
+
+### People
+
+| Member | Roles | Primary work packages |
+|---|---|---|
+| Phone Sett Paing Kyaw | Project Manager, Developer | 1, 3, 4 |
+| Bhone Pyae Hein | System Analysis, Co-Developer | 2, 3 |
+| Han Phyo Htet | Quality Assurance, Business Analysis | 2, 5, 6.4 |
+| Nyan Lin Htet | Technical Engineer, Tester | 5, 6 |
+| Pyae Phyo Maung | Co-Tester, Co-QA and Analysis | 5, 6.4 |
+
+Seven roles across five people, so most members hold two. That is a
+consequence of team size rather than a design: with five people, a role per
+person would leave two roles unfilled, and the two that would go are quality
+assurance and technical environment — the two whose absence is invisible until
+late.
+
+### Technology
+
+| Resource | Purpose | Cost |
+|---|---|---|
+| Python, FastAPI, httpx, SGP4 | Ingestion and API | Free, open source |
+| React, TypeScript, MapLibre GL, Vite | Browser client | Free, open source |
+| SQLite | Accounts and sessions | Free, bundled |
+| Vercel | Frontend and landing page hosting | Free tier |
+| Northflank | Backend container hosting | Free tier |
+| GitHub | Source control, history, issues | Free |
+
+### Data
+
+Five upstream feeds, all free and public: adsb.lol and adsb.fi for aircraft,
+Celestrak and SatNOGS for orbital elements and satellite identity, Digitraffic
+and aisstream for vessels. OpenSky remains supported in the code and is not
+in use.
+
+### Environment
+
+A member must be able to set the project up from a clean machine. That is the
+Technical Engineer's deliverable rather than a shared assumption, and it is the
+reason generated assets are fetched by a script rather than committed: a clone
+plus one command produces a running system, and a build with no network works
+as long as a previous one has run.
+
+---
+
+## 4.6 Risk Management Plan
+
+Probability and impact are graded **H/M/L**. The response column says what was
+actually built or done, not what would ideally be done — a risk register of
+intentions is a document nobody checks against the system.
+
+| # | Risk | P | I | Response |
+|---|---|---|---|---|
+| R1 | An upstream feed becomes unavailable | H | H | Last good snapshot served with a visible staleness flag; aircraft and ships each have two independent feeds |
+| R2 | An upstream rate-limits or bans the client | M | H | One backend for all viewers; measured limits enforced by a gate; exponential backoff honouring `Retry-After` |
+| R3 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in §2.2 rather than assumed away |
+| R4 | Browser cannot draw the object count | M | H | Responses thinned to a cap; one layer at a time; positions interpolated between polls |
+| R5 | Secrets committed to the repository | L | H | Credentials in environment variables only; configuration never printed as an object, only field by field |
+| R6 | Free hosting tier proves insufficient | M | M | One worker by design; everything answered from memory; scaling is a bigger box, not more boxes |
+| R7 | A defect resists diagnosis and consumes the schedule | M | H | Every defect written down with how it was found; a fix counts as fixed when demonstrated, not when written |
+| R8 | Work serialises behind one member | M | M | The shared data shape fixed early so layers proceed in parallel; session handover written every time |
+| R9 | A decision correct when made becomes wrong later | M | M | Decision record carries alternatives and reasoning, so a reversal is cheap and evidenced |
+
+### R1 was realised, and the plan is judged on that
+
+OpenSky became unreachable from every cloud host during the project. The
+mitigation was not theoretical: a second aircraft feed was added, the union
+provider kept the interface identical, and **nothing above the ingestion layer
+changed**. The cost was one provider module and one registry entry — the same
+cost the architecture had been designed to make it.
+
+### R7 was also realised, and cost more
+
+Six working sessions went to a single defect that was misdiagnosed five times.
+The cause was structural — one camera serving two pictures at very different
+scales — and the resolution deleted 376 lines, added 130, and cost no feature.
+It is recorded here because a risk register that lists only the risks that were
+survived cheaply is not a risk register.
+
+---
+
+## 4.7 Communication Plan
+
+| Channel | Participants | Frequency | Purpose |
+|---|---|---|---|
+| Written handover | Whole team | End of every working session | What was done, what is blocked, who is waiting on whom |
+| Decision record | Author, reviewed by PM | On every significant choice | The choice, its alternatives, and the reasoning |
+| Defect log | QA, Testers, Developer | On every defect found | Severity, how it was found, whether it is fixed |
+| Repository history | Whole team | Continuous | The change, and the reason for it, in the commit message |
+| Team review | Whole team | Per phase boundary | Accept the phase, or state what is outstanding |
+| Report and demonstration | Whole team, assessor | Milestone M3 | The deliverable |
+
+### Why handover is a deliverable rather than a courtesy
+
+The single largest risk to a part-time team is not technical: it is that context
+is lost between sessions and re-derived at full cost. Every session therefore
+ends with a written handover, and it is package 1.4 in the WBS with an owner
+against it — because a practice that is only a good intention is a practice that
+stops the first week somebody is busy.
+
+### Escalation
+
+A blocked item is raised in the handover. If it remains blocked at the next
+session it goes to the Project Manager, who decides whether it is in the current
+phase at all. **A blocker that is out of the phase is closed rather than
+carried**, which is how the phase boundary does its job: the alternative is a
+list that grows all semester and is resolved by the deadline rather than by
+anyone.
+
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+# Chapter 5: System Design
+
+## 5.1 System Architecture
+
+Orbital is three layers with one rule between them: **data flows in one
+direction, and each layer knows only the layer directly beneath it.**
+
+![Figure 5.1 — System architecture. Five external feeds, three internal layers, and one direction of flow.](figures/5-1-system-architecture.png){width=6.5in}
+
+### The three layers
+
+| Layer | Owns | Never does |
+|---|---|---|
+| 1 Ingestion | Speaking to upstreams, normalising, scheduling, holding the current state | Know that a browser exists |
+| 2 API | Reading the store, filtering by bounding box, thinning, accounts | Call an upstream |
+| 3 Frontend | Rendering, interpolation, interaction | Know where the data came from |
+
+### Three properties follow, and they are the design
+
+**The browser never talks to a data source.** Every external call goes through
+the backend, so rate limiting and caching are enforced in exactly one place. A
+hundred open browser tabs cost the same upstream quota as one. This is what made
+adding a second aircraft feed a backend-only change: the frontend was never
+told, because there was nothing to tell it.
+
+**Either end can be replaced without touching the other**, and both have been.
+The backend gained a second upstream and the frontend gained an entirely
+different renderer, neither requiring a change on the other side of the wire.
+
+**Upstream failure is contained at layer 1.** The API serves the last good
+snapshot with an explicit staleness flag. A feed outage degrades the display; it
+does not break it.
+
+### Deployment
+
+| Component | Host | Shape |
+|---|---|---|
+| Frontend | Vercel | Static build, no server |
+| Landing page | Vercel | `/landing`, the same deployment, static files |
+| Backend | Northflank | One container, **one worker** |
+| Accounts database | Northflank volume | SQLite file |
+
+**One worker, deliberately.** The backend holds a websocket open to the AIS
+stream, polls on a schedule, and answers every request from memory. A second
+worker would open a second AIS socket, run its own poller and keep its own
+store: the upstream cost would double and two requests could disagree about
+where an aircraft is. It is scaled by making the box bigger, not by adding
+boxes.
+
+### The numbers that shape it
+
+| Parameter | Value | Why that value |
+|---|---|---|
+| Objects per response | 2,000 | The cap above which the browser cannot draw a frame in budget |
+| Object retention | 300 s | Longer than the longest poll interval, so a missed poll never drops an aircraft |
+| Union supplement interval | 120 s | The metered feed answers once per interval regardless of the free feed's cadence |
+| Aircraft request rate | 4 per minute | A fifth under the measured limit of burst-4 then ~5 per minute |
+| Vessel ceiling | 14,000 | Bounds memory for a feed that accumulates rather than answers |
+
+---
+
+## 5.2 Database Design
+
+![Figure 5.2 — Entity relationship diagram. Two persisted tables, and the domain entities that have no table.](figures/5-2-er-diagram.png){width=6.5in}
+
+### Two tables, and that is the design
+
+The persisted schema is `accounts` and `sessions`. Nothing else in Orbital is
+written down.
+
+```sql
+CREATE TABLE accounts (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    email         TEXT    NOT NULL UNIQUE,
+    password_hash TEXT    NOT NULL,
+    tier          TEXT    NOT NULL DEFAULT 'free',
+    created_at    TEXT    NOT NULL
+);
+
+CREATE TABLE sessions (
+    token_hash TEXT    PRIMARY KEY,
+    account_id INTEGER NOT NULL,
+    created_at TEXT    NOT NULL,
+    expires_at TEXT    NOT NULL
+);
+CREATE INDEX sessions_account ON sessions (account_id);
+```
+
+An account holds many sessions: one per signed-in device, each expiring on its
+own schedule.
+
+**The raw session token is returned once, at creation, and never stored.** Only
+its hash is in the table, so the token exists in the user's cookie and nowhere
+else. A copy of the database does not let anyone sign in as anybody.
+
+### Why almost nothing is persisted
+
+A tracker looks like a system that should have a large database, and Orbital
+deliberately does not. A poll replaces the previous snapshot; positions are held
+in memory and served from there; an object not re-observed within the retention
+window is evicted. Nothing about an aircraft is written to disk at all.
+
+Three consequences, and all three are wanted:
+
+- **The API cannot be slow because a database is slow**, because there is no
+  database on the request path for tracked objects.
+- **There is no schema migration** for the thing that changes most often — the
+  shape of a feed — because a feed's shape is normalised at the boundary and
+  never stored in its own form.
+- **Restarting is cheap and safe.** The only state worth keeping is an account,
+  and that is the only state kept.
+
+The cost is equally plain: Orbital cannot answer a question about last Tuesday.
+Entitlement windows of twenty-four hours and seven days are bounded by what is
+still in memory, not by a query.
+
+### The entities that have no table
+
+`TrackedObject` is the shared shape all three object types normalise to, with
+`TrackPoint`, `Airport` and `FlightRoute` hanging off it. They have real
+structure, real relationships and real cardinality — they simply have no rows.
+They are drawn dashed in Figure 5.2 because omitting them would make the data
+model look like two tables about sign-in, which is the least interesting part of
+this system.
+
+**One shape holds all three object types, and the absent fields are `None`.** An
+aircraft has a route and a track; a satellite and a ship have neither. This is
+what makes a new object type cost one ingestion module: there is no per-type
+schema to add.
+
+---
+
+## 5.3 UML Diagrams
+
+### 5.3.1 Class Diagram
+
+![Figure 5.3 — Class diagram of the ingestion layer.](figures/5-3-class-diagram.png){width=6.5in}
+
+The ingestion layer is the part of Orbital with real class structure, so it is
+the part worth drawing. `Provider` is abstract and declares one required
+operation: fetch, given an optional bounding box, and return the normalised
+shape. Seven concrete providers implement it — one per upstream, plus an offline
+fixture that needs no credentials.
+
+**`UnionProvider` is the design point.** It inherits `Provider` *and holds two
+of them*: the primary answers every poll, the supplement answers every 120
+seconds, and the results are merged. A caller cannot tell a pair of feeds from a
+single feed.
+
+That is why the second aircraft source cost what it cost. When the primary
+became unreachable from every cloud host, the change was one provider module and
+one registry entry; the poller, the store, the API and the entire frontend were
+untouched, because none of them can observe the difference.
+
+`Provider` also raises rather than returning partial results —
+`ProviderUnavailable`, `ProviderRateLimited`, `ProviderBadResponse`. A provider
+that returned nine hundred aircraft instead of two thousand would be reporting
+that the sky had emptied. Raising makes a failure a failure.
+
+**The API never holds a `Provider`.** There is no call path from an HTTP request
+to a socket, which is the structural reason §5.1's third property is true rather
+than merely intended.
+
+### 5.3.2 Sequence Diagram
+
+![Figure 5.4 — Sequence diagram. The poll loop, and a request that does not wait for it.](figures/5-4-sequence-diagram.png){width=6.5in}
+
+Two interactions are drawn on one page deliberately. Separately they look like
+an ordinary background job and an ordinary request; together, the actual design
+is visible — **they never touch.**
+
+**A.** The poller wakes on its interval, asks the provider to fetch, normalises
+what comes back, and applies it to the store. This runs whether or not anyone is
+looking.
+
+**B.** The browser pans the map and asks for a bounding box. The API reads the
+store, filters, thins to the response cap, adds the staleness flag, and answers.
+The frontend interpolates positions between polls so that motion is smooth at a
+far lower request rate than smooth motion would otherwise need.
+
+The browser's request does not trigger a fetch, does not wait for one, and
+cannot fail because one failed. It reads whatever the store last had. That single
+property is why an upstream outage degrades Orbital rather than breaking it, and
+why viewer count is decoupled from upstream cost entirely.
+
+### 5.3.3 Activity Diagram
+
+![Figure 5.5 — Activity diagram. One poll cycle, including the ways it fails.](figures/5-5-activity-diagram.png){width=4.9in}
+
+An activity diagram of the happy path would be a straight line and would say
+nothing. The branches are the content: **three of the four outcomes of a fetch
+are failures**, and what happens to each is the reason the map does not go blank
+when a feed does.
+
+| Outcome | Response |
+|---|---|
+| Records returned | Normalise, apply to the store, reset the backoff |
+| `ProviderRateLimited` | Honour `Retry-After`, double the backoff, keep the snapshot |
+| `ProviderUnavailable` | Keep the previous snapshot, mark the store stale |
+| `ProviderBadResponse` | As above — a malformed answer is treated as no answer |
+
+**None of the three failures empties the store.** A feed that goes dark costs
+freshness, which is visible and labelled in the status bar, rather than costing
+the map, which would not be. The retention window is what finally removes an
+object that nobody is reporting — a decision made by elapsed time, not by one
+failed request.
+
+---
+
+## 5.4 User Interface Design
+
+![Figure 5.6 — The deployed interface, annotated. Captured headlessly at 1600 × 950 while the deployment was live.](figures/5-6-ui-design.png){width=6.5in}
+
+This is a screenshot of the running system rather than a wireframe. The counts
+in the status bar — objects drawn, objects in view, data age, and which feed
+answered — are the real ones at the moment of capture.
+
+### The principles the layout follows
+
+**The map is the product; everything else is chrome at the edges.** Controls
+occupy the corners and the top strip. Nothing floats over the centre, because
+the centre is the thing the user came for.
+
+**One layer at a time.** Aircraft, satellites and ships are a switch rather than
+three checkboxes. All three at once is roughly forty thousand markers and no
+legible map; the switch makes that impossible rather than merely discouraged.
+
+**The corner is one column, not four floating controls.** Brand, world chooser,
+sign-in and about stack under one another, and the world chooser opens to the
+right rather than downward so it does not cover the items beneath it.
+
+**The status bar is the honesty line.** It states that 2,000 of 13,607 objects
+in view are drawn, how old the data is, and which feed answered. A tracker that
+quietly showed a sample as though it were everything would be easier to build
+and would be lying.
+
+**Colour carries meaning, and only meaning.** Altitude is a ramp; marker shape
+distinguishes a known heading from an unknown one; a faded marker has not been
+reported for over two minutes. The key states all three rather than expecting
+the reader to infer them.
+
+**The revenue model is visible in the product.** Advertisement slots are shown to
+anonymous and free accounts and removed by the premium tier, and the upgrade
+prompt says what premium changes in concrete terms — a full week of history
+instead of twenty-four hours — rather than in adjectives.
+
+---
+
+## 5.5 Prototype Design
+
+### What the prototype is
+
+The prototype is the deployed system. There is no separate mock-up, and that is
+a deliberate consequence of how the work was sequenced: the first phase
+delivered one object type end to end — feed, normalisation, store, API, map,
+marker on screen — rather than delivering a layer at a time across all three.
+
+A vertical slice is a prototype that is also the first increment of the product.
+The alternative, a horizontal one, produces a complete ingestion layer with
+nothing to look at, and defers every integration risk to the end.
+
+| | Address |
+|---|---|
+| Application | `orbital-liveview.vercel.app` |
+| Landing page | `orbital-liveview.vercel.app/landing` |
+
+### What each phase's prototype proved
+
+| Phase | Prototype | The risk it retired |
+|---|---|---|
+| 1 | Aircraft, end to end | That a free feed could sustain a live map at all |
+| 2 | Satellites; migration to MapLibre | That a second object type costs one module |
+| 3 | Moon and solar system | That the renderer is not Earth-specific |
+| 4 | Accounts, tiers, advertisements | That a revenue model fits without a payment integration |
+| 5 | Ships, regional then global | That the shape holds for a streaming source, not just a polled one |
+| 6 | Performance and defect sweep | That the whole thing holds at full object count |
+
+### Evolution rather than throw-away
+
+Each phase's prototype became the next phase's foundation, and none was
+discarded. The evidence that this was the right shape is the cost of the later
+phases: the satellite layer cost one provider module and one registry entry,
+and the ship layer cost the same four months later, with the polling logic
+unmodified for either.
+
+**One prototype was discarded**, and it is worth recording. The original
+renderer was a three.js globe, replaced by MapLibre in phase 2. The globe could
+draw a sphere but could not draw a map: no vector basemap, no zoom to street
+level, no established tiling. Replacing it cost a phase and was correct — a
+decision that was right when it was made became wrong once the requirement grew
+past what it could reach.

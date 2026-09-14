@@ -10,13 +10,13 @@ Draft chapters for the CSC480 report, following the structure in
 | **1. Introduction** | Background and Problem Statement · Project Objectives · Project Scope · Expected Benefits · Tools and Technologies | **Draft complete** |
 | **2. Feasibility Study and Related Work** | Technical · Economic · Operational · Schedule · Related Systems · Relevant Theories | **Draft complete** |
 | **3. Requirements Analysis** | Stakeholder Analysis · Functional · Non-Functional · Use Case Diagram · Use Case Descriptions · SRS | **Draft complete** |
-| 4. Project Planning | Charter · WBS · Gantt · Cost · Resources · Risk · Communication | Not started |
-| 5. System Design | Architecture · ER · UML · UI · Prototype | Not started |
+| **4. Project Planning** | Charter · WBS · Gantt · Cost · Resources · Risk · Communication | **Draft complete** |
+| **5. System Design** | Architecture · ER · UML · UI · Prototype | **Draft complete** |
 | 6. System Development | Environment · Modules · Database · Screens · Code | Not started |
 | 7. System Testing | Plan · Cases · Unit · Integration · System · UAT · Results | Not started |
 | 8. Conclusion | Summary · Objectives · Problems · Improvements · Lessons | Not started |
 
-Chapters 4–8 are largely assembly rather than research: much of their content
+Chapters 6–8 are largely assembly rather than research: much of their content
 already exists in `docs/decisions.md`, `docs/architecture.md`,
 `docs/test-plan.md` and `docs/data-contract.md`.
 
@@ -28,8 +28,8 @@ not artifacts nobody needs to keep.
 
 | File | |
 |---|---|
-| `Orbital-Report-Chapters-1-3.docx` | Word, 20 pages, black and white |
-| `Orbital-Report-Chapters-1-3.pdf` | The same document, exported by Word itself |
+| `Orbital-Report-Chapters-1-5.docx` | Word, 40 pages, nine colour figures |
+| `Orbital-Report-Chapters-1-5.pdf` | The same document, exported by Word itself |
 
 **Rebuild** with `python docs/report/build_report.py` after editing any chapter.
 The pipeline is markdown → `.docx` via pandoc, then `.docx` → `.pdf` via Word,
@@ -40,7 +40,32 @@ section rules, and no discursive asides — it is written to be presented in ten
 to fifteen minutes rather than read at length. Tables keep a header rule and a
 closing rule, which aid scanning.
 
-Two things the build had to correct, because both fail silently:
+## Figures
+
+Nine figures, all generated. `figures/` holds the PNGs and the `fig_*.py`
+beside them are what produced each one, sharing one palette in
+`figures_style.py` so a colour means the same thing in every figure and on
+every slide.
+
+```bash
+python docs/report/fig_architecture.py   # and fig_er, fig_class, fig_sequence,
+                                          # fig_activity, fig_ui, fig_wbs,
+                                          # fig_gantt, fig_usecase
+```
+
+`fig_ui.py` is the exception: it annotates `figures/_app.png`, a headless
+capture of the live deployment at 1600 x 950, so the counts in its status bar
+are real. Recapture with:
+
+```bash
+chrome --headless=new --use-gl=swiftshader --window-size=1600,950 --virtual-time-budget=20000 --screenshot=_app.png https://orbital-liveview.vercel.app/
+```
+
+**The callouts are placed against that capture's pixels.** Recapturing at a
+different window size moves every region, and the numbered boxes will point at
+the wrong things without any error being raised.
+
+Four things the build had to correct, because all four fail silently:
 
 - **`\newpage` does nothing for a Word target.** It is a LaTeX command; pandoc
   dropped it without an error and without leaving literal text, so every chapter
@@ -48,7 +73,18 @@ Two things the build had to correct, because both fail silently:
   OpenXML.
 - **The use case diagram wrapped inside its own boxes** at pandoc's default
   11 pt code font, destroying the ASCII alignment. The reference document sets
-  it to 8 pt; the widest line is 73 characters.
+  it to 8 pt; the widest line is 73 characters. It is now Figure 3.1 instead,
+  so the problem is gone rather than worked around.
+- **Pandoc resolves a relative image path against the working directory**, not
+  against the file the path was written in. The chapters say `figures/...` and
+  the combined markdown is assembled one level down in `documents/`, so every
+  figure resolved to nothing — no image, no error, and a `.docx` whose media
+  folder was empty. `--resource-path` fixes it.
+- **Pandoc clamps an image in a `.docx` to 5.83 inches** whatever width the
+  attribute asks for. An 11-inch-wide figure therefore prints at half size and
+  its 6.6 pt labels land at 3.4 pt. The Gantt chart and the WBS were redrawn
+  narrower with larger type rather than left to be squinted at; every figure is
+  now checked at its printed size, not at the size it was drawn.
 
 ## Where the facts come from
 
@@ -72,6 +108,10 @@ D168-D170 moved several of them:
 
 1. **Confirm the team roles table** in §3.1.3 against the current division of
    work. It is taken from `Orbital_Team_Roles.pdf`, which may predate changes.
+   Note that the roles document covers **four** members and the report has
+   **five**: Pyae Phyo Maung is absent from it, and his roles — Co-Tester,
+   Co-QA and Analysis — were confirmed by Phone rather than read from the
+   document. Everything else in §4.5 and Figure 4.1 is the document's.
 2. **Decide how much of the honest reporting to keep.** The draft states several
    things a report could omit: that the administrator role has no interface,
    that a decision correct when made became wrong two phases later, that six
@@ -82,8 +122,8 @@ D168-D170 moved several of them:
 3. **Chapter 2.2.3 constrains the revenue model.** OpenSky forbids commercial
    use, so a paid version could not use it. This is presented as a finding
    rather than a resolved question, and the team may wish to take a position.
-4. **The use case diagram** in §3.4 is ASCII. It will need redrawing in a
-   diagramming tool for submission.
+4. ~~The use case diagram in §3.4 is ASCII~~ — **done.** It is Figure 3.1,
+   redrawn with the same eleven use cases, five actors and relationships.
 5. **`docs/test-plan.md` §2 is stale** — its requirements table still refers to
    `globe/`, deleted in D104. Chapter 3 was written from the current system
    instead. That table should be refreshed before Chapter 7 is written from it.
@@ -106,3 +146,18 @@ and satellites. They are given as "measured live on 7 September 2026" rather
 than as fixed properties. The ship figure in particular climbs for roughly an
 hour after a restart, because the global feed is a stream that accumulates
 rather than an endpoint that answers.
+
+## The Gantt chart is a plan, not a log
+
+Chapter 4.3 is a **forward-looking** schedule, chosen deliberately over one
+reconstructed from the commit history. Two consequences worth knowing before
+anyone edits it:
+
+- **The window is an assumption.** Twelve weeks from 25 August 2026, the date
+  of the first commit, because the module's submission date was not to hand.
+  `START` and `WEEKS` in `fig_gantt.py` drive every bar, the axis and the
+  milestones, so changing the window is changing two numbers.
+- **It is not evidence of what happened.** §2.4 records the phases actually
+  delivered. Chapter 8, when it is written, is where the plan and the outcome
+  are compared — and that comparison is only worth anything because the plan
+  was not quietly redrawn to match.
