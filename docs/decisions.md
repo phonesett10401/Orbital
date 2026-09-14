@@ -12476,6 +12476,35 @@ so an edit to the committed copy would vanish at the next `npm run dev` with no
 message at all. The workspace is the source, the script is the publisher, and
 publishing is a decision rather than a side effect of building.
 
+### `/landing` without the trailing slash served the HTML and nothing else
+
+Measured on the deployment, not predicted. Vercel resolves the directory index
+- `/landing` returns `landing/index.html`, 200 - but it does **not** redirect to
+`/landing/` first. So the document's base URL stays `/`, and the twelve relative
+references the page is built on resolve one directory too high: `assets/sky.webp`
+became `/assets/sky.webp`, which is the *application's* asset directory. All
+twelve 404'd. The page arrived, alone, unstyled and unpinned, with its alt text
+showing.
+
+The property that made `/landing` free is the same property that broke it: a
+page with no absolute references runs at any depth, and therefore cannot tell
+when it is at the wrong one.
+
+`frontend/vercel.json` now redirects `/landing` to `/landing/`. Not a change to
+the page - a page that hard-codes its own deployment path is a page that only
+works there, and it is still served from the scroll-craft workspace at `/`
+during development. **307 rather than 308**: a permanent redirect is cached by
+browsers indefinitely, and a wrong one is then very difficult to take back.
+
+It is the first `vercel.json` in this repository. Defining `redirects` is
+additive - it does not displace the Vite framework preset's own SPA rewrite,
+which is the thing that must keep working.
+
+The general shape, which this repository keeps rediscovering: **the last hop is
+not the one you tested.** It was verified against `vite build` output served
+locally and all twelve files were 200 there, because the local URL had the
+slash. The host's own resolution rule was never in the test.
+
 ### The binaries are a stated exception to D30
 
 Eight WebP plates, 636 KB, are now committed - the first binaries in the
