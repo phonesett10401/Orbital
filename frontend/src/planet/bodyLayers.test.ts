@@ -8,8 +8,16 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { bodyFor } from '../bodies';
-import { LAYER_HOME_BODY, visibilityFor } from './bodySurface';
+import { BODIES, bodyFor, canEnter } from '../bodies';
+import {
+  IMAGERY_FAR,
+  IMAGERY_NEAR,
+  LAYER_HOME_BODY,
+  imageryVisibility,
+  sameImagery,
+  surfaceTilesFor,
+  visibilityFor,
+} from './bodySurface';
 import { CUSTOM_LAYER_IDS } from './customLayers';
 import { moonLeaderLayer, moonSatelliteLayers } from './moonLayer';
 import { MOON_SHELL_LAYER } from './moonShellLayer';
@@ -65,5 +73,61 @@ describe('the layers that belong to another world', () => {
       const lunar = Object.keys(LAYER_HOME_BODY).map((id) => plan[id]);
       expect(new Set(lunar).size, `${body} draws the lunar craft in pieces`).toBe(1);
     }
+  });
+});
+
+describe('the two imagery tiers', () => {
+  it('keeps the near tier off every world but Earth', () => {
+    // It is pointed at Earth's Esri tiles and always will be, so leaving it on
+    // does not waste a layer, it draws Brazil over Mars.
+    expect(imageryVisibility('earth', true)[IMAGERY_NEAR]).toBe('visible');
+    for (const id of ['mars', 'venus', 'mercury', 'moon']) {
+      expect(imageryVisibility(id, true)[IMAGERY_NEAR], id).toBe('none');
+      expect(imageryVisibility(id, true)[IMAGERY_FAR], id).toBe('visible');
+    }
+  });
+
+  it('takes both tiers down when the reader has not chosen imagery', () => {
+    // MapLibre fetches a layer's tiles whether or not its paint draws them, so
+    // this is bandwidth as well as correctness.
+    expect(imageryVisibility('earth', false)).toEqual({
+      [IMAGERY_FAR]: 'none',
+      [IMAGERY_NEAR]: 'none',
+    });
+  });
+
+  it('agrees with the body plan, which is the disagreement that caused D182', () => {
+    // The bug was two rules for one question. This asserts there is one: the
+    // plan a body swap applies and the plan the basemap toggle applies have to
+    // say the same thing about the same two layers.
+    const style = { layers: [] };
+    for (const id of ['earth', 'mars', 'venus'] as const) {
+      const plan = visibilityFor(bodyFor(id), style, CUSTOM_LAYER_IDS);
+      const toggle = imageryVisibility(id, true);
+      expect(plan[IMAGERY_FAR], id).toBe(toggle[IMAGERY_FAR]);
+      expect(plan[IMAGERY_NEAR], id).toBe(toggle[IMAGERY_NEAR]);
+    }
+  });
+});
+
+describe('one world, one source', () => {
+  it('gives every enterable world its own tiles', () => {
+    // Neptune was drawn with Uranus's plate because the swap compared the
+    // credit, both are Voyager 2, and the strings matched (D193). This asserts
+    // the thing the swap now compares: no two worlds share a tile url.
+    const seen = new Map<string, string>();
+    for (const body of BODIES.filter(canEnter)) {
+      const tiles = surfaceTilesFor(body);
+      if (tiles === null) continue; // Earth, whose tiles are configuration.
+      expect(seen.has(tiles), `${body.id} shares tiles with ${seen.get(tiles)}`).toBe(false);
+      seen.set(tiles, body.id);
+    }
+  });
+
+  it('knows two worlds apart even when they credit the same mission', () => {
+    // The exact pair that broke it.
+    expect(bodyFor('uranus').surface?.attribution).toBe(bodyFor('neptune').surface?.attribution);
+    expect(sameImagery(bodyFor('uranus'), bodyFor('neptune'))).toBe(false);
+    expect(sameImagery(bodyFor('uranus'), bodyFor('uranus'))).toBe(true);
   });
 });

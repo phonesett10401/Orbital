@@ -21,7 +21,7 @@
  */
 
 import type { Body } from '../bodies';
-import { isLandable } from '../bodies';
+import { canEnter } from '../bodies';
 
 /**
  * The prefix every layer Orbital adds carries.
@@ -89,6 +89,36 @@ export const NOT_ABOUT_EARTH = new Set<string>([
 export const IMAGERY_FAR = 'orbital-imagery-far';
 export const IMAGERY_NEAR = 'orbital-imagery-near';
 
+/**
+ * What the two imagery tiers should be doing, for one world and one basemap.
+ *
+ * The whole rule, in one place, because it used to be in two and the two
+ * disagreed. `visibilityFor` correctly kept the near tier off anywhere but
+ * Earth. The basemap toggle turned **both** tiers on whenever the reader had
+ * imagery chosen, knew nothing about which world was underneath, and ran
+ * afterwards - so it undid the plan every time.
+ *
+ * Above zoom 7, where the near tier finishes fading in, that served Earth's
+ * Esri imagery over other worlds: farmland in Brazil, captioned "Mars ·
+ * surface imagery", with the far mosaic still correctly loaded underneath it.
+ * Mercury hid the fault for a year by accident - its mosaic stops at zoom 5
+ * and the near tier's opacity ramp has not begun there - and it only surfaced
+ * when Venus arrived with a mosaic eleven levels deep (D182).
+ */
+export function imageryVisibility(
+  bodyId: string,
+  imageryChosen: boolean,
+): Record<string, 'visible' | 'none'> {
+  return {
+    [IMAGERY_FAR]: imageryChosen ? 'visible' : 'none',
+    // Earth has two tiers that cross-fade. Every other world has one mosaic,
+    // so the near tier has nothing to fade into - and it is still pointed at
+    // Earth's tiles, which is the part that makes leaving it on a false claim
+    // rather than a wasted layer.
+    [IMAGERY_NEAR]: imageryChosen && bodyId === 'earth' ? 'visible' : 'none',
+  };
+}
+
 export interface StyleLike {
   layers: { id: string; type: string; source?: string }[];
 }
@@ -142,12 +172,23 @@ export function visibilityFor(
     plan[id] = homeBodyOf(id) === body.id ? 'visible' : 'none';
   }
 
-  // Earth has two imagery tiers that cross-fade; every other world has one
-  // mosaic, so the near tier has nothing to fade into and stays off.
-  plan[IMAGERY_FAR] = 'visible';
-  plan[IMAGERY_NEAR] = onEarth ? 'visible' : 'none';
+  // The imagery tiers have one rule and it lives in one function, so the
+  // basemap toggle cannot quietly contradict this plan the way it used to.
+  Object.assign(plan, imageryVisibility(body.id, true));
 
   return plan;
+}
+
+/**
+ * Whether two worlds would be served by the same imagery source.
+ *
+ * The swap in `PlanetView` used to decide this on the attribution alone, and
+ * two worlds crediting the same mission then shared a source: Neptune was
+ * drawn with Uranus's plate, because both are Voyager 2 (D193). Exposed here
+ * so the rule can be checked without a map.
+ */
+export function sameImagery(a: Body, b: Body): boolean {
+  return surfaceTilesFor(a) === surfaceTilesFor(b);
 }
 
 /**
@@ -158,7 +199,7 @@ export function visibilityFor(
  * here would quietly override that.
  */
 export function surfaceTilesFor(body: Body): string | null {
-  if (body.id === 'earth' || !isLandable(body)) return null;
+  if (body.id === 'earth' || !canEnter(body)) return null;
   return body.surface!.tiles;
 }
 
@@ -170,7 +211,7 @@ export function surfaceTilesFor(body: Body): string | null {
  * confidence as a sharp one.
  */
 export function maxZoomFor(body: Body): number {
-  return isLandable(body) ? body.surface!.maxZoom : 5;
+  return canEnter(body) ? body.surface!.maxZoom : 5;
 }
 
 /*

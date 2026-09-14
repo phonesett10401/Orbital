@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react';
 
 import { chromeFor, sampleReason, sampleScope } from './layerChrome';
-import { bodyFor } from '../bodies';
+import { bodyFor, imageryLabel } from '../bodies';
 import { formatInstant } from '../timeTravel';
 import { useOrbitalStore } from '../state/store';
 
@@ -62,9 +62,15 @@ export function StatusBar() {
           <strong>{body.name}</strong>
         </span>
         <span className="status__item">
+          {/*
+            "Cloud tops" on the four with nothing under them. The line used to
+            say "surface imagery" for every world that was not Earth, which was
+            true of all of them until Jupiter became enterable and then was the
+            most confident possible way to be wrong (D193).
+          */}
           {activeBody === 'moon' && moonCraft > 0
-            ? `surface imagery · ${moonCraft} spacecraft in orbit, from JPL Horizons`
-            : 'surface imagery — no live objects here'}
+            ? `${imageryLabel(body).toLowerCase()} · ${moonCraft} spacecraft in orbit, from JPL Horizons`
+            : `${imageryLabel(body).toLowerCase()} — no live objects here`}
         </span>
       </div>
     );

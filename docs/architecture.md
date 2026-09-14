@@ -16,6 +16,15 @@ callsign or an airport by name or code, click an object to see its details, and
 view the path an aircraft has flown. A solar-system view is reached from the
 globe, and the moon is drawn in its computed position.
 
+**The renderer draws one globe, and which world it is can change.** Every
+planet can be entered: the imagery source swaps and the Earth-only layers go
+off, because aircraft and ships and the terminator are statements about Earth
+and over Mars they are not stale but meaningless (D120, D133). Mercury, Venus,
+Earth, the Moon and Mars carry a controlled surface mosaic. Jupiter, Saturn,
+Uranus and Neptune have no surface to map — a mosaic ties features to fixed
+ground, and on a gas giant the features move — so they carry cloud tops, and
+every label that would have said "surface" says so instead (D193).
+
 **The layers are not the same kind of thing, and the difference runs through
 the whole design.** Aircraft and ships are *observed* — a feed reports them,
 and the display is only ever as current as the last report. Satellites and the
@@ -430,6 +439,10 @@ orbital/
         ├── satelliteFamily.ts   name -> spacecraft family (D101, D102)
         └── planet/              the renderer (D54, D104)
             ├── basemap.ts           the style: imagery, roads, buildings (D56-D59)
+            ├── bodySurface.ts       swapping the world under the camera: which
+            │                        tiles, and which layers are about Earth (D120, D133)
+            ├── plateCarree.ts       plate carree -> Web Mercator, in the browser,
+            │                        so any world Trek maps can be entered (D190, D193)
             ├── aircraftLayer.ts     every tracked object, one SDF sprite atlas
             ├── routeLayer.ts        the observed track, and what is guessed (D82)
             ├── modelLayer.ts        the selection as a 3D airframe, in MapLibre's

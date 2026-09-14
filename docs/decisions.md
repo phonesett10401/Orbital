@@ -12135,3 +12135,297 @@ rather than falling back, because a typo in a deployment variable that silently
 picks a different feed is invisible until somebody counts aircraft.
 
 **915 backend tests**, 1,118 frontend.
+
+## D190 - Plate carree was never the wall, it was a transformation
+
+`bodies.ts` had said for months that Venus could not be entered: it has a
+complete Magellan radar map, "just not one served as Mercator tiles here". That
+was the right measurement and the wrong conclusion.
+
+MapLibre's raster sources speak one tiling scheme, Web Mercator, where `z0` is
+a single tile. NASA's Solar System Treks publish in plate carree, where `z0` is
+two tiles wide and one tall. So for a year the answer to "which worlds can be
+entered" was whatever OpenPlanetaryMap happened to publish in Mercator -
+Mercury, the Moon and Mars - and everything else was written off (D120).
+
+Two measurements turned it around:
+
+- Trek serves global mosaics for **Venus, Ceres, Vesta, Io, Europa, Ganymede,
+  Titan, Enceladus and Phobos**, and its tiles come back with
+  `Access-Control-Allow-Origin: *`. The pixels can be fetched, redrawn and
+  handed to MapLibre with no proxy and nothing on the backend.
+- The two projections are **identical in longitude**. Both are linear in it.
+  So this is not a general warp; it is one axis, and one axis can be done a
+  destination row at a time with `drawImage`.
+
+`planet/plateCarree.ts` is a `maplibregl.addProtocol` handler. MapLibre asks
+for `pc://venus/{z}/{x}/{y}`; the handler works out which plate carree tiles
+lie under that Mercator tile, stitches them, and squeezes the latitude axis 256
+rows at a time. The source level is `z - 1`, which makes the horizontal pixel
+sizes match exactly - any other choice either discards pixels the mosaic has or
+invents pixels it does not.
+
+Three things the arithmetic had to be told rather than allowed to assume:
+
+- **Trek uses both longitude conventions.** Venus and Mercury run -180..180;
+  Titan and Enceladus run 0..360. Reading one as the other does not fail, it
+  silently serves the far side of the world.
+- **A tile can straddle the grid's seam**, and when it does the right edge
+  comes back to the left of the left edge. Carried round rather than clamped.
+- **A mosaic need not reach its own poles.** Magellan looked left from a polar
+  orbit and filled neither cap, so rows above 84 north and below 80 south are
+  left transparent rather than stretching the last row of real pixels across
+  them. The picker says so on the row.
+
+Venus is the first world through, and the one that mattered: it is the last
+**planet** with ground to stand on. The gas giants stay refused, and that
+refusal is not a limitation of ours - there is no surface to map, and calling
+physics a gap would be the dishonest half of D120. The other nine worlds are
+reachable behind the same handler and are not wired up: adding a moon is a
+decision about the picker, not about projections.
+
+Deepest level probed by walking levels until the server returned 404, not
+divided out of the stated resolution - the two disagree often enough that the
+arithmetic is a hypothesis and the 404 is the answer. Venus stops at level 10,
+so `maxZoom` is 11, three levels deeper than Mars.
+
+## D191 - Two rules for one question, and Brazil was on Mars
+
+Venus arrived with a mosaic eleven levels deep, and at zoom 9 it was sandy
+brown with dune fields in it. Venus is grey. What was on screen was the Sahara.
+
+`visibilityFor` had always been right: Earth has two imagery tiers that
+cross-fade, every other world has one mosaic, so the near tier - which is
+pointed at Earth's Esri tiles and always will be - stays off anywhere else.
+
+The basemap toggle had a second rule. `setImageryVisible` turned **both** tiers
+on whenever the reader had imagery chosen, knew nothing about which world was
+underneath, and ran after the body plan, so it undid it every time. Above zoom
+7, where the near tier finishes fading in, every non-Earth world was served
+Earth's imagery with its own correct mosaic still loaded underneath.
+
+**This was live, and it was not new.** Checked on Mars before it was fixed:
+farmland and forest in Brazil, captioned "Mars - surface imagery". Mercury hid
+it for a year by accident, because its mosaic stops at zoom 5 and the near
+tier's opacity ramp has not begun there; Mars reaches 8 and nobody had looked.
+It took a world with eleven levels to make it obvious.
+
+The fix is that there is now one rule, `imageryVisibility`, and both callers
+read it. The test that pins it asserts the two plans agree, which is the
+disagreement itself rather than either of its symptoms - and it fails when the
+near tier is let back on.
+
+This is the same shape as D133 and D182 one more time: a layer drawn where its
+subject does not exist is a stronger false claim than one drawn late, and the
+way it gets there is two places deciding one thing.
+
+**1,140 frontend tests**, 915 backend.
+
+## D192 - The reprojection reaches nine worlds; the product wants one
+
+D190 built the plate carree handler and wired Venus through it. The obvious
+next move was the rest of what Trek serves, and it was made: **Phobos, Ceres,
+Vesta, Io, Europa, Ganymede, Enceladus and Titan**, each a controlled
+photomosaic rather than a shaded-relief product, each `maxLevel` walked to its
+own 404. It worked. It is also reverted, on Phone's call, and the reason is
+worth keeping rather than the code.
+
+**Eighteen rows is a different product.** Orbital shows the solar system's
+planets, the Sun and the Moon. A picker listing Vesta and Enceladus is a
+catalogue of everything with a mosaic behind it, which is a defensible thing to
+build and not this one. The nine are one `Mosaic` entry and one `BODIES` entry
+each if that ever changes.
+
+Three things the attempt is worth recording for:
+
+**D140's one-way door reopened, and the eighteen-row list was what opened it.**
+`solarOrigin()` reads `body === 'moon' ? 'earth' : body` and casts the result to
+`PlanetId`. That is correct while every body is a planet, the Sun or the Moon,
+and it throws on `ELEMENTS['phobos']` the moment it is not - on the *first step*
+of every trip that starts at such a world, before the swap, so the picker went
+quiet. The cast is a claim the type system cannot check, and the comment on it
+now says so. Anything added to `BODIES` that `planets.ts` has no elements for
+needs that function rewritten, not just a new entry.
+
+**Trek publishes two longitude conventions and does not say which in the tile
+path.** Venus and Mercury run -180..180; Titan and Enceladus run 0..360.
+Reading one as the other does not fail, it serves the far side of the world.
+`Mosaic.lonOrigin` stays a field rather than an assumption even with one mosaic
+in the table, because the next one to be added will be a coin toss.
+
+**Trek's top hits are not its photomosaics.** The first Phobos layers returned
+are 2ppd HRSC *shade* and *slope* products, which look like imagery until you
+notice the craters are lit from a direction no spacecraft was ever in. The
+Viking photomosaic is five levels deeper and further down the list.
+
+### The corner, which stays
+
+The picker, Sign in and About sat at the far right of the header, sharing that
+corner with the basemap and night toggles, the diagnostics panel and the promo
+card - four things from four parts of the app, overlapping. They are the
+wordmark's controls, so they moved under the wordmark as one left-aligned
+column, and the list opens to the right rather than down into the map.
+
+A wrapper element rather than a `top` offset on the links: their vertical
+position then follows the brand's own height instead of a number written here
+that goes stale the first time the mark is resized. D190's rule survives,
+because the column is left-aligned and the subtitle's width no longer reaches
+them.
+
+Two consequences that were not free:
+
+- **D127's hover bridge had to move with it.** It bridged the gap above the
+  panel; the gap is now to its left, and leaving the bridge where it was would
+  have reintroduced exactly the bug D127 exists for.
+- **The header's `z-index: 2` was not enough.** The list's own `z-index: 20`
+  only ever competed inside the header's stacking context, and at 2 the header
+  lost to the legend - which is later in the document and drew over the bottom
+  of the list. The header is 3 now: above the panels that share the map's
+  edges, below the pages that cover it.
+
+**1,141 frontend tests**, 915 backend.
+
+## D193 - You were never landing on Mars either
+
+The four outer planets were refused on the grounds that there is nothing to
+stand on, which is true and was answering a question nobody asked. Choosing
+Mars does not land anybody: it makes Mars the globe, and you turn it. Phone's
+correction was exact - *"we are not going to land technically"* - and once the
+question is "can this be the globe" rather than "can this be stood on", the
+only blocker left is imagery.
+
+### Why these four needed a different kind of source
+
+Nobody publishes a controlled mosaic of a gas giant, and the reason is not
+neglect. A mosaic ties features to fixed ground; on Jupiter the features move -
+its equator rotates about five minutes faster than its mid-latitudes, which is
+why there are two rotation systems for it. Any map of it is a snapshot at an
+instant.
+
+Measured, in this order:
+
+- **Trek has nothing.** 404 for all four, where it has nine other worlds.
+- **Wikimedia has Jupiter** (Cassini's December 2000 cylindrical map, public
+  domain) and nothing usable for the other three.
+- **Solar System Scope has all four**, CC BY 4.0, derived from NASA imagery -
+  and serves them with **no `Access-Control-Allow-Origin` header at all**. So
+  does NASA's own photojournal, and so does nasa3d. A canvas cannot read what
+  the browser will not hand over, so the reprojection cannot use any of them
+  from a remote fetch.
+
+The answer was that we do not have to fetch them remotely.
+`scripts/fetch-cloud-textures.mjs` pulls the four plates into
+`public/textures/` at build time, the same shape as `copy-textures.mjs` and
+under the same rule about not committing binaries (D30). Same origin, so CORS
+never arises, and the app stops depending on a third party being up while
+somebody is looking at Saturn.
+
+`plateCarree.ts` grew a second source shape for it. A Trek mosaic is a pyramid
+of 256px tiles; a plate is one image at one size. Both reduce to the same
+thing - a rectangle of source pixels to stitch and squeeze - so `Patch` now
+carries a url and a destination rect instead of a grid address, and the tile
+branch is the one that computes rows and columns. `sourceLevel` returns 0 for a
+plate, because there is only ever one.
+
+### The label was the actual work
+
+Giving Jupiter a `surface` made it enterable everywhere at once, and that was
+the dangerous part rather than the useful one. `isLandable` was the same
+question as "has imagery" while every world with imagery had ground under it,
+and became a false claim the moment one did not. It is `canEnter` now, with
+`standsOnGround` beside it for the wording, and the two are asked separately:
+
+- the **picker** enables on `canEnter` and prints the radius only for ground,
+  keeping `No solid surface — cloud all the way down` on the row for the four;
+- the **solar index** says `Cloud tops` rather than `Surface imagery`;
+- the **caption** offers `Visit Jupiter` and puts `cloud tops, no surface` in
+  the eyebrow, because the button alone would quietly promise ground;
+- the **wordmark subtitle** and the **status line** stopped being the constant
+  `surface imagery` for every world that is not Earth - true of all of them
+  until it was not.
+
+`surface.shows` and `surface.epoch` carry it in the data. Viking's Mars is the
+same Mars; Cassini's Jupiter is not the same Jupiter, and the Great Red Spot
+has lost about a third of its width since.
+
+### Neptune was drawn with Uranus's plate
+
+Caught in the pixels, not by a test: Neptune rendered pale cyan, and Neptune is
+deep blue. The plates were right - measured, `rgb(54,79,167)` against
+`rgb(155,202,209)` - so the app was serving the wrong one.
+
+`applyBody` decides whether to tear down and rebuild the imagery source by
+comparing its **attribution**, which has been a correct proxy for "this is a
+different world" for as long as every world had a distinct credit. Uranus and
+Neptune are both Voyager 2 and carry the same string, so the source was left
+alone and Neptune inherited the plate already in it.
+
+The credit is now a second reason to rebuild rather than the only one; the
+tiles are the thing that actually has to change. `sameImagery` exposes the rule
+so it can be checked without a map, and the test that guards it asserts no two
+enterable worlds share a tile url - which is the property, rather than the one
+pair that happened to break.
+
+This is the third time in three decisions that a **proxy held until the set it
+was standing in grew**: `body === 'moon' ? 'earth' : body`, one rule for the
+imagery tiers in two places, and now attribution standing in for identity.
+
+### What is honest about Uranus
+
+Almost nothing is there. Voyager 2 found it essentially featureless in visible
+light, and its plate is close to a smooth cyan gradient. It is included anyway,
+at 2048 wide rather than 4096: the emptiness is the fact, and a larger file
+would be more megabytes of the same gradient. Jupiter gets the 4096 plate
+because it is the one with structure worth the levels.
+
+**1,145 frontend tests**, 915 backend.
+
+## D194 - Sixty times sharper and the wrong picture
+
+Venus went in on the Magellan left-look plate at 75 m per pixel, which is the
+highest-resolution imagery of any world in this app by a factor of thirty. It
+looked wrong, and Phone said so: *"it looks not professional yet"*.
+
+Three things were true of it at once. Magellan mapped in strips from a polar
+orbit, so the plate carries its own **orbit seams** as black bands across every
+view. Its coverage stops at 84 north and 80 south, so both **poles are holes**.
+And synthetic aperture radar is **greyscale**, so the planet everybody has seen
+in gold arrived the colour of a weather chart. A striped, capless, grey Venus
+reads as a broken render rather than as a planet, whatever its resolution.
+
+It is now `Venus_Magellan_C3-MDIR_Colorized_Global_Mosaic_4641m`: the
+synthesised global mosaic, colourised, complete to both poles, no seams. That
+costs six levels of depth - `maxZoom` 11 down to 5, which is Mercury's - and
+buys a world that looks like the one people have seen. Maxwell Montes and
+Cleopatra are still legible at the new ceiling, checked rather than assumed.
+
+**The better answer was available and was not taken.** Earth already has two
+imagery tiers that cross-fade with zoom, which is exactly the shape of this
+problem: the colourised mosaic as the far tier, the 75 m left-look as the near
+one, and the complete plate showing through wherever the detailed one has a
+hole. It is not built because making the near tier per-body means reopening
+the rule D191 had just finished repairing, and that trade was not worth making
+in the same sitting. It is the obvious next move if Venus ever needs the depth.
+
+### `gap` became `caveat`
+
+The field said "what the mosaic does not cover", and the new Venus covers
+everything - so the most important thing about its imagery had nowhere to go.
+That thing is not a hole: **it is radar**. Venus's surface has never been
+photographed, because the cloud is opaque in visible light, and a golden globe
+with nothing said about it invites exactly that mistake. Renamed for what it is
+actually used for.
+
+### Three tests were about a product, not about geometry
+
+They asserted that rows above 84 north come back transparent, and they did it
+against `MOSAICS.venus` - so a mosaic that reaches the poles broke three tests
+that have nothing to do with Venus. They test a `CAPLESS` fixture now, and a
+fourth was added asserting that a mosaic which *does* reach the poles covers
+every row. The rule: a test about behaviour picks its own subject, and reaching
+for the real one couples it to a choice that was always going to change.
+
+`npm run clouds` is wired into `assets`, so `predev` and `prebuild` fetch the
+gas giants' plates. A fresh clone no longer needs to be told.
+
+**1,146 frontend tests**, 915 backend.

@@ -54,6 +54,7 @@ import {
 } from './airportLayer';
 import { createSatelliteIconCanvases } from './satelliteSprite';
 import { setVisibility } from './layerSync';
+import { registerPlateCarree } from './plateCarree';
 import { SHELL_MAX_ZOOM, createShellLayer, type ShellLayer } from './satelliteShellLayer';
 import {
   MOON_LABEL_LAYER,
@@ -176,6 +177,7 @@ import { lonLatOf, scenePlacements } from '../solarFrame';
 import { GIBS_ATTRIBUTION, IMAGERY_FAR_MAX_ZOOM } from './basemap';
 import {
   IMAGERY_FAR,
+  imageryVisibility,
   maxZoomFor,
   surfaceTilesFor,
   visibilityFor,
@@ -272,6 +274,13 @@ const RETURN_FROM_SYSTEM_ZOOM = 1.0;
  * anything asking `planets.ts` a question must ask it about Earth instead.
  * One place, because asking it in two and getting it right in one is exactly
  * what happened (D140).
+ *
+ * **This cast is only safe while every body is a planet, the Sun or the
+ * Moon.** Eight of Trek's small worlds were added and taken back out, and in
+ * between this threw on `ELEMENTS['phobos']` on the first step of every trip
+ * that started at one - D140's one-way door, reopened by a list that had grown
+ * past what the line assumed (D192). Anything added here that `planets.ts` has
+ * no elements for needs this function rewritten, not just a new entry.
  */
 function solarOrigin(): PlanetId {
   const body = useOrbitalStore.getState().activeBody;
@@ -368,8 +377,20 @@ function applyBody(map: import('maplibre-gl').Map, bodyId: string): void {
     ? { tiles: [tiles], attribution: body.surface!.attribution, maxzoom: body.surface!.maxZoom }
     : { tiles: [config.imageryTileUrl], attribution: GIBS_ATTRIBUTION, maxzoom: IMAGERY_FAR_MAX_ZOOM };
 
-  const existing = map.getStyle()?.sources?.[IMAGERY_FAR] as { attribution?: string } | undefined;
-  if (existing?.attribution !== wanted.attribution) {
+  // **Compared on the tiles, not only the credit.** The credit was the proxy
+  // for "this is a different world", and it held exactly as long as every
+  // world had a distinct one. Uranus and Neptune are both Voyager 2 and had
+  // the same attribution string, so the source was left alone and Neptune was
+  // served Uranus's plate - a pale cyan planet captioned Neptune, which is the
+  // most confident possible way to be wrong (D193). The tiles are the thing
+  // that actually has to change; the credit is a second reason, not the only
+  // one.
+  const existing = map.getStyle()?.sources?.[IMAGERY_FAR] as
+    | { attribution?: string; tiles?: string[] }
+    | undefined;
+  const different =
+    existing?.attribution !== wanted.attribution || existing?.tiles?.[0] !== wanted.tiles[0];
+  if (different) {
     const layer = map.getStyle()?.layers?.find((l) => l.id === IMAGERY_FAR);
     // Put it back where it was: under the cartography, over the ground fill.
     const all = map.getStyle()?.layers ?? [];
@@ -405,10 +426,21 @@ function applyBody(map: import('maplibre-gl').Map, bodyId: string): void {
   map.triggerRepaint();
 }
 
-function setImageryVisible(map: import('maplibre-gl').Map, mode: string): void {
-  const visibility = mode === BASEMAP_IMAGERY ? 'visible' : 'none';
+/**
+ * The basemap toggle, which also has to know which world it is over.
+ *
+ * It did not, and that was the bug: it turned both imagery tiers on and ran
+ * after the body plan, so Earth's near tier came back over every other world
+ * (D182). The rule is `imageryVisibility` and nothing here decides anything.
+ */
+function setImageryVisible(
+  map: import('maplibre-gl').Map,
+  mode: string,
+  bodyId: string,
+): void {
+  const plan = imageryVisibility(bodyId, mode === BASEMAP_IMAGERY);
   for (const id of IMAGERY_LAYERS) {
-    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', plan[id]);
   }
 }
 
@@ -485,7 +517,7 @@ export function PlanetView() {
         night: readerNight,
       });
       map.setGlobalStateProperty(BASEMAP_STATE, chrome.basemap);
-      setImageryVisible(map, chrome.basemap);
+      setImageryVisible(map, chrome.basemap, useOrbitalStore.getState().activeBody);
       terminator?.setEnabled(chrome.night);
       basemapControl?.setAvailable(chrome.controlsAvailable);
       nightControl?.setAvailable(chrome.controlsAvailable);
@@ -508,6 +540,10 @@ export function PlanetView() {
         // it rather than by the bundle every visitor loads.
         await import('maplibre-gl/dist/maplibre-gl.css');
         const maplibre = await import('maplibre-gl');
+        // Before any source is added, or the first Venus tile is requested
+        // against a scheme nothing answers for. Idempotent, so a remount is
+        // not a second handler (D181).
+        registerPlateCarree(maplibre);
         const style = await loadPlanetStyle();
         if (disposed) return;
 
@@ -583,7 +619,7 @@ export function PlanetView() {
           // before anything else is added, so the first frame is already the
           // right map rather than the imagery flashing up and being switched.
           map.setGlobalStateProperty(BASEMAP_STATE, config.basemap);
-          setImageryVisible(map, config.basemap);
+          setImageryVisible(map, config.basemap, useOrbitalStore.getState().activeBody);
 
           // A handle for the console, in development only.
           //

@@ -31,7 +31,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { bodyFor, isLandable } from '../bodies';
+import { bodyFor, canEnter, imageryLabel } from '../bodies';
 import { stackLabels } from '../labelStack';
 import type { PlanetId } from '../planets';
 import { createSolarScene, type SolarScene } from '../planet/solarScene';
@@ -576,7 +576,7 @@ export function SolarSystemPage() {
           const body = bodyFor(marker.id as Parameters<typeof bodyFor>[0]);
           if (!body) return null;
           const here = body.id === activeBody;
-          const visitable = isLandable(body) && !here;
+          const visitable = canEnter(body) && !here;
           const nameTop = (stacked.get(marker.id) ?? marker.y + clearanceOf(marker)) - marker.y;
           return (
             <div
@@ -700,7 +700,9 @@ export function SolarSystemPage() {
                     <span className="sysindex__name">{body.name}</span>
                     <span className="sysindex__au">{au === null ? '—' : `${au.toFixed(2)} AU`}</span>
                     <span className="sysindex__note">
-                      {isLandable(body) ? 'Surface imagery' : 'No surface'}
+                      {/* "Cloud tops" for the four with nothing underneath,
+                          so the index does not call weather a surface. */}
+                      {imageryLabel(body)}
                     </span>
                   </button>
                 </li>

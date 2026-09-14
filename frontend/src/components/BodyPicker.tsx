@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { BODIES, type Body, bodyFor, isLandable } from '../bodies';
+import { BODIES, type Body, bodyFor, canEnter, standsOnGround } from '../bodies';
 import { useOrbitalStore } from '../state/store';
 
 export function BodyPicker() {
@@ -47,7 +47,7 @@ export function BodyPicker() {
   const current = bodyFor(activeBody);
 
   const choose = (body: Body) => {
-    if (!isLandable(body)) return;
+    if (!canEnter(body)) return;
     if (body.id === activeBody) {
       setOpen(false);
       return;
@@ -86,19 +86,31 @@ export function BodyPicker() {
       {open && (
         <ul className="bodies__list" role="listbox" aria-label="World to show">
           {BODIES.map((body) => {
-            const landable = isLandable(body);
+            const enterable = canEnter(body);
+            // A world can be enterable and still not be a place. Jupiter is
+            // both: you can go and turn it, and there is nothing under the
+            // cloud to stand on, so the row carries that sentence instead of
+            // its radius (D193).
+            const ground = standsOnGround(body);
             return (
               <li key={body.id}>
                 <button
                   type="button"
                   role="option"
                   aria-selected={body.id === activeBody}
-                  disabled={!landable}
+                  disabled={!enterable}
                   // The reason is on the row itself, not only in a tooltip: a
-                  // disabled control with no stated cause reads as broken.
-                  title={landable ? undefined : body.noSurfaceReason}
+                  // disabled control with no stated cause reads as broken. A
+                  // world that *can* be entered says what its mosaic is
+                  // missing, for the same reason one way along: an empty pole
+                  // with nothing said about it reads as a fault in Orbital
+                  // rather than as the edge of what a spacecraft managed.
+                  // The reason rides the row for a world you can enter that
+                  // still has no ground, and in the tooltip for one whose
+                  // imagery is merely incomplete.
+                  title={ground ? body.surface?.caveat : body.noSurfaceReason}
                   className={`bodies__item ${body.id === activeBody ? 'is-active' : ''} ${
-                    landable ? '' : 'is-locked'
+                    enterable ? '' : 'is-locked'
                   }`}
                   onClick={() => choose(body)}
                 >
@@ -107,7 +119,7 @@ export function BodyPicker() {
                     aria-hidden="true"
                   />
                   <span className="bodies__name">{body.name}</span>
-                  {landable ? (
+                  {ground ? (
                     // **Labelled, because the bare number reads as a distance.**
                     // `6,371 km` beside "Earth" is exactly the shape of "how far
                     // away is it", and that was the first question it got asked.
@@ -120,6 +132,9 @@ export function BodyPicker() {
                       km
                     </span>
                   ) : (
+                    // The gas giants keep this line now that they are
+                    // enterable, because it is the thing most worth saying
+                    // about them and the only place left to say it.
                     <span className="bodies__why">{body.noSurfaceReason}</span>
                   )}
                 </button>

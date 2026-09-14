@@ -108,21 +108,24 @@ describe('what the caption says', () => {
     });
   });
 
-  it("gives the body's own reason when there is nowhere to land", () => {
-    // Not a sentence written here. Jupiter has no surface and says why;
-    // the Sun has none for a different reason and says that instead.
-    const jupiter = captionFor(bodyFor('jupiter')!, 5.2).action;
-    expect(jupiter.kind).toBe('none');
-    if (jupiter.kind === 'none') {
-      expect(jupiter.reason).toBe(bodyFor('jupiter')!.noSurfaceReason);
-      expect(jupiter.reason).toMatch(/surface/i);
-    }
-
+  it("gives the body's own reason when there is nothing to go to", () => {
+    // The Sun is the only one left with no imagery at all, and it says why in
+    // its own words rather than in a sentence written here.
     const sun = captionFor(bodyFor('sun')!, null).action;
     expect(sun.kind).toBe('none');
-    if (sun.kind === 'none' && jupiter.kind === 'none') {
-      expect(sun.reason).not.toBe(jupiter.reason);
+    if (sun.kind === 'none') {
+      expect(sun.reason).toBe(bodyFor('sun')!.noSurfaceReason);
+      expect(sun.reason).toMatch(/star/i);
     }
+
+    // Jupiter went the other way (D193): it can be visited now, and the
+    // eyebrow rather than the button carries the fact that there is nothing
+    // under the cloud. Offering "Visit Jupiter" with no such line would
+    // quietly promise ground.
+    const jupiter = captionFor(bodyFor('jupiter')!, 5.2);
+    expect(jupiter.action.kind).toBe('visit');
+    expect(jupiter.eyebrow).toMatch(/cloud tops, no surface/i);
+    expect(captionFor(bodyFor('mars')!, 1.5).eyebrow).not.toMatch(/cloud/i);
   });
 
   it('leaves the distance out when there is not one to give', () => {

@@ -12,7 +12,7 @@
  */
 
 import { showsAds } from './ads';
-import { showsEarthLayers } from './bodies';
+import { bodyFor, imageryLabel, showsEarthLayers } from './bodies';
 import { BodyPicker } from './components/BodyPicker';
 import { TimeControl } from './components/TimeControl';
 import { DetailPanel } from './components/DetailPanel';
@@ -63,7 +63,8 @@ export function App() {
   // not empty - they are about nothing (D120). Chrome describing the wrong
   // subject is the fault D100 already caught once, in the place a reader is
   // most likely to believe it.
-  const onEarth = showsEarthLayers(useOrbitalStore((s) => s.activeBody));
+  const activeBody = useOrbitalStore((s) => s.activeBody);
+  const onEarth = showsEarthLayers(activeBody);
   const onMoon = useOrbitalStore((s) => s.activeBody) === 'moon';
 
   // The other side of the free tier (D150). Premium buys their absence, so this
@@ -124,6 +125,22 @@ export function App() {
       <JourneyScreen />
 
       <header className="app__header">
+        {/*
+          **The corner is one column now (D192).**
+
+          The three controls used to sit at the far right of the header, where
+          they shared the top-right with the basemap and night toggles, the
+          diagnostics panel and the promo card - four things from four
+          different parts of the app, overlapping. They are the wordmark's
+          controls, so they go under the wordmark.
+
+          A wrapper rather than a `top` offset on the links: their vertical
+          position then follows the brand's own height instead of a number
+          written down here that goes stale the first time the mark is resized.
+          D190's rule still holds, because the column is left-aligned and the
+          subtitle's width no longer reaches them.
+        */}
+        <div className="app__corner">
         <div className="app__brand">
           {/*
             Decorative, so it is hidden from assistive technology: the name is
@@ -134,7 +151,10 @@ export function App() {
           <div className="app__brandText">
             <span className="app__title">Orbital</span>
             <span className="app__subtitle" title={coverage?.note}>
-              {onEarth ? subtitle : 'surface imagery'}
+              {/* Not a constant any more: four worlds are enterable and show
+                  cloud rather than ground, and the subtitle names what is on
+                  screen (D193). */}
+              {onEarth ? subtitle : imageryLabel(bodyFor(activeBody)).toLowerCase()}
             </span>
             {/*
               A wrapper that is not a box on the desktop.
@@ -177,6 +197,7 @@ export function App() {
           >
             About
           </button>
+        </div>
         </div>
         {onEarth && <SearchBar />}
         {onEarth && <LayerToggle />}

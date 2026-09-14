@@ -1087,7 +1087,14 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 2;
+  /*
+   * Above the panels that share the map's edges, below the pages that cover
+   * it. The world list lives inside this stacking context, so its own
+   * `z-index: 20` only ever competed with the header's siblings - and at 2 it
+   * lost to the legend, which is later in the document and drew straight over
+   * the bottom third of an eighteen-row list (D192).
+   */
+  z-index: 3;
   display: flex;
   align-items: flex-start;
   gap: 16px;
@@ -1126,12 +1133,31 @@ body {
  * both layouts, and only where the header puts them differs. Last on a desktop,
  * beside the name on a phone.
  */
+/*
+ * The wordmark and its controls, as one fixed column in the corner (D192).
+ *
+ * Fixed in the sense that matters: nothing in it moves when the subtitle
+ * changes with the layer, when the world changes, or when the list opens.
+ */
+.app__corner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.app__corner > * {
+  pointer-events: auto;
+}
+
 .app__brandLinks {
   display: flex;
   align-items: center;
-  gap: 18px;
-  margin-left: auto;
-  order: 5;
+  gap: 16px;
+  /* Lined up with the wordmark's text, which sits 4px in from `.app__brand`'s
+     own padding plus the mark and its gap. */
+  padding-left: 4px;
   pointer-events: auto;
 }
 
@@ -1386,24 +1412,43 @@ body {
  * list closed while the mouse was on its way to it. `::before` bridges the
  * gap; a short close delay in the component covers the diagonal move that
  * clips the panel's corner (D127).
+ *
+ * The panel opens to the *side* now, so the bridge is a vertical strip down
+ * its left edge rather than a horizontal one across its top (D192). Bridging
+ * the old edge would leave the new gap open and reintroduce exactly the bug
+ * D127 was written for.
  */
 .bodies__list::before {
   content: '';
   position: absolute;
-  left: 0;
-  right: 0;
-  top: -10px;
-  height: 10px;
+  top: 0;
+  bottom: 0;
+  left: -12px;
+  width: 12px;
 }
 
+/*
+ * Opens to the right, not downward (D192).
+ *
+ * The picker sits in the top-left column now, so there is a whole window to
+ * the right of it and only the wordmark above. Hung below a control already
+ * 90px down, a ten-row list crowds the map's top-left corner - the one part of
+ * the frame the wordmark has already claimed. Sideways it starts at the top of
+ * the window and has the full height.
+ */
 .bodies__list {
   position: absolute;
-  top: calc(100% + 6px);
-  left: -8px;
+  top: -6px;
+  left: calc(100% + 12px);
   margin: 0;
   padding: 4px;
   list-style: none;
   min-width: 250px;
+  /* Capped and scrollable rather than clipped, which is what a fixed panel
+     would do on a short window. */
+  max-height: min(74vh, 620px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);

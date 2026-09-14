@@ -17,7 +17,7 @@
  * can check, and this project has shipped that mistake twice (D133, D168).
  */
 
-import { bodyFor, isLandable, type Body, type BodyId } from './bodies';
+import { bodyFor, canEnter, standsOnGround, type Body, type BodyId } from './bodies';
 import { MAX_PITCH, type SolarCamera } from './solarCamera';
 
 /**
@@ -112,10 +112,14 @@ function km(value: number): string {
  *
  * **Every line is a fact this repository already holds.** The eyebrow is the
  * body's kind and its size, and the distance when there is one to give; the
- * action is a visit when there is a surface to stand on and the body's own
- * recorded reason when there is not. Nothing here is written to fill the shape
- * - a caption that padded itself out would be the thing the whole project
- * refuses, one page along.
+ * action is a visit when there is imagery to turn and the body's own recorded
+ * reason when there is not. Nothing here is written to fill the shape - a
+ * caption that padded itself out would be the thing the whole project refuses,
+ * one page along.
+ *
+ * A gas giant is now both at once: it can be visited, and it has no surface.
+ * The eyebrow carries the second half, because "Visit Jupiter" beside nothing
+ * else would quietly promise ground (D193).
  */
 export function captionFor(body: Body, distanceAu: number | null): BodyCaption {
   const parts: string[] = [];
@@ -128,11 +132,12 @@ export function captionFor(body: Body, distanceAu: number | null): BodyCaption {
     parts.push(`${distanceAu.toFixed(2)} AU from the sun`);
   }
   parts.push(`radius ${km(body.radiusKm)}`);
+  if (canEnter(body) && !standsOnGround(body)) parts.push('cloud tops, no surface');
 
   return {
     eyebrow: parts.join(' · '),
     name: body.name,
-    action: isLandable(body)
+    action: canEnter(body)
       ? { kind: 'visit', label: `Visit ${body.name}` }
       : {
           kind: 'none',

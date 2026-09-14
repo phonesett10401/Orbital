@@ -19,7 +19,12 @@ are **computed**: published orbital elements and an ephemeris are propagated to
 the instant you are looking, so those layers spend no quota, need no
 credentials, and keep working for days if every upstream goes down.
 
-There is also a solar-system view, reached from the globe.
+There is also a solar-system view, reached from the globe, and **every planet
+in it can be entered** — the globe becomes that world and you turn it. Mercury,
+Venus, Earth, the Moon and Mars carry a controlled surface mosaic; Jupiter,
+Saturn, Uranus and Neptune have no surface to map, so they carry their cloud
+tops and the interface says so rather than calling weather a surface. Only the
+Sun cannot be entered.
 
 CSC480 team project.
 
@@ -44,6 +49,35 @@ Dockerfile, next to the `--workers 1` it explains.
 fails CORS, and `ORBITAL_ACCOUNTS_DB_PATH` should point at a mounted volume —
 accounts are the one piece of state that does not rebuild itself after a
 restart.
+
+## The other worlds
+
+MapLibre's raster sources speak one tiling scheme, Web Mercator, where `z0` is
+a single tile. NASA's Solar System Treks publish in **plate carrée**, where
+`z0` is two tiles wide and one tall, and for a long time that mismatch was
+recorded as the reason only three worlds could be entered — the three
+OpenPlanetaryMap happens to serve in Mercator.
+
+It was a transformation, not a wall. `frontend/src/planet/plateCarree.ts`
+registers a `pc://` protocol with MapLibre: asked for a Mercator tile, it
+fetches the plate carrée tiles underneath, stitches them and squeezes the
+latitude axis, one destination row at a time. Longitude needs no warping at
+all — both projections are linear in it — so the whole job is one axis.
+
+Two shapes of source go through it:
+
+- **Trek tile pyramids**, fetched at runtime. Trek sends
+  `Access-Control-Allow-Origin: *`, so the pixels can be redrawn in a canvas
+  with no proxy and nothing on the backend. Venus arrives this way.
+- **Single equirectangular plates**, for the four worlds with no surface.
+  Every host of those refuses CORS, so they are downloaded into
+  `frontend/public/textures/` at build time instead and served from our own
+  origin. `npm run clouds` does it, and `prebuild` runs it for you.
+
+Ceres, Vesta, Io, Europa, Ganymede, Titan, Enceladus and Phobos are reachable
+through the same protocol and are deliberately not wired up: this is a list of
+the solar system's planets, not a catalogue of everything with a mosaic behind
+it.
 
 ## Running it locally
 
@@ -125,7 +159,7 @@ cd backend && .venv/Scripts/python -m pytest
 cd frontend && npm test
 ```
 
-**895 backend, 1,118 frontend.** Everything runs offline: no test in either
+**915 backend, 1,146 frontend.** Everything runs offline: no test in either
 suite touches the network or spends an API credit.
 
 ## Documentation
@@ -149,9 +183,15 @@ quietly applied, and the tests that guarded the old boundary were re-aimed at
 the new one rather than deleted. What stays out: debris and rocket bodies, and
 any prediction of conjunctions, collisions or re-entry.
 
-**Ships are built** (D160–D171, D190), and the moon and a solar-system view with
+**Ships are built** (D160–D171), and the moon and a solar-system view with
 them. Ships are the one layer with a coverage caveat the UI states plainly:
 without an aisstream key it is the northern Baltic only.
+
+**Every planet can be entered** (D190–D194). The blocker had been recorded
+since D120 as a projection MapLibre could not read; it was a transformation
+that had not been written. Venus came first and the four gas giants followed,
+labelled as cloud tops rather than as surfaces, because there is nothing under
+them to stand on.
 
 **It is deployed and has been used from a phone**, which is where a run of
 layout decisions came from (D178–D195). Sign-in works same-origin; across

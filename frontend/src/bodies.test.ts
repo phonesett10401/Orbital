@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { BODIES, EARTH, bodyFor, isLandable, showsEarthLayers } from './bodies';
+import {
+  BODIES,
+  EARTH,
+  bodyFor,
+  canEnter,
+  imageryLabel,
+  showsEarthLayers,
+  standsOnGround,
+} from './bodies';
 import {
   IMAGERY_NEAR,
   NOT_ABOUT_EARTH,
@@ -45,27 +53,91 @@ const style = {
 const CUSTOM_LAYERS = CUSTOM_LAYER_IDS;
 
 describe('which worlds can be entered', () => {
-  it('lands only where there is a Web Mercator mosaic', () => {
-    // Probing changed this answer twice. NASA Trek serves Mercury, the Moon
-    // and Mars but in equirectangular tiles - `z0` two wide, one tall - which
-    // a MapLibre raster source cannot consume. OpenPlanetaryMap serves the
-    // same three in Web Mercator (D120).
-    const landable = BODIES.filter(isLandable).map((b) => b.id);
-    expect(landable.sort()).toEqual(['earth', 'mars', 'mercury', 'moon']);
+  it('lands where there is a mosaic, reprojecting the ones that need it', () => {
+    // Probing changed this answer three times. Trek serves plate carrée -
+    // `z0` two tiles wide, one tall - which a MapLibre raster source cannot
+    // consume, so for a long time the answer was whatever OpenPlanetaryMap
+    // happened to publish in Mercator: Mercury, the Moon and Mars (D120).
+    // Venus joins them through `plateCarree.ts`, which turns Trek's grid into
+    // Mercator tiles in the browser (D181).
+    const enterable = BODIES.filter(canEnter).map((b) => b.id);
+    expect(enterable.sort()).toEqual([
+      'earth', 'jupiter', 'mars', 'mercury', 'moon', 'neptune', 'saturn',
+      'uranus', 'venus',
+    ]);
+    // Only the Sun is left out, and for the one reason no imagery can fix.
+    expect(BODIES.filter((b) => !canEnter(b)).map((b) => b.id)).toEqual(['sun']);
+  });
+
+  it('separates going somewhere from standing on it', () => {
+    // The whole of D193 in one assertion. A gas giant can be entered and
+    // turned, and there is nothing under the cloud: calling that "landable"
+    // was the false claim, and the fix was to stop asking one question for
+    // two different answers.
+    for (const id of ['jupiter', 'saturn', 'uranus', 'neptune'] as const) {
+      expect(canEnter(bodyFor(id)), id).toBe(true);
+      expect(standsOnGround(bodyFor(id)), id).toBe(false);
+      expect(imageryLabel(bodyFor(id)), id).toBe('Cloud tops');
+      // And the sentence survives, because it is the thing worth saying.
+      expect(bodyFor(id).noSurfaceReason, id).toMatch(/no solid surface/i);
+    }
+    for (const id of ['mercury', 'venus', 'earth', 'moon', 'mars'] as const) {
+      expect(standsOnGround(bodyFor(id)), id).toBe(true);
+      expect(imageryLabel(bodyFor(id)), id).toBe('Surface imagery');
+    }
+    expect(imageryLabel(bodyFor('sun'))).toBe('No imagery');
+  });
+
+  it('dates the imagery that is weather rather than terrain', () => {
+    // Viking's Mars is the same Mars. Cassini's Jupiter is not the same
+    // Jupiter, so the plate has to say it is a moment.
+    expect(bodyFor('jupiter').surface?.shows).toBe('cloud');
+    expect(bodyFor('jupiter').surface?.epoch).toBeTruthy();
+    expect(bodyFor('mars').surface?.shows).toBeUndefined();
+  });
+
+  it('lists the planets, the Sun and the Moon, and stops there', () => {
+    // Trek's reprojection reaches Ceres, Vesta, Io, Europa, Ganymede, Titan,
+    // Enceladus and Phobos too, and they were wired up and taken back out:
+    // this is a list of the solar system's planets, not of every world with a
+    // mosaic (D192). The assertion is the *count*, because the failure mode is
+    // a body creeping back in rather than one going missing.
+    expect(BODIES).toHaveLength(10);
+  });
+
+  it('reprojects rather than reaching for a Mercator source that does not exist', () => {
+    // The distinction is load-bearing: a `pc://` url means the tiles are built
+    // in the browser from a grid MapLibre cannot read, and pointing a raster
+    // source straight at Trek would silently serve a stretched world.
+    expect(bodyFor('venus').surface?.tiles).toMatch(/^pc:\/\//);
+    expect(bodyFor('mars').surface?.tiles).toMatch(/^https:\/\//);
   });
 
   it('gives every world without a surface a stated reason', () => {
     // A disabled row with no cause reads as broken. These are answers.
-    for (const body of BODIES.filter((b) => !isLandable(b))) {
+    for (const body of BODIES.filter((b) => !canEnter(b))) {
       expect(body.noSurfaceReason, body.name).toBeTruthy();
     }
   });
 
-  it('distinguishes no data from no ground', () => {
-    // Venus has a complete radar map and no Mercator tiles here; Jupiter has
-    // nothing to map at all. Collapsing the two would call physics a gap.
-    expect(bodyFor('venus').noSurfaceReason).toMatch(/radar|tiles/i);
+  it('distinguishes a missing mosaic from a missing surface', () => {
+    // Venus used to be refused for want of tiles in a projection we could
+    // read, which was a gap on our side; Jupiter has no ground at all. Only
+    // the first was ever fixable, and both are now fixed as far as they can
+    // be: Venus has a surface, Jupiter has cloud and says so.
+    expect(canEnter(bodyFor('venus'))).toBe(true);
+    expect(bodyFor('venus').noSurfaceReason).toBeUndefined();
+    expect(standsOnGround(bodyFor('venus'))).toBe(true);
     expect(bodyFor('jupiter').noSurfaceReason).toMatch(/no solid surface/i);
+  });
+
+  it('says the thing a reader would otherwise get wrong', () => {
+    // Venus's surface has never been photographed - the cloud is opaque in
+    // visible light - and a golden globe with nothing said about it invites
+    // exactly that mistake.
+    expect(bodyFor('venus').surface?.caveat).toMatch(/radar/i);
+    // And imagery with nothing to explain claims nothing.
+    expect(bodyFor('mars').surface?.caveat).toBeUndefined();
   });
 
   it('lists every planet, plus the Sun and the Moon', () => {
