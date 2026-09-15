@@ -31,7 +31,13 @@ not artifacts nobody needs to keep.
 | `Orbital-Report-Chapters-1-5.docx` | Word, 40 pages, nine colour figures |
 | `Orbital-Report-Chapters-1-5.pdf` | The same document, exported by Word itself |
 
-**Rebuild** with `python docs/report/build_report.py` after editing any chapter.
+| `Orbital-Presentation.pptx` | 13 slides |
+| `Orbital-Outline.txt` | Plain-text outline of both, with page and slide numbers |
+
+**Rebuild** with `python docs/report/build_report.py` after editing any chapter,
+`python docs/report/build_deck.py` for the slides, then
+`python docs/report/build_outline.py` last — it reads the built PDF and .pptx,
+so it has to run after both.
 The pipeline is markdown → `.docx` via pandoc, then `.docx` → `.pdf` via Word,
 so the PDF is the *same document* rather than a second rendering of the source.
 
