@@ -287,10 +287,10 @@ def main() -> None:
          "40,000 objects is not a legible map at any frame rate.",
          "Responses thinned to 2,000; one layer at a time; positions "
          "interpolated between polls."),
-        ("R4  Free hosting proves insufficient", "HELD",
-         "Both hosts are free tiers. There is no budget to scale into.",
-         "One worker by design, everything answered from memory. Scaling is a "
-         "bigger box, not more boxes."),
+        ("R4  Traffic outgrows one backend", "HELD",
+         "One worker serves every viewer, on a free tier, single-threaded.",
+         "Viewer count costs no upstream quota. Twenty-nine polls in thirty "
+         "answer 304 without building a response."),
     ]
     for index, (head, state, what, response) in enumerate(risks):
         col, row = index % 2, index // 2
@@ -308,10 +308,13 @@ def main() -> None:
                 spacing=1.2)
         textbox(s, x + 0.28, y + 1.32, 5.16, 0.66, response, size=11.5,
                 colour=ACCENT if realised else BODY, spacing=1.2)
-    notes(s, "R1 is the one to dwell on: the architecture was designed so that a "
-             "feed disappearing costs one module, and when it happened that is "
-             "exactly what it cost. The full register, including the schedule "
-             "risk that was also realised, is section 4.6 of the report.")
+    notes(s, "R1 is the one that actually happened: the architecture was "
+             "designed so that losing a feed costs one module, and when OpenSky "
+             "went it cost exactly that. R4 is the one with a ceiling, and be "
+             "ready for the follow-up - scaling is vertical only, because a "
+             "second worker would open a second AIS socket and the two stores "
+             "would disagree. Past a bigger box the design has to change, and "
+             "4.6 says so. The full register of ten is section 4.6.")
 
     # ---- 4. architecture -------------------------------------------------
     s = new_slide()

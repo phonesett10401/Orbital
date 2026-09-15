@@ -118,37 +118,39 @@ Chapter 4: Project Planning  ...  p22
       Data
       Environment
   4.6 Risk Management Plan  ...  p28
+      R4 in detail, because it is the one with a ceiling
+      R5 is the one a tracker has to take seriously
       R1 was realised, and the plan is judged on that
-      R8 was also realised, and cost more
-  4.7 Communication Plan  ...  p30
+      R9 was also realised, and cost more
+  4.7 Communication Plan  ...  p31
       Why handover is a deliverable rather than a courtesy
       Escalation
 
 ------------------------------------------------------------------------------
-Chapter 5: System Design  ...  p31
+Chapter 5: System Design  ...  p32
 ------------------------------------------------------------------------------
-  5.1 System Architecture  ...  p31
+  5.1 System Architecture  ...  p32
       [FIGURE] Figure 5.1 — System architecture
       The three layers
       Three properties follow, and they are the design
       Deployment
       The numbers that shape it
-  5.2 Database Design  ...  p33
+  5.2 Database Design  ...  p34
       [FIGURE] Figure 5.2 — Entity relationship diagram
       Two tables, and that is the design
       Why almost nothing is persisted
       The entities that have no table
-  5.3 UML Diagrams  ...  p35
+  5.3 UML Diagrams  ...  p36
       5.3.1 Class Diagram
       [FIGURE] Figure 5.3 — Class diagram of the ingestion layer.
       5.3.2 Sequence Diagram
       [FIGURE] Figure 5.4 — Sequence diagram
       5.3.3 Activity Diagram
       [FIGURE] Figure 5.5 — Activity diagram
-  5.4 User Interface Design  ...  p38
+  5.4 User Interface Design  ...  p39
       [FIGURE] Figure 5.6 — The deployed interface, annotated
       The principles the layout follows
-  5.5 Prototype Design  ...  p39
+  5.5 Prototype Design  ...  p40
       What the prototype is
       What each phase's prototype proved
       Evolution rather than throw-away
@@ -221,11 +223,14 @@ PART TWO — THE PRESENTATION
         · Cost: one provider module and one registry entry. Nothing above the…
         · R2 Rate limited or banned
 
-        NOTE: R1 is the one to dwell on: the architecture was designed so
-              that a feed disappearing costs one module, and when it
-              happened that is exactly what it cost. The full register,
-              including the schedule risk that was also realised, is section
-              4.6 of the report.
+        NOTE: R1 is the one that actually happened: the architecture was
+              designed so that losing a feed costs one module, and when
+              OpenSky went it cost exactly that. R4 is the one with a
+              ceiling, and be ready for the follow-up - scaling is vertical
+              only, because a second worker would open a second AIS socket
+              and the two stores would disagree. Past a bigger box the
+              design has to change, and 4.6 says so. The full register of
+              ten is section 4.6.
 
    9.  Three layers, one direction
         · Each layer knows only the layer beneath it. The browser never talks…

@@ -1014,15 +1014,16 @@ intentions is a document nobody checks against the system.
 | R1 | An upstream feed becomes unavailable | H | H | Last good snapshot served with a visible staleness flag; aircraft and ships each have two independent feeds |
 | R2 | An upstream rate-limits or bans the client | M | H | One backend for all viewers; measured limits enforced by a gate; exponential backoff honouring `Retry-After` |
 | R3 | The browser cannot draw the object count | M | H | Responses thinned to a 2,000 cap; one layer at a time; positions interpolated between polls |
-| R4 | Free hosting tier proves insufficient | M | M | One worker by design; everything answered from memory; scaling is a bigger box, not more boxes |
-| R5 | Secrets committed to the repository | L | H | Credentials in environment variables only; configuration never printed as an object, only field by field |
-| R6 | Work serialises behind one member | M | M | The shared data shape fixed before any provider was written, so the layers proceed in parallel; handover written every session |
-| R7 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in §2.2 rather than assumed away |
-| R8 | A defect resists diagnosis and consumes the schedule | M | H | Every defect written down with how it was found; a fix counts as fixed when demonstrated, not when written |
-| R9 | A decision correct when made becomes wrong later | M | M | Decision record carries alternatives and reasoning, so a reversal is cheap and evidenced |
+| R4 | Traffic outgrows the single backend | M | H | Viewer count is decoupled from upstream cost; conditional requests answer roughly twenty-nine polls in thirty without building a response; per-request work is bounded by the 2,000 cap |
+| R5 | The map shows something false and nothing says so | M | H | Every response carries its age and a staleness flag; a marker fades after two minutes unreported; the status bar states how many of how many are drawn |
+| R6 | Secrets committed to the repository | L | H | Credentials in environment variables only; configuration never printed as an object, only field by field |
+| R7 | Work serialises behind one member | M | M | The shared data shape fixed before any provider was written, so the layers proceed in parallel; handover written every session |
+| R8 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in §2.2 rather than assumed away |
+| R9 | A defect resists diagnosis and consumes the schedule | M | H | Every defect written down with how it was found; a fix counts as fixed when demonstrated, not when written |
+| R10 | A decision correct when made becomes wrong later | M | M | Decision record carries alternatives and reasoning, so a reversal is cheap and evidenced |
 
 **Ordered by how much each one shaped the system, rather than by probability
-times impact.** R1 to R4 are the four with a *structural* mitigation — something
+times impact.** R1 to R5 are the ones with a *structural* mitigation — something
 in the architecture exists because of them, and would not exist otherwise:
 
 - **R1** is why a provider can be two providers. The union hides the pair
@@ -1031,13 +1032,52 @@ in the architecture exists because of them, and would not exist otherwise:
   upstream quota as one, because the browser never calls a source.
 - **R3** is why responses are capped at 2,000, why one object layer is drawn at
   a time, and why positions are interpolated between polls rather than fetched.
-- **R4** is why there is one worker holding everything in memory. The system is
-  scaled by a bigger box, which a free tier can still be.
+- **R4** is why the list endpoint answers conditional requests, and why the
+  ETag is computed from the store's version counter *before* the store is read.
+- **R5** is why the status bar exists in the form it does, why a marker fades
+  rather than simply staying put, and why a provider raises instead of
+  returning what it managed to get.
 
 The remaining five are managed by practice rather than by structure — a
 credential kept out of a file, a defect written down, a decision recorded. That
 is a weaker kind of mitigation, because it depends on somebody continuing to do
 it, and that is why they come second.
+
+### R4 in detail, because it is the one with a ceiling
+
+The client polls every 10 seconds and tier 1 refreshes every 300, so roughly
+**twenty-nine polls in thirty ask for a snapshot that has not changed**. Each
+of those would otherwise serialise two thousand objects, gzip them and write
+them to a socket — on the single event loop the poller runs on. The ETag turns
+them into a header comparison, and because the tag is computed from the store's
+version counter and the query before the store is read, a 304 never builds the
+response at all.
+
+The one poll in thirty that does change costs the measured work in §2.1: a
+bounding-box filter and a thinning pass, together under one and a half
+milliseconds at the 2,000 cap. **Upstream cost does not move at all** with
+viewer count, because the browser never calls a source.
+
+**Where the ceiling is, honestly.** Scaling is vertical only. A second worker
+would open a second AIS websocket, run its own poller and keep its own store —
+doubling the upstream cost and letting two requests disagree about where an
+aircraft is. So the answer to sustained growth is a bigger box until a bigger
+box runs out, and past that the design has to change: a shared store the
+workers read, which is a different system from the one described in Chapter 5.
+That is a known limit rather than an oversight, and it is stated here because a
+risk register that records only the risks with comfortable answers is not one.
+
+### R5 is the one a tracker has to take seriously
+
+Every other risk here is visible when it happens: a blank layer, a slow page, a
+failed deploy. **This one is invisible by construction.** A map showing
+positions from four minutes ago looks exactly like a map showing positions from
+four seconds ago, and a sample of two thousand aircraft looks exactly like all
+of them. The user cannot detect the failure, so the system has to declare it.
+
+That is why Objective O5 — honest reporting of what is shown — is an objective
+rather than a nicety, and why the status bar reports sampling, age and source
+rather than leaving them to be assumed.
 
 ### R1 was realised, and the plan is judged on that
 
@@ -1047,7 +1087,7 @@ provider kept the interface identical, and **nothing above the ingestion layer
 changed**. The cost was one provider module and one registry entry — the same
 cost the architecture had been designed to make it.
 
-### R8 was also realised, and cost more
+### R9 was also realised, and cost more
 
 Six working sessions went to a single defect that was misdiagnosed five times.
 The cause was structural — one camera serving two pictures at very different
