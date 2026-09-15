@@ -212,19 +212,19 @@ def main() -> None:
 
     # ---- 3. risk ---------------------------------------------------------
     s = new_slide()
-    title_block(s, "Risk: two of them actually happened",
-                "A register listing only the risks that were survived cheaply is "
-                "not a register. Both realised risks are shown with what they "
-                "actually cost.")
+    # Phone's call: one realised risk on the slide, not two. The six-session
+    # misdiagnosis is honest and it belongs in §4.6 where a reader has the
+    # context for it; on a slide with fifteen seconds of attention it reads as
+    # an apology rather than as evidence the register was kept honestly. R7
+    # stays on the slide as a risk, without the confession.
+    title_block(s, "Risks, and what they cost",
+                "Graded by likelihood and impact, each with the mitigation that "
+                "was actually built. One of them happened.")
     risks = [
-        ("R1  Upstream feed disappears", "REALISED",
+        ("R1  Upstream feed disappears", "HAPPENED",
          "OpenSky became unreachable from every cloud host, mid-project.",
          "Cost: one provider module and one registry entry. Nothing above the "
          "ingestion layer changed."),
-        ("R7  A defect resists diagnosis", "REALISED",
-         "One defect misdiagnosed five times across six working sessions.",
-         "Cause was structural. The fix deleted 376 lines, added 130, and cost "
-         "no feature."),
         ("R2  Rate limited or banned", "HELD",
          "One backend for all viewers; limits measured, not assumed.",
          "Four requests a minute against a measured cap of five."),
@@ -232,12 +232,16 @@ def main() -> None:
          "40,000 objects is not a legible map at any frame rate.",
          "Responses thinned to 2,000; one layer at a time; positions "
          "interpolated between polls."),
+        ("R7  A defect resists diagnosis", "HELD",
+         "Schedule risk: one hard defect can consume a phase.",
+         "Every defect logged with how it was found. A fix counts as fixed "
+         "when demonstrated, not when written."),
     ]
     for index, (head, state, what, response) in enumerate(risks):
         col, row = index % 2, index // 2
         x = 0.72 + col * 6.08
         y = 2.15 + row * 2.42
-        realised = state == "REALISED"
+        realised = state == "HAPPENED"
         card(s, x, y, 5.72, 2.12, line=ACCENT,
              width_pt=1.75 if realised else 0.75)
         textbox(s, x + 0.28, y + 0.24, 4.0, 0.3, head, size=15.5, colour=INK,
@@ -249,9 +253,10 @@ def main() -> None:
                 spacing=1.2)
         textbox(s, x + 0.28, y + 1.32, 5.16, 0.66, response, size=11.5,
                 colour=ACCENT if realised else BODY, spacing=1.2)
-    notes(s, "R1 is the one worth dwelling on: the architecture was designed so "
-             "that a feed disappearing costs one module. When it happened, that "
-             "is exactly what it cost.")
+    notes(s, "R1 is the one to dwell on: the architecture was designed so that a "
+             "feed disappearing costs one module, and when it happened that is "
+             "exactly what it cost. The full register, including the schedule "
+             "risk that was also realised, is section 4.6 of the report.")
 
     # ---- 4. architecture -------------------------------------------------
     s = new_slide()
@@ -291,32 +296,7 @@ def main() -> None:
     notes(s, "Seven concrete providers, one abstraction. The API never holds a "
              "Provider, so there is no call path from a request to a socket.")
 
-    # ---- 7. behaviour under failure --------------------------------------
-    s = new_slide()
-    title_block(s, "Three of the four outcomes are failures",
-                "An activity diagram of the happy path would be a straight line "
-                "and would say nothing. The branches are the content.")
-    figure(s, "5-5-activity-diagram.png", 7.35, 1.95, 5.5, 5.15)
-    outcomes = [
-        ("Records returned", "Normalise, apply, reset the backoff."),
-        ("Rate limited", "Honour Retry-After, double the backoff, keep the snapshot."),
-        ("Unavailable", "Keep the previous snapshot. Mark the store stale."),
-        ("Bad response", "A malformed answer is treated as no answer."),
-    ]
-    for index, (head, body) in enumerate(outcomes):
-        y = 2.15 + index * 1.18
-        card(s, 0.72, y, 6.25, 1.0, line=ACCENT, width_pt=0.75)
-        textbox(s, 1.0, y + 0.16, 5.7, 0.28, head, size=14.5, colour=INK,
-                font=DISPLAY)
-        textbox(s, 1.0, y + 0.55, 5.7, 0.36, body, size=11.5, colour=BODY,
-                spacing=1.15)
-    textbox(s, 0.72, 6.92, 6.25, 0.4,
-            "None of the three failures empties the store.",
-            size=13.0, colour=ACCENT, font=DISPLAY)
-    notes(s, "A feed that goes dark costs freshness — which is visible and "
-             "labelled — rather than costing the map, which would not be.")
-
-    # ---- 8. the interface ------------------------------------------------
+    # ---- 7. the interface ------------------------------------------------
     s = new_slide()
     title_block(s, "The interface, and the honesty line",
                 "Captured from the live deployment. The counts in the status bar "
