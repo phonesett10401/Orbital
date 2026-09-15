@@ -270,11 +270,11 @@ def main() -> None:
     # something in the architecture that exists because of them. That is also
     # why they are the interesting ones to show.
     #
-    # Two came off the slide. "Browser cannot draw the count" duplicated the
-    # Feasibility slide, which already argues it with measurements. "A defect
-    # resists diagnosis" is managed by practice rather than by structure, and
-    # its realised case is the six-session confession that belongs in §4.6
-    # rather than on a projector.
+    # R3 overlaps the Feasibility slide, which argues the same thing with
+    # measurements. Phone's call, and it is defensible: the two slides make the
+    # claim in different registers - one shows the milliseconds, the other says
+    # what the risk was and what was built because of it. When presenting, the
+    # second mention should point back rather than repeat the numbers.
     risks = [
         ("R1  Upstream feed disappears", "HAPPENED",
          "OpenSky became unreachable from every cloud host, mid-project.",
@@ -283,14 +283,14 @@ def main() -> None:
         ("R2  Rate limited or banned", "HELD",
          "One backend for all viewers; limits measured, not assumed.",
          "Four requests a minute against a measured cap of five."),
-        ("R3  Secrets reach the repository", "HELD",
-         "A credential in git is public the moment the repository is.",
-         "Credentials in environment variables only. Configuration is never "
-         "printed as an object — one field at a time."),
-        ("R4  Work serialises behind one person", "HELD",
-         "Five part-time students: if the layers queue, the schedule goes.",
-         "The shared data shape was fixed before any provider was written, so "
-         "the three layers proceed in parallel."),
+        ("R3  Browser cannot draw the count", "HELD",
+         "40,000 objects is not a legible map at any frame rate.",
+         "Responses thinned to 2,000; one layer at a time; positions "
+         "interpolated between polls."),
+        ("R4  Free hosting proves insufficient", "HELD",
+         "Both hosts are free tiers. There is no budget to scale into.",
+         "One worker by design, everything answered from memory. Scaling is a "
+         "bigger box, not more boxes."),
     ]
     for index, (head, state, what, response) in enumerate(risks):
         col, row = index % 2, index // 2

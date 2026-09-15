@@ -119,7 +119,7 @@ Chapter 4: Project Planning  ...  p22
       Environment
   4.6 Risk Management Plan  ...  p28
       R1 was realised, and the plan is judged on that
-      R6 was also realised, and cost more
+      R8 was also realised, and cost more
   4.7 Communication Plan  ...  p30
       Why handover is a deliverable rather than a courtesy
       Escalation
