@@ -326,7 +326,80 @@ def main() -> None:
     notes(s, "Five external feeds, three internal layers. The single most "
              "important property: upstream failure is contained at layer 1.")
 
-    # ---- 5. database -----------------------------------------------------
+    # ---- 5. what it is built with ----------------------------------------
+    #
+    # Placed straight after the architecture slide: the layers have just been
+    # named, so saying what each is written in lands without setup.
+    #
+    # No line counts. Chapter 1.6 carries them with the date they were measured,
+    # and a slide showing a different number beside a report showing another
+    # invites "which one is right?" during questions. Languages and what each
+    # one does is the question that was asked anyway.
+    s = new_slide()
+    title_block(s, "What it is built with",
+                "Four languages, and a short list of libraries doing the work "
+                "that would otherwise be ours.")
+
+    textbox(s, 0.72, 2.00, 5.6, 0.3, "LANGUAGES", size=11.0, colour=ACCENT,
+            font=DISPLAY)
+    languages = [
+        ("Python", "The backend: ingestion, the REST API, accounts. Pydantic "
+                   "turns the data contract into something that runs."),
+        ("TypeScript", "The frontend: the map, the object layers, the "
+                       "interface. The same contract, enforced at compile time."),
+        ("GLSL", "Shaders written by hand for the marker, orbit-shell and "
+                 "terminator layers, inside MapLibre's WebGL context."),
+        ("SQL", "Two tables — accounts and sessions. The only state that "
+                "survives a restart."),
+    ]
+    for index, (name, role) in enumerate(languages):
+        y = 2.45 + index * 1.17
+        card(s, 0.72, y, 5.6, 1.05, line=ACCENT, width_pt=0.75)
+        textbox(s, 1.00, y + 0.17, 5.0, 0.28, name, size=15.0, colour=INK,
+                font=DISPLAY)
+        textbox(s, 1.00, y + 0.55, 5.04, 0.42, role, size=10.5, colour=BODY,
+                spacing=1.18)
+
+    textbox(s, 6.95, 2.00, 5.6, 0.3, "AND THE LIBRARIES", size=11.0,
+            colour=ACCENT, font=DISPLAY)
+    card(s, 6.95, 2.45, 5.66, 4.62, line=ACCENT, width_pt=0.75)
+    libraries = [
+        ("Map", "MapLibre GL JS  ·  three.js",
+         "One view from globe to street level, and the selected aircraft drawn "
+         "as a 3D model inside MapLibre's own context."),
+        ("Frontend", "React  ·  Vite", ""),
+        ("Backend", "FastAPI  ·  httpx  ·  websockets",
+         "Async throughout: polling never blocks a request, and the AIS stream "
+         "pushes rather than being asked."),
+        ("Orbits", "sgp4",
+         "The standard propagator — satellite positions are computed, not "
+         "fetched."),
+        ("Tests", "pytest  ·  Vitest", "Both run offline, against fixtures."),
+    ]
+    # Laid out by accumulating rather than on a grid, because the rows are
+    # different heights - and the accumulation has to land inside the card, so
+    # each detail is kept to two lines at this width.
+    y = 2.70
+    for label, names, detail in libraries:
+        textbox(s, 7.25, y, 1.5, 0.26, label, size=10.5, colour=ACCENT,
+                font=DISPLAY)
+        textbox(s, 8.75, y, 3.7, 0.26, names, size=11.5, colour=INK,
+                font=DISPLAY)
+        y += 0.34
+        if detail:
+            textbox(s, 8.75, y, 3.7, 0.56, detail, size=9.8, colour=BODY,
+                    spacing=1.2)
+            y += 0.56
+        y += 0.12
+
+    notes(s, "Four languages. The one worth a sentence is GLSL — the shaders "
+             "are written by hand rather than taken from a library, because "
+             "the markers, the orbit shells and the day-night terminator all "
+             "draw inside MapLibre's WebGL context and there is no component "
+             "that does that. Everything else on this slide is a deliberate "
+             "choice to not write something ourselves.")
+
+    # ---- 6. database -----------------------------------------------------
     s = new_slide()
     title_block(s, "Two tables — and that is the design",
                 "A tracker looks like a system that needs a large database. "
@@ -344,7 +417,7 @@ def main() -> None:
              "Tuesday. Entitlement windows are bounded by what is still in "
              "memory, not by a query.")
 
-    # ---- 6. the class diagram and the union ------------------------------
+    # ---- 7. the class diagram and the union ------------------------------
     s = new_slide()
     title_block(s, "Why a second feed cost one file",
                 "UnionProvider inherits Provider and holds two of them. A caller "
@@ -354,7 +427,7 @@ def main() -> None:
     notes(s, "Seven concrete providers, one abstraction. The API never holds a "
              "Provider, so there is no call path from a request to a socket.")
 
-    # ---- 7. the interface ------------------------------------------------
+    # ---- 8. the interface ------------------------------------------------
     s = new_slide()
     title_block(s, "The interface, and the honesty line",
                 "Captured from the live deployment. The counts in the status bar "

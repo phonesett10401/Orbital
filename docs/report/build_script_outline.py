@@ -109,7 +109,21 @@ GUIDE: dict[int, tuple[str, str, list[str]]] = {
         "Upstream failure is contained at layer one: the API serves the last "
         "good snapshot with a staleness flag.",
     ]),
-    10: ("Two tables — and that is the design",
+    10: ("What it is built with",
+         "Four language cards, and a list of libraries by layer.", [
+        "Python for the backend — ingestion, the REST API, accounts. Pydantic "
+        "turns the data contract into something that runs.",
+        "TypeScript for the frontend — the same contract, enforced at compile "
+        "time instead of at runtime.",
+        "GLSL is the one worth a sentence: the shaders are written by hand, "
+        "because the markers, orbit shells and the day-night terminator all "
+        "draw inside MapLibre's WebGL context and nothing off the shelf does "
+        "that.",
+        "SQL is two tables. That is the whole database.",
+        "Everything in the right-hand column is a decision not to write "
+        "something ourselves.",
+    ]),
+    11: ("Two tables — and that is the design",
          "ER diagram — two persisted tables, the rest dashed.", [
         "Accounts and sessions. That is the whole persisted schema.",
         "Everything the map shows lives in memory and is replaced every poll. "
@@ -118,7 +132,7 @@ GUIDE: dict[int, tuple[str, str, list[str]]] = {
         "for the thing that changes most — the shape of a feed.",
         "The honest cost: Orbital cannot answer a question about last Tuesday.",
     ]),
-    11: ("Why a second feed cost one file",
+    12: ("Why a second feed cost one file",
          "Class diagram — Provider, seven implementations, UnionProvider "
          "highlighted.", [
         "One abstract Provider: fetch, given a bounding box, return the "
@@ -130,7 +144,7 @@ GUIDE: dict[int, tuple[str, str, list[str]]] = {
         "The API never holds a Provider, so there is no call path from a "
         "request to a socket.",
     ]),
-    12: ("The interface, and the honesty line",
+    13: ("The interface, and the honesty line",
          "Screenshot of the live deployment, with real counts.", [
         "This is the deployed system, not a mock-up. Those counts were real at "
         "the moment of capture.",
@@ -141,7 +155,7 @@ GUIDE: dict[int, tuple[str, str, list[str]]] = {
         "The status bar reports what is *not* shown: 2,000 of 13,607 drawn, "
         "the data age, and which feed answered.",
     ]),
-    13: ("What Orbital Delivers", "Four closing cards.", [
+    14: ("What Orbital Delivers", "Four closing cards.", [
         "One map, free, no account — aircraft, ships and satellites together.",
         "It survives upstream failure, because one already happened.",
         "A new object type costs one module.",

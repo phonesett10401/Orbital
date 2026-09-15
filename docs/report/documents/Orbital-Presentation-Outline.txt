@@ -1,6 +1,6 @@
 ==============================================================================
 ORBITAL — CSC480
-Presentation outline — 13 slides
+Presentation outline — 14 slides
 ==============================================================================
 
 What is on each slide, and the points to cover. Write your own sentences from
@@ -123,7 +123,24 @@ between you however suits; agree it before anyone writes.
        good snapshot with a staleness flag.
 
 ------------------------------------------------------------------------------
-10.  TWO TABLES — AND THAT IS THE DESIGN
+10.  WHAT IT IS BUILT WITH
+------------------------------------------------------------------------------
+    Four language cards, and a list of libraries by layer.
+
+    ·  Python for the backend — ingestion, the REST API, accounts. Pydantic
+       turns the data contract into something that runs.
+    ·  TypeScript for the frontend — the same contract, enforced at compile
+       time instead of at runtime.
+    ·  GLSL is the one worth a sentence: the shaders are written by hand,
+       because the markers, orbit shells and the day-night terminator all
+       draw inside MapLibre's WebGL context and nothing off the shelf does
+       that.
+    ·  SQL is two tables. That is the whole database.
+    ·  Everything in the right-hand column is a decision not to write
+       something ourselves.
+
+------------------------------------------------------------------------------
+11.  TWO TABLES — AND THAT IS THE DESIGN
 ------------------------------------------------------------------------------
     ER diagram — two persisted tables, the rest dashed.
 
@@ -135,7 +152,7 @@ between you however suits; agree it before anyone writes.
     ·  The honest cost: Orbital cannot answer a question about last Tuesday.
 
 ------------------------------------------------------------------------------
-11.  WHY A SECOND FEED COST ONE FILE
+12.  WHY A SECOND FEED COST ONE FILE
 ------------------------------------------------------------------------------
     Class diagram — Provider, seven implementations, UnionProvider
     highlighted.
@@ -150,7 +167,7 @@ between you however suits; agree it before anyone writes.
        request to a socket.
 
 ------------------------------------------------------------------------------
-12.  THE INTERFACE, AND THE HONESTY LINE
+13.  THE INTERFACE, AND THE HONESTY LINE
 ------------------------------------------------------------------------------
     Screenshot of the live deployment, with real counts.
 
@@ -164,7 +181,7 @@ between you however suits; agree it before anyone writes.
        data age, and which feed answered.
 
 ------------------------------------------------------------------------------
-13.  WHAT ORBITAL DELIVERS
+14.  WHAT ORBITAL DELIVERS
 ------------------------------------------------------------------------------
     Four closing cards.
 

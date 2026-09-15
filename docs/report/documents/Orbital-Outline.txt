@@ -238,7 +238,22 @@ PART TWO — THE PRESENTATION
         NOTE: Five external feeds, three internal layers. The single most
               important property: upstream failure is contained at layer 1.
 
-  10.  Two tables — and that is the design
+  10.  What it is built with
+        · Four languages, and a short list of libraries doing the work that w…
+        · LANGUAGES
+        · Python
+        · The backend: ingestion, the REST API, accounts. Pydantic turns the …
+        · TypeScript
+        · The frontend: the map, the object layers, the interface. The same c…
+
+        NOTE: Four languages. The one worth a sentence is GLSL — the shaders
+              are written by hand rather than taken from a library, because
+              the markers, the orbit shells and the day-night terminator all
+              draw inside MapLibre's WebGL context and there is no component
+              that does that. Everything else on this slide is a deliberate
+              choice to not write something ourselves.
+
+  11.  Two tables — and that is the design
         · A tracker looks like a system that needs a large database. Orbital …
         · Accounts and sessions
         · The only state worth surviving a restart. The raw session token is …
@@ -249,14 +264,14 @@ PART TWO — THE PRESENTATION
               Tuesday. Entitlement windows are bounded by what is still in
               memory, not by a query.
 
-  11.  Why a second feed cost one file
+  12.  Why a second feed cost one file
         · UnionProvider inherits Provider and holds two of them. A caller can…
 
         NOTE: Seven concrete providers, one abstraction. The API never holds
               a Provider, so there is no call path from a request to a
               socket.
 
-  12.  The interface, and the honesty line
+  13.  The interface, and the honesty line
         · Captured from the live deployment. The counts in the status bar are…
         · The map is the product
         · Controls sit in the corners. Nothing floats over the centre.
@@ -269,7 +284,7 @@ PART TWO — THE PRESENTATION
               that showed a sample as though it were everything would be
               easier to build and would be lying.
 
-  13.  What Orbital Delivers
+  14.  What Orbital Delivers
         · One Map
         · Aircraft, ships, and satellites — unified, free, in a single browse…
         · Resilient
