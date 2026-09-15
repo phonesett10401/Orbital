@@ -1,0 +1,175 @@
+==============================================================================
+ORBITAL — CSC480
+Presentation outline — 13 slides
+==============================================================================
+
+What is on each slide, and the points to cover. Write your own sentences from
+the points — they are notes, not a script.
+
+Twelve minutes of speaking fits a fifteen-minute slot. Divide the slides
+between you however suits; agree it before anyone writes.
+
+
+------------------------------------------------------------------------------
+ 1.  ORBITAL
+------------------------------------------------------------------------------
+    Title card.
+
+    ·  Orbital puts aircraft, ships and satellites on one live map, in a
+       browser, free, with no account.
+    ·  The team and the module. Keep it to a sentence and move on.
+
+------------------------------------------------------------------------------
+ 2.  THE PROBLEM: FRAGMENTED & CLOSED
+------------------------------------------------------------------------------
+    Four cards — Fragmented, Raw, Metered, Closed.
+
+    ·  All three kinds of object are already tracked publicly, right now.
+    ·  But each lives behind its own API, its own format, its own rate limit,
+       and some forbid the use outright.
+    ·  Nobody has to invent the data. The work is assembling it and keeping
+       it free to look at.
+
+------------------------------------------------------------------------------
+ 3.  ARCHITECTURE & METHODOLOGY
+------------------------------------------------------------------------------
+    Three stacked arrows — Ingestion, API, Frontend.
+
+    ·  Data flows one way, and each layer knows only the one beneath it.
+    ·  The frontend never learns where the data came from; ingestion never
+       learns a browser exists.
+    ·  One shared data shape covers all three object types, which is why a
+       new type costs one module.
+
+------------------------------------------------------------------------------
+ 4.  FEASIBILITY & PERFORMANCE
+------------------------------------------------------------------------------
+    Bar chart — four backend stages at 2,000, 10,000 and 30,000 objects.
+
+    ·  Every source is free and public. Total cash cost is zero.
+    ·  The real budget is request quota: 77% of the OpenSky allowance
+       planned, and the app refuses to start above 85%.
+    ·  On the chart, the left-hand group is where the system actually runs —
+       every stage under two milliseconds.
+    ·  The 43.5 ms bar is the cliff the 2,000 cap exists to avoid. The
+       backend is one event loop, so a slow call delays everyone.
+
+------------------------------------------------------------------------------
+ 5.  RELIABILITY & USE CASE
+------------------------------------------------------------------------------
+    Two cards, and the use case diagram — eleven cases, five actors.
+
+    ·  A feed going dark is normal operating conditions, not an incident.
+    ·  Stale-but-flagged: the last good data keeps being served with its age
+       visible. The map never goes blank.
+    ·  Aircraft and ships each have two independent feeds, so one failure is
+       never fatal.
+    ·  On the diagram: four of the eleven cases have no human actor. They are
+       the scheduler, and that is where every external dependency lives.
+
+------------------------------------------------------------------------------
+ 6.  PLANNING: SIX PACKAGES, FIVE PEOPLE
+------------------------------------------------------------------------------
+    Work breakdown — six cards, four deliverables each, owners initialled.
+
+    ·  Seven roles across five people, so most of us hold two.
+    ·  Decomposed until each item has a name against it, and no further.
+    ·  The backend package is split by delivered phase rather than by
+       component, which makes the cost of each new object type visible.
+
+------------------------------------------------------------------------------
+ 7.  THE PLAN, AND THE THREE MILESTONES
+------------------------------------------------------------------------------
+    Gantt chart — twelve weeks, three milestones.
+
+    ·  Milestones: requirements signed off at week 3, feature complete at 8,
+       report and demonstration at 11.
+    ·  The critical path is the first vertical slice — requirements, data
+       contract, one provider, the store, the API, one layer on screen.
+    ·  After that it runs in parallel: satellites, ships and accounts each
+       touch a different provider or route, so none blocks another.
+    ·  Say plainly that this is the plan rather than a record of what
+       happened — the two are kept separate on purpose.
+
+------------------------------------------------------------------------------
+ 8.  RISKS, AND WHAT THEY COST
+------------------------------------------------------------------------------
+    Four risk cards. R1 is marked HAPPENED.
+
+    ·  R1 is not hypothetical — OpenSky became unreachable from every cloud
+       host, mid-project.
+    ·  It cost one provider module and one registry entry. Nothing above the
+       ingestion layer changed.
+    ·  R3 is the object-count limit again. Slide 4 already showed the
+       measurements, so point back rather than repeating the numbers.
+    ·  R4: the client polls every ten seconds but the data changes every
+       three hundred, so twenty-nine polls in thirty are answered by a header
+       comparison that never builds a response.
+    ·  If asked why these four out of ten: they are the four with a
+       structural mitigation — something in the architecture exists because
+       of them.
+
+------------------------------------------------------------------------------
+ 9.  THREE LAYERS, ONE DIRECTION
+------------------------------------------------------------------------------
+    Full architecture diagram — five feeds, three layers.
+
+    ·  The browser never talks to a data source. Every external call goes
+       through the backend.
+    ·  So a hundred open tabs cost the same upstream quota as one.
+    ·  It is also why adding a second aircraft feed was a backend-only change
+       — the frontend was never told, because there was nothing to tell it.
+    ·  Upstream failure is contained at layer one: the API serves the last
+       good snapshot with a staleness flag.
+
+------------------------------------------------------------------------------
+10.  TWO TABLES — AND THAT IS THE DESIGN
+------------------------------------------------------------------------------
+    ER diagram — two persisted tables, the rest dashed.
+
+    ·  Accounts and sessions. That is the whole persisted schema.
+    ·  Everything the map shows lives in memory and is replaced every poll.
+       Nothing about an aircraft is written to disk.
+    ·  So there is no database on the request path, and no schema migration
+       for the thing that changes most — the shape of a feed.
+    ·  The honest cost: Orbital cannot answer a question about last Tuesday.
+
+------------------------------------------------------------------------------
+11.  WHY A SECOND FEED COST ONE FILE
+------------------------------------------------------------------------------
+    Class diagram — Provider, seven implementations, UnionProvider
+    highlighted.
+
+    ·  One abstract Provider: fetch, given a bounding box, return the
+       normalised shape.
+    ·  UnionProvider inherits it and holds two of them — primary every poll,
+       supplement every 120 seconds.
+    ·  A caller cannot tell a pair of feeds from a single feed. That is why
+       losing a primary source changed nothing above ingestion.
+    ·  The API never holds a Provider, so there is no call path from a
+       request to a socket.
+
+------------------------------------------------------------------------------
+12.  THE INTERFACE, AND THE HONESTY LINE
+------------------------------------------------------------------------------
+    Screenshot of the live deployment, with real counts.
+
+    ·  This is the deployed system, not a mock-up. Those counts were real at
+       the moment of capture.
+    ·  The map is the product — controls sit in the corners, nothing floats
+       over the centre.
+    ·  One layer at a time, because three at once is forty thousand markers
+       and no legible map.
+    ·  The status bar reports what is *not* shown: 2,000 of 13,607 drawn, the
+       data age, and which feed answered.
+
+------------------------------------------------------------------------------
+13.  WHAT ORBITAL DELIVERS
+------------------------------------------------------------------------------
+    Four closing cards.
+
+    ·  One map, free, no account — aircraft, ships and satellites together.
+    ·  It survives upstream failure, because one already happened.
+    ·  A new object type costs one module.
+    ·  Stop there and take questions.
+
