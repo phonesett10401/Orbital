@@ -1013,17 +1013,22 @@ intentions is a document nobody checks against the system.
 |---|---|---|---|---|
 | R1 | An upstream feed becomes unavailable | H | H | Last good snapshot served with a visible staleness flag; aircraft and ships each have two independent feeds |
 | R2 | An upstream rate-limits or bans the client | M | H | One backend for all viewers; measured limits enforced by a gate; exponential backoff honouring `Retry-After` |
-| R3 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in §2.2 rather than assumed away |
-| R4 | A defect resists diagnosis and consumes the schedule | M | H | Every defect written down with how it was found; a fix counts as fixed when demonstrated, not when written |
-| R5 | Browser cannot draw the object count | M | H | Responses thinned to a cap; one layer at a time; positions interpolated between polls |
-| R6 | Secrets committed to the repository | L | H | Credentials in environment variables only; configuration never printed as an object, only field by field |
-| R7 | Free hosting tier proves insufficient | M | M | One worker by design; everything answered from memory; scaling is a bigger box, not more boxes |
-| R8 | Work serialises behind one member | M | M | The shared data shape fixed early so layers proceed in parallel; session handover written every time |
+| R3 | Secrets committed to the repository | L | H | Credentials in environment variables only; configuration never printed as an object, only field by field |
+| R4 | Work serialises behind one member | M | M | The shared data shape fixed before any provider was written, so the layers proceed in parallel; handover written every session |
+| R5 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in §2.2 rather than assumed away |
+| R6 | A defect resists diagnosis and consumes the schedule | M | H | Every defect written down with how it was found; a fix counts as fixed when demonstrated, not when written |
+| R7 | Browser cannot draw the object count | M | H | Responses thinned to a cap; one layer at a time; positions interpolated between polls |
+| R8 | Free hosting tier proves insufficient | M | M | One worker by design; everything answered from memory; scaling is a bigger box, not more boxes |
 | R9 | A decision correct when made becomes wrong later | M | M | Decision record carries alternatives and reasoning, so a reversal is cheap and evidenced |
 
-**Ordered by significance rather than by when it was thought of**, so the four
-that matter most are R1 to R4 and the presentation can show exactly those
-without a gap in the numbering.
+**Ordered by how much each one shaped the system, rather than by probability
+times impact.** R1 to R4 are the four with a *structural* mitigation — something
+in the architecture exists because of them. Feed loss is why a provider can be
+two providers; rate limiting is why there is exactly one backend; secret
+handling is why configuration is never printed as an object; and serialisation
+risk is why the shared data shape was fixed before a line of ingestion was
+written. The rest are managed by practice rather than by structure, which is a
+weaker thing and is why they come second.
 
 ### R1 was realised, and the plan is judged on that
 
@@ -1033,7 +1038,7 @@ provider kept the interface identical, and **nothing above the ingestion layer
 changed**. The cost was one provider module and one registry entry — the same
 cost the architecture had been designed to make it.
 
-### R4 was also realised, and cost more
+### R6 was also realised, and cost more
 
 Six working sessions went to a single defect that was misdiagnosed five times.
 The cause was structural — one camera serving two pictures at very different

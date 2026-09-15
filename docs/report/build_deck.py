@@ -260,15 +260,21 @@ def main() -> None:
     title_block(s, "Risks, and what they cost",
                 "Graded by likelihood and impact, each with the mitigation that "
                 "was actually built. One of them happened.")
-    # R1 to R4 of §4.6, in the register's own order. They were R1, R2, R4 and
-    # R7 here, which read as an arbitrary four picked out of nine - so the
-    # register itself was reordered by significance and the slide now shows its
-    # top four. The numbers on the slide and the numbers in the report are the
-    # same numbers, which is the whole point of numbering them.
+    # R1 to R4 of §4.6, in the register's own order. An earlier version showed
+    # R1, R2, R4 and R7, which reads as an arbitrary four picked out of nine -
+    # so the register itself is ordered so that its first four are the four
+    # worth presenting, and the numbers here are the report's numbers.
     #
-    # "Browser cannot draw the count" came off the slide: the Feasibility slide
-    # already makes that argument with measurements, and a deck should not
-    # spend two slides on one claim.
+    # The ordering rule is "how much did this shape the system", not
+    # probability times impact: these four each have a structural mitigation,
+    # something in the architecture that exists because of them. That is also
+    # why they are the interesting ones to show.
+    #
+    # Two came off the slide. "Browser cannot draw the count" duplicated the
+    # Feasibility slide, which already argues it with measurements. "A defect
+    # resists diagnosis" is managed by practice rather than by structure, and
+    # its realised case is the six-session confession that belongs in §4.6
+    # rather than on a projector.
     risks = [
         ("R1  Upstream feed disappears", "HAPPENED",
          "OpenSky became unreachable from every cloud host, mid-project.",
@@ -277,14 +283,14 @@ def main() -> None:
         ("R2  Rate limited or banned", "HELD",
          "One backend for all viewers; limits measured, not assumed.",
          "Four requests a minute against a measured cap of five."),
-        ("R3  A licence forbids the use", "HELD",
-         "OpenSky is non-commercial. A paid version cannot use it.",
-         "Licences recorded per source. Stated in §2.2 as a finding rather "
-         "than assumed away."),
-        ("R4  A defect resists diagnosis", "HELD",
-         "Schedule risk: one hard defect can consume a phase.",
-         "Every defect logged with how it was found. A fix counts as fixed "
-         "when demonstrated, not when written."),
+        ("R3  Secrets reach the repository", "HELD",
+         "A credential in git is public the moment the repository is.",
+         "Credentials in environment variables only. Configuration is never "
+         "printed as an object — one field at a time."),
+        ("R4  Work serialises behind one person", "HELD",
+         "Five part-time students: if the layers queue, the schedule goes.",
+         "The shared data shape was fixed before any provider was written, so "
+         "the three layers proceed in parallel."),
     ]
     for index, (head, state, what, response) in enumerate(risks):
         col, row = index % 2, index // 2
