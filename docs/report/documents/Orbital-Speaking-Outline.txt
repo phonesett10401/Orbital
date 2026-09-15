@@ -1,0 +1,326 @@
+==============================================================================
+ORBITAL — CSC480
+Speaking outline, for writing your own script from
+==============================================================================
+
+One point and a few beats per slide. Expand the beats into your own sentences
+— a script written by somebody else gets read aloud, and being read aloud to
+is worse than being talked to.
+
+  Slides          13
+  Speaking time   12:00 of a 15-minute slot,
+                  leaving roughly three minutes for questions
+  Deck            documents/Orbital-Presentation.pptx
+
+The speaker against each slide is a suggestion, grouped so nobody hops in and
+out. Change it to suit who is comfortable with what — but agree it before
+anyone writes a word, because the hand-over lines depend on who is standing up
+next.
+
+
+------------------------------------------------------------------------------
+WHO TAKES WHAT
+------------------------------------------------------------------------------
+
+  Phone        slides 1, 13                  0:50
+  Han Phyo     slides 2, 5                   2:10
+  Bhone        slides 3, 9, 10, 11           3:50
+  Nyan Lin     slides 4, 12                  2:10
+  Pyae         slides 6, 7, 8                3:00
+
+
+==============================================================================
+SLIDE 1 of 13   ·   0:20   ·   Phone
+Orbital
+------------------------------------------------------------------------------
+ON SCREEN   Title card, the project name and the team.
+THE POINT   Say what it is in one sentence and get off the slide.
+
+SAY         · Orbital puts aircraft, ships and satellites on one live map, in
+              a browser, free, with no account.
+            · Name the team and the module. Do not read the subtitle aloud —
+              it is already on screen.
+
+HAND OVER   "Here is the problem it exists to solve."
+
+==============================================================================
+SLIDE 2 of 13   ·   1:00   ·   Han Phyo
+The Problem: Fragmented & Closed
+------------------------------------------------------------------------------
+ON SCREEN   Four cards: Fragmented, Raw, Metered, Closed.
+THE POINT   The data already exists. Nothing assembles it.
+
+SAY         · Every one of these three object types is tracked publicly, right
+              now, by somebody.
+            · But each lives behind its own API, in its own format, with its
+              own rate limit — and some forbid the use outright.
+            · Nobody has to invent the data. The work is in assembling it and
+              keeping it free to look at.
+            · Do not read all four cards. Pick two and let the slide carry the
+              rest.
+
+HAND OVER   "So the shape of the system follows from that."
+
+==============================================================================
+SLIDE 3 of 13   ·   1:00   ·   Bhone
+Architecture & Methodology
+------------------------------------------------------------------------------
+ON SCREEN   Three stacked arrows: Ingestion, API, Frontend.
+THE POINT   One direction of flow, and each layer knows only the one beneath
+            it.
+
+SAY         · Data flows one way. Ingestion talks to the outside world; the
+              API reads what ingestion left; the frontend reads the API.
+            · The frontend never learns where the data came from, and
+              ingestion never learns a browser exists.
+            · One shared data shape covers all three object types, which is
+              why a new type costs one module.
+            · This is the slide the later architecture slides build on — set
+              it up properly here and slide 9 goes quickly.
+
+HAND OVER   "The question then is whether it is actually feasible."
+
+==============================================================================
+SLIDE 4 of 13   ·   1:10   ·   Nyan Lin
+Feasibility & Performance
+------------------------------------------------------------------------------
+ON SCREEN   Bar chart: four backend stages at 2,000, 10,000 and 30,000
+            objects.
+THE POINT   Free data is viable; the constraint is rate limiting, not
+            availability.
+
+SAY         · Every source is free and public. Total cash cost is zero — that
+              is in the report as a table.
+            · The real budget is request quota, and it was budgeted like
+              money: 77% of the OpenSky allowance planned, and the app refuses
+              to start above 85%.
+            · On the chart: the left-hand group is where the system actually
+              runs. Every stage under two milliseconds.
+            · The 43.5 ms bar on the right is the cliff the 2,000 cap exists
+              to avoid — the backend is one event loop, so a slow call delays
+              everyone.
+
+HAND OVER   "And when a source fails anyway — which one did."
+
+==============================================================================
+SLIDE 5 of 13   ·   1:10   ·   Han Phyo
+Reliability & Use case
+------------------------------------------------------------------------------
+ON SCREEN   Two cards, and the use case diagram: eleven cases, five actors.
+THE POINT   Upstream failure is expected, not exceptional.
+
+SAY         · Treat a feed going dark as normal operating conditions, not as
+              an incident.
+            · Stale-but-flagged: the last good data keeps being served, with
+              its age visible. The map never goes blank.
+            · Aircraft and ships each have two independent feeds, so one
+              failure is never fatal.
+            · On the diagram, point out that four of the eleven cases have no
+              human actor — they are the scheduler, and that is where every
+              external dependency lives.
+
+HAND OVER   "That is the system. Here is how the work was planned."
+
+==============================================================================
+SLIDE 6 of 13   ·   0:55   ·   Pyae
+Planning: six packages, five people
+------------------------------------------------------------------------------
+ON SCREEN   Work breakdown: six cards, four deliverables each, owners
+            initialled.
+THE POINT   Decomposed to where one person owns one deliverable.
+
+SAY         · Seven roles across five people, so most of us hold two.
+            · Decomposed until each item has a name against it — any deeper
+              and a WBS is a task list that is stale in a week.
+            · Package 3, the backend, is split by delivered phase rather than
+              by component. That is deliberate: it makes the cost of each new
+              object type visible instead of hiding it inside 'the ingestion
+              layer'.
+
+NOTE        Six work packages. Note that backend is broken down by delivered
+            phase rather than by component — that is what makes the cost of
+            each new object type visible.
+
+HAND OVER   "Laid against twelve weeks, it looks like this."
+
+==============================================================================
+SLIDE 7 of 13   ·   0:55   ·   Pyae
+The plan, and the three milestones
+------------------------------------------------------------------------------
+ON SCREEN   Gantt chart, twelve weeks, three milestone markers.
+THE POINT   This is the plan, not a chart redrawn afterwards to match.
+
+SAY         · Three milestones: requirements signed off at week 3, feature
+              complete at 8, report and demonstration at 11.
+            · The critical path is the first vertical slice — requirements,
+              data contract, one provider, the store, the API, one layer on
+              screen.
+            · After that it is parallel. Satellites, ships and accounts each
+              touch a different provider or route, so none blocks another.
+            · Be straight that this is the plan and section 2.4 records what
+              was delivered. Comparing them is only worth anything because
+              they are kept apart.
+
+NOTE        Milestones at weeks 3, 8 and 11. The critical path is the first
+            vertical slice; everything after it runs in parallel because the
+            shared data shape was fixed before any provider was written.
+
+HAND OVER   "Planning also means saying what could go wrong."
+
+==============================================================================
+SLIDE 8 of 13   ·   1:10   ·   Pyae
+Risks, and what they cost
+------------------------------------------------------------------------------
+ON SCREEN   Four risk cards. R1 is marked HAPPENED.
+THE POINT   One of these actually happened, and it cost what it was designed
+            to.
+
+SAY         · R1 is not hypothetical. OpenSky became unreachable from every
+              cloud host, mid-project.
+            · It cost one provider module and one registry entry. Nothing
+              above the ingestion layer changed — that is the architecture
+              being proved by an accident rather than by an argument.
+            · R4 is worth a number: the client polls every ten seconds but the
+              data only changes every three hundred, so twenty-nine polls in
+              thirty are answered by a header comparison that never builds a
+              response.
+            · If asked why these four out of ten: these are the four with a
+              structural mitigation — something in the architecture exists
+              because of them.
+
+NOTE        R1 is the one that actually happened: the architecture was
+            designed so that losing a feed costs one module, and when OpenSky
+            went it cost exactly that. R4 is the one with a ceiling, and be
+            ready for the follow-up - scaling is vertical only, because a
+            second worker would open a second AIS socket and the two stores
+            would disagree. Past a bigger box the design has to change, and
+            4.6 says so. The full register of ten is section 4.6.
+
+HAND OVER   "So, the design itself. Three layers."
+
+==============================================================================
+SLIDE 9 of 13   ·   1:00   ·   Bhone
+Three layers, one direction
+------------------------------------------------------------------------------
+ON SCREEN   Full architecture diagram: five feeds, three layers.
+THE POINT   The browser never talks to a data source.
+
+SAY         · Every external call goes through the backend, so rate limiting
+              is enforced in exactly one place.
+            · A hundred open tabs cost the same upstream quota as one. That is
+              the single most important property on this slide.
+            · It is also why adding a second aircraft feed was a backend-only
+              change: the frontend was never told, because there was nothing
+              to tell it.
+            · Upstream failure is contained at layer one — the API serves the
+              last good snapshot with a staleness flag.
+
+NOTE        Five external feeds, three internal layers. The single most
+            important property: upstream failure is contained at layer 1.
+
+HAND OVER   "Underneath all of that, the database is two tables."
+
+==============================================================================
+SLIDE 10 of 13   ·   0:55   ·   Bhone
+Two tables — and that is the design
+------------------------------------------------------------------------------
+ON SCREEN   ER diagram: two persisted tables, the rest dashed.
+THE POINT   A tracker looks like it needs a big database. This one
+            deliberately does not.
+
+SAY         · Accounts and sessions. That is the whole persisted schema.
+            · Everything the map shows lives in memory and is replaced every
+              poll. Nothing about an aircraft is ever written to disk.
+            · So there is no database on the request path, and no schema
+              migration for the thing that changes most often — the shape of a
+              feed.
+            · Be honest about the cost: Orbital cannot answer a question about
+              last Tuesday. The entitlement windows are bounded by what is
+              still in memory.
+
+NOTE        The honest cost: Orbital cannot answer a question about last
+            Tuesday. Entitlement windows are bounded by what is still in
+            memory, not by a query.
+
+HAND OVER   "One class explains why the second feed was cheap."
+
+==============================================================================
+SLIDE 11 of 13   ·   0:55   ·   Bhone
+Why a second feed cost one file
+------------------------------------------------------------------------------
+ON SCREEN   Class diagram: Provider, seven implementations, UnionProvider
+            highlighted.
+THE POINT   UnionProvider is a Provider and holds two Providers.
+
+SAY         · One abstract Provider: fetch, given a bounding box, return the
+              normalised shape.
+            · UnionProvider inherits it and holds two of them — primary every
+              poll, supplement every 120 seconds.
+            · A caller cannot tell a pair of feeds from a single feed. That is
+              the whole trick, and it is why losing a primary source changed
+              nothing above ingestion.
+            · Worth adding: the API never holds a Provider. There is no call
+              path from a request to a socket, which is why an upstream
+              failure cannot reach a response.
+
+NOTE        Seven concrete providers, one abstraction. The API never holds a
+            Provider, so there is no call path from a request to a socket.
+
+HAND OVER   "And this is what it all looks like to a user."
+
+==============================================================================
+SLIDE 12 of 13   ·   1:00   ·   Nyan Lin
+The interface, and the honesty line
+------------------------------------------------------------------------------
+ON SCREEN   Screenshot of the live deployment, captured with real counts.
+THE POINT   The status bar reports what the map is not showing.
+
+SAY         · This is the deployed system, not a mock-up. Those counts were
+              real at the moment of capture.
+            · The map is the product — controls sit in the corners, nothing
+              floats over the centre.
+            · One layer at a time, because three at once is forty thousand
+              markers and no legible map.
+            · The status bar is the honesty line: 2,000 of 13,607 drawn, the
+              data age, and which feed answered. A tracker that showed a
+              sample as though it were everything would be easier to build and
+              would be lying.
+
+NOTE        The status bar states that 2,000 of 13,607 objects in view are
+            drawn, how old the data is, and which feed answered. A tracker
+            that showed a sample as though it were everything would be easier
+            to build and would be lying.
+
+HAND OVER   "To sum up what that gives you."
+
+==============================================================================
+SLIDE 13 of 13   ·   0:30   ·   Phone
+What Orbital Delivers
+------------------------------------------------------------------------------
+ON SCREEN   Four closing cards: One Map, Resilient, Extensible, Performant.
+THE POINT   Close on the four claims and stop. Do not re-explain.
+
+SAY         · One map, free, no account: aircraft, ships and satellites
+              together.
+            · It survives upstream failure, because one already happened.
+            · A new object type costs one module.
+            · Then stop talking and take questions. Resist the urge to
+              summarise the summary.
+
+HAND OVER   — end —
+
+==============================================================================
+BEFORE THE RUN-THROUGH
+==============================================================================
+
+  · Agree the split above, then time yourselves individually. Most
+    people run 20% long on the first attempt.
+  · Slides 4 and 8 both touch the object-count limit. Whoever speaks
+    second should point back rather than repeat the numbers.
+  · Decide who takes questions on what, so nobody answers over anyone.
+    The obvious ones: why free sources, why one worker, what happens
+    when a feed dies, and could it be commercial.
+  · Have the live site open in a tab. If the demonstration is asked
+    for, orbital-liveview.vercel.app — and the landing page is at
+    /landing.
+

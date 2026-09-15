@@ -33,11 +33,18 @@ not artifacts nobody needs to keep.
 
 | `Orbital-Presentation.pptx` | 13 slides |
 | `Orbital-Outline.txt` | Plain-text outline of both, with page and slide numbers |
+| `Orbital-Speaking-Outline.txt` | One point and a few beats per slide, for writing a script from |
 
 **Rebuild** with `python docs/report/build_report.py` after editing any chapter,
 `python docs/report/build_deck.py` for the slides, then
-`python docs/report/build_outline.py` last — it reads the built PDF and .pptx,
-so it has to run after both.
+`python docs/report/build_outline.py` and
+`python docs/report/build_script_outline.py` last — both read the built PDF
+and .pptx, so they have to run after them.
+
+`build_script_outline.py` holds its per-slide guidance in a `GUIDE` table
+keyed by slide number, and **checks the title it expects against the deck**.
+Reorder the slides and it prints a warning rather than quietly describing
+the wrong one.
 The pipeline is markdown → `.docx` via pandoc, then `.docx` → `.pdf` via Word,
 so the PDF is the *same document* rather than a second rendering of the source.
 
