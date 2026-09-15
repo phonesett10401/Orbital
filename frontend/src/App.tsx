@@ -183,20 +183,35 @@ export function App() {
           name on a phone.
         */}
         <div className="app__brandLinks">
-          <BodyPicker />
-          {/* Signing in is available on every world, unlike the layers around
-              it: an account is about the reader, not the body under the camera
-              (D148). */}
-          <AccountMenu />
-          {/* Beside the account rather than in the layer bar: the layers are
-              about what is on the map, and this is about the map (D177). */}
-          <button
-            type="button"
-            className="app__about"
-            onClick={() => useOrbitalStore.getState().setOpenPage('about')}
-          >
-            About
-          </button>
+          {/*
+            Two slots, and both are `display: contents` on a desktop - so the
+            three controls lay out exactly as they did before this wrapper
+            existed. They become real boxes only on a phone, where the world
+            picker and the account go to different rows: the picker joins the
+            search, and Sign in and About go to the top right corner.
+
+            Wrapping rather than moving in the markup, because the grouping is
+            a layout question and both layouts want the same DOM order for the
+            tab sequence: world, account, about.
+          */}
+          <span className="app__worldSlot">
+            <BodyPicker />
+          </span>
+          <span className="app__accountSlot">
+            {/* Signing in is available on every world, unlike the layers around
+                it: an account is about the reader, not the body under the camera
+                (D148). */}
+            <AccountMenu />
+            {/* Beside the account rather than in the layer bar: the layers are
+                about what is on the map, and this is about the map (D177). */}
+            <button
+              type="button"
+              className="app__about"
+              onClick={() => useOrbitalStore.getState().setOpenPage('about')}
+            >
+              About
+            </button>
+          </span>
         </div>
         </div>
         {onEarth && <SearchBar />}

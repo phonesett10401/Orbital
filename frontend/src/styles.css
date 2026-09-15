@@ -1162,6 +1162,19 @@ body {
 }
 
 /*
+ * The world picker, and the account pair, as two groups that do not exist here.
+ *
+ * `display: contents` so the desktop row is byte-for-byte the layout it was
+ * before they were introduced: three controls, one gap, one line. They become
+ * real boxes only in the phone query, where the two groups go to different
+ * rows.
+ */
+.app__worldSlot,
+.app__accountSlot {
+  display: contents;
+}
+
+/*
  * Sized in a fixed unit rather than an em: the mark is a drawing with its own
  * internal weights, and letting it track the title's font size would thin the
  * orbit stroke on any browser where that size is overridden.
@@ -3483,7 +3496,14 @@ body {
     position: fixed;
     left: 12px;
     right: 12px;
-    top: 60px;
+    /*
+     * Below the row the picker is now on, not below the row it used to be on.
+     * At 60 it opened over its own trigger and over the search beside it - the
+     * picker moved from row one to row two when Sign in and About went to the
+     * corner, and this number did not move with it. Measured: the picker ends
+     * at 101 and the header at 115.
+     */
+    top: 106px;
     width: auto;
     min-width: 0;
     max-height: 55vh;
@@ -3528,16 +3548,72 @@ body {
    * `margin-left: auto` pushes the three controls to the right edge, so the
    * name has the left and neither has to wrap.
    */
+  /*
+   * **The desktop corner column broke this layout, and this is the repair.**
+   *
+   * D192 wrapped the wordmark and its three controls in `.app__corner`, a
+   * *column*, to stop four unrelated things sharing the top-right on a
+   * desktop. On a phone that column stacked Sign in and About underneath the
+   * name, which pushed the search down onto `.layers` - and `.layers` is
+   * `position: fixed; top: 128px`, so it does not move out of the way. Phone's
+   * screenshot has the field lying across Aircraft / Satellites / Ships.
+   *
+   * The two wrappers are flattened so the header sees the controls
+   * individually again, and then `order` places them:
+   *
+   *     row 1   Orbital ....................... Sign in   About
+   *     row 2   EARTH  [ search .............................. ]
+   *     row 3   (the fixed layer bar, clear underneath)
+   *
+   * `display: contents` rather than a second copy of the markup: one DOM, one
+   * tab order, and the desktop rule above is untouched.
+   */
+  .app__corner,
   .app__brandLinks {
+    display: contents;
+  }
+
+  .app__header {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .app__brand {
+    order: 1;
+  }
+
+  /* Sign in and About, hard right on the first row. */
+  .app__accountSlot {
+    order: 2;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 12px;
     margin-left: auto;
     flex: none;
-    /* Beside the name rather than at the end of the header: on a phone the
-       header's rows are the name and the search, and these belong on the
-       first (D190). */
-    order: 0;
+  }
+
+  /*
+   * The row break, as a flex item of the header itself.
+   *
+   * A pseudo-element of a flex container *is* a flex item, so giving it
+   * `order: 3` and a full width ends row one between the account group and the
+   * world picker. The alternative is a wrapper element that exists only to be
+   * a row on one breakpoint, which is a box in the DOM for a purely visual
+   * reason.
+   */
+  .app__header::before {
+    content: '';
+    order: 3;
+    width: 100%;
+    height: 0;
+  }
+
+  /* The world picker leads row two; the search takes the rest of it. */
+  .app__worldSlot {
+    order: 4;
+    display: flex;
+    align-items: center;
+    flex: none;
   }
 
   /*
@@ -3572,9 +3648,14 @@ body {
   }
 
   .search {
-    /* Its own row, full width. A field is the one control that cannot be
-       traded down: at 105px it stops being a field at all. */
-    flex: 1 0 100%;
+    /*
+     * Row two, sharing it with the world picker rather than taking a line of
+     * its own. It still cannot be traded down below a usable width - at 105px
+     * a field stops being a field - but the picker beside it is about 90px, so
+     * the remainder of a 375px screen is still a real search box.
+     */
+    order: 5;
+    flex: 1 1 auto;
     max-width: none;
     min-width: 0;
   }
