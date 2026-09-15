@@ -53,6 +53,13 @@ python docs/report/fig_architecture.py   # and fig_er, fig_class, fig_sequence,
                                           # fig_gantt, fig_usecase
 ```
 
+**Graphviz is installed now** (`dot`, 16.1.0, on the user PATH, with the
+`graphviz` Python binding). None of the nine figures uses it: every box in them
+is positioned by hand because there was no `dot` on this machine when they were
+drawn. They are not worth rewriting for its own sake — but a *new* diagram with
+real graph structure, and the class and ER diagrams if either is ever reworked,
+should let `dot` do the layout rather than repeat that.
+
 `fig_ui.py` is the exception: it annotates `figures/_app.png`, a headless
 capture of the live deployment at 1600 x 950, so the counts in its status bar
 are real. Recapture with:
