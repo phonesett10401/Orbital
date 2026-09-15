@@ -164,6 +164,46 @@ def main() -> None:
     stamp_blob = stamp.image.blob
     stamp_box = (stamp.left, stamp.top, stamp.width, stamp.height)
 
+    # ---- two pictures on the original slides are replaced in place ---------
+    #
+    # These are the only edits to the six slides that already existed. Both are
+    # swaps of one image for a better one, not redesigns: the surrounding card,
+    # text and position are untouched.
+    def swap_picture(slide, match, name, *, box=None):
+        """Replace a picture with a figure, fitted inside the same footprint.
+
+        python-pptx cannot repoint a picture at new bytes, so the old shape is
+        removed and a new one added. `box` overrides the footprint when the old
+        picture did not fill the space available to it.
+        """
+        from PIL import Image
+
+        old = next(sh for sh in slide.shapes
+                   if sh.shape_type == 13 and match(sh))
+        x, y, w, h = box or (old.left, old.top, old.width, old.height)
+        old._element.getparent().remove(old._element)
+
+        path = FIGURES / name
+        with Image.open(path) as image:
+            aspect = image.width / image.height
+        draw_w, draw_h = (w, int(w / aspect)) if (w / h) < aspect else \
+                         (int(h * aspect), h)
+        slide.shapes.add_picture(str(path), x + (w - draw_w) // 2,
+                                 y + (h - draw_h) // 2, draw_w, draw_h)
+
+    # Feasibility: same measurements, redrawn in the palette the other nine
+    # figures share. The numbers were already right - they are test-plan §4.
+    swap_picture(prs.slides[3], lambda sh: sh.width > Inches(5),
+                 "2-1-backend-cost-per-stage.png")
+
+    # Reliability: the old diagram showed five use cases and one actor; §3.4
+    # has eleven and five, so the slide and the report disagreed about what the
+    # system does. Fitted to the white card rather than to the old picture,
+    # which did not fill it.
+    swap_picture(prs.slides[4], lambda sh: sh.width > Inches(4),
+                 "3-1-use-case-diagram-slide.png",
+                 box=(Inches(7.02), Inches(2.17), Inches(5.86), Inches(3.69)))
+
     made = []
 
     def new_slide():
@@ -220,6 +260,15 @@ def main() -> None:
     title_block(s, "Risks, and what they cost",
                 "Graded by likelihood and impact, each with the mitigation that "
                 "was actually built. One of them happened.")
+    # R1 to R4 of §4.6, in the register's own order. They were R1, R2, R4 and
+    # R7 here, which read as an arbitrary four picked out of nine - so the
+    # register itself was reordered by significance and the slide now shows its
+    # top four. The numbers on the slide and the numbers in the report are the
+    # same numbers, which is the whole point of numbering them.
+    #
+    # "Browser cannot draw the count" came off the slide: the Feasibility slide
+    # already makes that argument with measurements, and a deck should not
+    # spend two slides on one claim.
     risks = [
         ("R1  Upstream feed disappears", "HAPPENED",
          "OpenSky became unreachable from every cloud host, mid-project.",
@@ -228,11 +277,11 @@ def main() -> None:
         ("R2  Rate limited or banned", "HELD",
          "One backend for all viewers; limits measured, not assumed.",
          "Four requests a minute against a measured cap of five."),
-        ("R4  Browser cannot draw the count", "HELD",
-         "40,000 objects is not a legible map at any frame rate.",
-         "Responses thinned to 2,000; one layer at a time; positions "
-         "interpolated between polls."),
-        ("R7  A defect resists diagnosis", "HELD",
+        ("R3  A licence forbids the use", "HELD",
+         "OpenSky is non-commercial. A paid version cannot use it.",
+         "Licences recorded per source. Stated in §2.2 as a finding rather "
+         "than assumed away."),
+        ("R4  A defect resists diagnosis", "HELD",
          "Schedule risk: one hard defect can consume a phase.",
          "Every defect logged with how it was found. A fix counts as fixed "
          "when demonstrated, not when written."),

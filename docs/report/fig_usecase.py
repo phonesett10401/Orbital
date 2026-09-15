@@ -13,6 +13,11 @@ new content; it is the same diagram in a form that survives a page break.
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
+# `--slide` drops the two explanatory notes and crops to the diagram. They are
+# report prose - a reader has time for them, a slide does not - and removing
+# them lets the same diagram sit about a third larger in a slide card.
+SLIDE = "--slide" in sys.argv
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, FancyBboxPatch, Polygon
 from figures_style import (
@@ -21,8 +26,11 @@ from figures_style import (
 )
 
 apply_base_style()
-fig = plt.figure(figsize=(11.0, 7.6))
-ax = blank_axes(fig, ylim=(0, 100))
+# The slide variant is narrower so its aspect (1.58) matches the card it sits
+# in on slide 5. Matched, it fills the card; at the report's 1.45 it would be
+# width-limited and leave a band of white above and below.
+fig = plt.figure(figsize=(9.7, 6.15) if SLIDE else (11.0, 7.6))
+ax = blank_axes(fig, ylim=(14, 100) if SLIDE else (0, 100))
 
 
 def usecase(x, y, w, h, code, text, colour):
@@ -132,17 +140,19 @@ arrow(ax, (88.4, 34.0), (76.0, 40.0), colour=_tint(BACKEND, 0.25), width=1.1,
       style="-")
 
 # ---- the two notes the ASCII version had underneath ----------------------
-ax.text(50.0, 12.0,
-        "UC-07 to UC-10 are started by a scheduler rather than by a person. They are in the diagram because every "
-        "external dependency\nand every failure mode lives there — a use case model that showed only what a user clicks "
-        "would omit the entire risk surface.",
-        ha="center", va="top", fontsize=7.0, color=MUTED, linespacing=1.7)
+if not SLIDE:
+    ax.text(50.0, 12.0,
+            "UC-07 to UC-10 are started by a scheduler rather than by a person. They are in the diagram because every "
+            "external dependency\nand every failure mode lives there — a use case model that showed only what a user clicks "
+            "would omit the entire risk surface.",
+            ha="center", va="top", fontsize=7.0, color=MUTED, linespacing=1.7)
 
-ax.text(50.0, 4.0,
-        "UC-11 has no interface. The administrator role exists in the data model and is granted at the command line, "
-        "which is recorded here\nrather than hidden: an actor with no screen is a scope boundary, not a feature.",
-        ha="center", va="top", fontsize=7.0, color=ACCENT, linespacing=1.7)
+    ax.text(50.0, 4.0,
+            "UC-11 has no interface. The administrator role exists in the data model and is granted at the command line, "
+            "which is recorded here\nrather than hidden: an actor with no screen is a scope boundary, not a feature.",
+            ha="center", va="top", fontsize=7.0, color=ACCENT, linespacing=1.7)
 
-out = pathlib.Path(__file__).parent / "figures" / "3-1-use-case-diagram.png"
+name = "3-1-use-case-diagram-slide.png" if SLIDE else "3-1-use-case-diagram.png"
+out = pathlib.Path(__file__).parent / "figures" / name
 fig.savefig(out, dpi=DPI)
 print("wrote", out, out.stat().st_size, "bytes")

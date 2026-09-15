@@ -241,12 +241,16 @@ intentions is a document nobody checks against the system.
 | R1 | An upstream feed becomes unavailable | H | H | Last good snapshot served with a visible staleness flag; aircraft and ships each have two independent feeds |
 | R2 | An upstream rate-limits or bans the client | M | H | One backend for all viewers; measured limits enforced by a gate; exponential backoff honouring `Retry-After` |
 | R3 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in §2.2 rather than assumed away |
-| R4 | Browser cannot draw the object count | M | H | Responses thinned to a cap; one layer at a time; positions interpolated between polls |
-| R5 | Secrets committed to the repository | L | H | Credentials in environment variables only; configuration never printed as an object, only field by field |
-| R6 | Free hosting tier proves insufficient | M | M | One worker by design; everything answered from memory; scaling is a bigger box, not more boxes |
-| R7 | A defect resists diagnosis and consumes the schedule | M | H | Every defect written down with how it was found; a fix counts as fixed when demonstrated, not when written |
+| R4 | A defect resists diagnosis and consumes the schedule | M | H | Every defect written down with how it was found; a fix counts as fixed when demonstrated, not when written |
+| R5 | Browser cannot draw the object count | M | H | Responses thinned to a cap; one layer at a time; positions interpolated between polls |
+| R6 | Secrets committed to the repository | L | H | Credentials in environment variables only; configuration never printed as an object, only field by field |
+| R7 | Free hosting tier proves insufficient | M | M | One worker by design; everything answered from memory; scaling is a bigger box, not more boxes |
 | R8 | Work serialises behind one member | M | M | The shared data shape fixed early so layers proceed in parallel; session handover written every time |
 | R9 | A decision correct when made becomes wrong later | M | M | Decision record carries alternatives and reasoning, so a reversal is cheap and evidenced |
+
+**Ordered by significance rather than by when it was thought of**, so the four
+that matter most are R1 to R4 and the presentation can show exactly those
+without a gap in the numbering.
 
 ### R1 was realised, and the plan is judged on that
 
@@ -256,7 +260,7 @@ provider kept the interface identical, and **nothing above the ingestion layer
 changed**. The cost was one provider module and one registry entry — the same
 cost the architecture had been designed to make it.
 
-### R7 was also realised, and cost more
+### R4 was also realised, and cost more
 
 Six working sessions went to a single defect that was misdiagnosed five times.
 The cause was structural — one camera serving two pictures at very different
