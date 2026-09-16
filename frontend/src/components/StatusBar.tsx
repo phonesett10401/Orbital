@@ -66,7 +66,7 @@ export function StatusBar() {
             "Cloud tops" on the four with nothing under them. The line used to
             say "surface imagery" for every world that was not Earth, which was
             true of all of them until Jupiter became enterable and then was the
-            most confident possible way to be wrong (D193).
+            most confident possible way to be wrong (D212).
           */}
           {activeBody === 'moon' && moonCraft > 0
             ? `${imageryLabel(body).toLowerCase()} · ${moonCraft} spacecraft in orbit, from JPL Horizons`

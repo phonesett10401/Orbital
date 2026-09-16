@@ -70,7 +70,7 @@ describe('which worlds can be entered', () => {
   });
 
   it('separates going somewhere from standing on it', () => {
-    // The whole of D193 in one assertion. A gas giant can be entered and
+    // The whole of D212 in one assertion. A gas giant can be entered and
     // turned, and there is nothing under the cloud: calling that "landable"
     // was the false claim, and the fix was to stop asking one question for
     // two different answers.
@@ -100,7 +100,7 @@ describe('which worlds can be entered', () => {
     // Trek's reprojection reaches Ceres, Vesta, Io, Europa, Ganymede, Titan,
     // Enceladus and Phobos too, and they were wired up and taken back out:
     // this is a list of the solar system's planets, not of every world with a
-    // mosaic (D192). The assertion is the *count*, because the failure mode is
+    // mosaic (D211). The assertion is the *count*, because the failure mode is
     // a body creeping back in rather than one going missing.
     expect(BODIES).toHaveLength(10);
   });

@@ -118,7 +118,7 @@ describe('what the caption says', () => {
       expect(sun.reason).toMatch(/star/i);
     }
 
-    // Jupiter went the other way (D193): it can be visited now, and the
+    // Jupiter went the other way (D212): it can be visited now, and the
     // eyebrow rather than the button carries the fact that there is nothing
     // under the cloud. Offering "Visit Jupiter" with no such line would
     // quietly promise ground.

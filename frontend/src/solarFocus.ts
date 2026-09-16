@@ -119,7 +119,7 @@ function km(value: number): string {
  *
  * A gas giant is now both at once: it can be visited, and it has no surface.
  * The eyebrow carries the second half, because "Visit Jupiter" beside nothing
- * else would quietly promise ground (D193).
+ * else would quietly promise ground (D212).
  */
 export function captionFor(body: Body, distanceAu: number | null): BodyCaption {
   const parts: string[] = [];

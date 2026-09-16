@@ -196,7 +196,7 @@ any prediction of conjunctions, collisions or re-entry.
 them. Ships are the one layer with a coverage caveat the UI states plainly:
 without an aisstream key it is the northern Baltic only.
 
-**Every planet can be entered** (D190–D194). The blocker had been recorded
+**Every planet can be entered** (D209–D213). The blocker had been recorded
 since D120 as a projection MapLibre could not read; it was a transformation
 that had not been written. Venus came first and the four gas giants followed,
 labelled as cloud tops rather than as surfaces, because there is nothing under

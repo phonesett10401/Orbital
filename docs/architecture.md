@@ -23,7 +23,7 @@ and over Mars they are not stale but meaningless (D120, D133). Mercury, Venus,
 Earth, the Moon and Mars carry a controlled surface mosaic. Jupiter, Saturn,
 Uranus and Neptune have no surface to map — a mosaic ties features to fixed
 ground, and on a gas giant the features move — so they carry cloud tops, and
-every label that would have said "surface" says so instead (D193).
+every label that would have said "surface" says so instead (D212).
 
 **The layers are not the same kind of thing, and the difference runs through
 the whole design.** Aircraft and ships are *observed* — a feed reports them,
@@ -423,13 +423,13 @@ orbital/
 └── frontend/                                                 (M4)
     ├── scripts/
     │   ├── copy-textures.mjs    Earth imagery out of node_modules  (D30)
-    │   ├── fetch-cloud-textures.mjs  the gas giants' plates        (D193)
-    │   ├── sync-landing.mjs     republish the landing page         (D195)
+    │   ├── fetch-cloud-textures.mjs  the gas giants' plates        (D212)
+    │   ├── sync-landing.mjs     republish the landing page         (D214)
     │   └── build-airlines.mjs   ICAO designator lookup             (D46)
     ├── public/
     │   ├── textures/            generated, gitignored
     │   ├── data/                generated, gitignored
-    │   └── landing/             the landing page, committed, served at /landing (D195)
+    │   └── landing/             the landing page, committed, served at /landing (D214)
     └── src/
         ├── airlines.ts          callsign -> airline, in the client (D46)
         ├── wingspan.ts          ICAO type -> wingspan and draw scale (D90)
@@ -445,7 +445,7 @@ orbital/
             ├── bodySurface.ts       swapping the world under the camera: which
             │                        tiles, and which layers are about Earth (D120, D133)
             ├── plateCarree.ts       plate carree -> Web Mercator, in the browser,
-            │                        so any world Trek maps can be entered (D190, D193)
+            │                        so any world Trek maps can be entered (D209, D212)
             ├── aircraftLayer.ts     every tracked object, one SDF sprite atlas
             ├── routeLayer.ts        the observed track, and what is guessed (D82)
             ├── modelLayer.ts        the selection as a 3D airframe, in MapLibre's
@@ -464,7 +464,7 @@ Two asset directories under `public/` are generated rather than committed:
 `npm install` brings the source data, `npm run assets` reduces it, and both
 run before `npm run dev` and `npm run build`. The third, `landing/`, is the
 exception in both directions - it is committed, and it is republished only when
-somebody runs `npm run landing` (D195). Nothing in them is fetched from
+somebody runs `npm run landing` (D214). Nothing in them is fetched from
 a third party at runtime. **The basemap tiles are**, so the frontend is no
 longer offline the way the globe was; the backend still is, on the fixture
 provider. That trade was made when the map became the only renderer (D104) and

@@ -17,7 +17,7 @@
  *   handed to MapLibre without a proxy and without anything on the backend.
  *   **Only Venus is wired up**, deliberately: Orbital shows the solar system's
  *   planets, and a picker with eighteen rows in it is a different product from
- *   the one this is (D192). The rest are one `Mosaic` entry each if that ever
+ *   the one this is (D211). The rest are one `Mosaic` entry each if that ever
  *   changes.
  * - The two projections are **identical in longitude**. Both are linear in it.
  *   So the reprojection is not a general warp at all; it is one axis, and it
@@ -83,7 +83,7 @@ export interface TrekMosaic extends Plate {
  * move - its equator rotates about five minutes faster than its mid-latitudes,
  * which is why there are two rotation systems for it. So what is available is
  * a plate of the cloud tops at a moment, and the moment is part of the claim
- * (D193).
+ * (D212).
  */
 export interface ImagePlate extends Plate {
   from: 'image';

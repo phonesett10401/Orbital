@@ -126,7 +126,7 @@ export function App() {
 
       <header className="app__header">
         {/*
-          **The corner is one column now (D192).**
+          **The corner is one column now (D211).**
 
           The three controls used to sit at the far right of the header, where
           they shared the top-right with the basemap and night toggles, the
@@ -153,7 +153,7 @@ export function App() {
             <span className="app__subtitle" title={coverage?.note}>
               {/* Not a constant any more: four worlds are enterable and show
                   cloud rather than ground, and the subtitle names what is on
-                  screen (D193). */}
+                  screen (D212). */}
               {onEarth ? subtitle : imageryLabel(bodyFor(activeBody)).toLowerCase()}
             </span>
             {/*

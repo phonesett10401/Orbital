@@ -125,7 +125,7 @@ describe('what the mosaic does not cover', () => {
    * Synthetic on purpose. This used to be Venus, whose left-look plate stopped
    * at 84 north - and when Venus moved to a mosaic that does reach the poles,
    * three tests about *geometry* failed because they were really tests about a
-   * product (D194).
+   * product (D213).
    */
   const CAPLESS: Mosaic = { ...WHOLE, south: -80, north: 84 };
 

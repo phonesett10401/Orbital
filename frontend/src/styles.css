@@ -1092,7 +1092,7 @@ body {
    * it. The world list lives inside this stacking context, so its own
    * `z-index: 20` only ever competed with the header's siblings - and at 2 it
    * lost to the legend, which is later in the document and drew straight over
-   * the bottom third of an eighteen-row list (D192).
+   * the bottom third of an eighteen-row list (D211).
    */
   z-index: 3;
   display: flex;
@@ -1134,7 +1134,7 @@ body {
  * beside the name on a phone.
  */
 /*
- * The wordmark and its controls, as one fixed column in the corner (D192).
+ * The wordmark and its controls, as one fixed column in the corner (D211).
  *
  * Fixed in the sense that matters: nothing in it moves when the subtitle
  * changes with the layer, when the world changes, or when the list opens.
@@ -1427,7 +1427,7 @@ body {
  * clips the panel's corner (D127).
  *
  * The panel opens to the *side* now, so the bridge is a vertical strip down
- * its left edge rather than a horizontal one across its top (D192). Bridging
+ * its left edge rather than a horizontal one across its top (D211). Bridging
  * the old edge would leave the new gap open and reintroduce exactly the bug
  * D127 was written for.
  */
@@ -1441,7 +1441,7 @@ body {
 }
 
 /*
- * Opens to the right, not downward (D192).
+ * Opens to the right, not downward (D211).
  *
  * The picker sits in the top-left column now, so there is a whole window to
  * the right of it and only the wordmark above. Hung below a control already
@@ -3551,7 +3551,7 @@ body {
   /*
    * **The desktop corner column broke this layout, and this is the repair.**
    *
-   * D192 wrapped the wordmark and its three controls in `.app__corner`, a
+   * D211 wrapped the wordmark and its three controls in `.app__corner`, a
    * *column*, to stop four unrelated things sharing the top-right on a
    * desktop. On a phone that column stacked Sign in and About underneath the
    * name, which pushed the search down onto `.layers` - and `.layers` is

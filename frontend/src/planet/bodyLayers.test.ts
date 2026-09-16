@@ -113,7 +113,7 @@ describe('the two imagery tiers', () => {
 describe('one world, one source', () => {
   it('gives every enterable world its own tiles', () => {
     // Neptune was drawn with Uranus's plate because the swap compared the
-    // credit, both are Voyager 2, and the strings matched (D193). This asserts
+    // credit, both are Voyager 2, and the strings matched (D212). This asserts
     // the thing the swap now compares: no two worlds share a tile url.
     const seen = new Map<string, string>();
     for (const body of BODIES.filter(canEnter)) {

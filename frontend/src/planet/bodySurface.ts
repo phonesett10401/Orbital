@@ -184,7 +184,7 @@ export function visibilityFor(
  *
  * The swap in `PlanetView` used to decide this on the attribution alone, and
  * two worlds crediting the same mission then shared a source: Neptune was
- * drawn with Uranus's plate, because both are Voyager 2 (D193). Exposed here
+ * drawn with Uranus's plate, because both are Voyager 2 (D212). Exposed here
  * so the rule can be checked without a map.
  */
 export function sameImagery(a: Body, b: Body): boolean {

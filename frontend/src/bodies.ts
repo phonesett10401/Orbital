@@ -42,7 +42,7 @@
  * Phobos behind the same handler, and they were wired up and then taken back
  * out. This list is the solar system's planets, the Sun and the Moon, and
  * eighteen rows of moons and minor bodies is a different product from the one
- * this is (D192). They are one `Mosaic` entry and one entry here each, if that
+ * this is (D211). They are one `Mosaic` entry and one entry here each, if that
  * is ever the product wanted.
  *
  * ## The gas giants are a different kind of no
@@ -313,7 +313,7 @@ export function bodyFor(id: BodyId): Body {
  * Named for what it decides - whether the picker lets you go - rather than for
  * standing on anything. It used to be `canEnter`, which was the same
  * question while every world with imagery had ground under it, and became a
- * false claim the moment Jupiter did not (D193).
+ * false claim the moment Jupiter did not (D212).
  */
 export function canEnter(body: Body): boolean {
   return body.surface !== undefined;

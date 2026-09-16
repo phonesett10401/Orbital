@@ -90,7 +90,7 @@ export function BodyPicker() {
             // A world can be enterable and still not be a place. Jupiter is
             // both: you can go and turn it, and there is nothing under the
             // cloud to stand on, so the row carries that sentence instead of
-            // its radius (D193).
+            // its radius (D212).
             const ground = standsOnGround(body);
             return (
               <li key={body.id}>

@@ -12136,7 +12136,7 @@ picks a different feed is invisible until somebody counts aircraft.
 
 **915 backend tests**, 1,118 frontend.
 
-## D190 - Plate carree was never the wall, it was a transformation
+## D209 - Plate carree was never the wall, it was a transformation
 
 `bodies.ts` had said for months that Venus could not be entered: it has a
 complete Magellan radar map, "just not one served as Mercator tiles here". That
@@ -12189,7 +12189,7 @@ divided out of the stated resolution - the two disagree often enough that the
 arithmetic is a hypothesis and the 404 is the answer. Venus stops at level 10,
 so `maxZoom` is 11, three levels deeper than Mars.
 
-## D191 - Two rules for one question, and Brazil was on Mars
+## D210 - Two rules for one question, and Brazil was on Mars
 
 Venus arrived with a mosaic eleven levels deep, and at zoom 9 it was sandy
 brown with dune fields in it. Venus is grey. What was on screen was the Sahara.
@@ -12221,9 +12221,9 @@ way it gets there is two places deciding one thing.
 
 **1,140 frontend tests**, 915 backend.
 
-## D192 - The reprojection reaches nine worlds; the product wants one
+## D211 - The reprojection reaches nine worlds; the product wants one
 
-D190 built the plate carree handler and wired Venus through it. The obvious
+D209 built the plate carree handler and wired Venus through it. The obvious
 next move was the rest of what Trek serves, and it was made: **Phobos, Ceres,
 Vesta, Io, Europa, Ganymede, Enceladus and Titan**, each a controlled
 photomosaic rather than a shaded-relief product, each `maxLevel` walked to its
@@ -12285,7 +12285,7 @@ Two consequences that were not free:
 
 **1,141 frontend tests**, 915 backend.
 
-## D193 - You were never landing on Mars either
+## D212 - You were never landing on Mars either
 
 The four outer planets were refused on the grounds that there is nothing to
 stand on, which is true and was answering a question nobody asked. Choosing
@@ -12380,7 +12380,7 @@ because it is the one with structure worth the levels.
 
 **1,145 frontend tests**, 915 backend.
 
-## D194 - Sixty times sharper and the wrong picture
+## D213 - Sixty times sharper and the wrong picture
 
 Venus went in on the Magellan left-look plate at 75 m per pixel, which is the
 highest-resolution imagery of any world in this app by a factor of thirty. It
@@ -12404,7 +12404,7 @@ imagery tiers that cross-fade with zoom, which is exactly the shape of this
 problem: the colourised mosaic as the far tier, the 75 m left-look as the near
 one, and the complete plate showing through wherever the detailed one has a
 hole. It is not built because making the near tier per-body means reopening
-the rule D191 had just finished repairing, and that trade was not worth making
+the rule D210 had just finished repairing, and that trade was not worth making
 in the same sitting. It is the obvious next move if Venus ever needs the depth.
 
 ### `gap` became `caveat`
@@ -12430,7 +12430,7 @@ gas giants' plates. A fresh clone no longer needs to be told.
 
 **1,146 frontend tests**, 915 backend.
 
-## D195 - The landing page ships as a path, not as a second deployment
+## D214 - The landing page ships as a path, not as a second deployment
 
 The scroll-driven landing page had been built and was on one machine only.
 `/scrollcraft/` is ignored in full, so the commit that deployed every planet

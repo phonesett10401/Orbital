@@ -279,7 +279,7 @@ const RETURN_FROM_SYSTEM_ZOOM = 1.0;
  * Moon.** Eight of Trek's small worlds were added and taken back out, and in
  * between this threw on `ELEMENTS['phobos']` on the first step of every trip
  * that started at one - D140's one-way door, reopened by a list that had grown
- * past what the line assumed (D192). Anything added here that `planets.ts` has
+ * past what the line assumed (D211). Anything added here that `planets.ts` has
  * no elements for needs this function rewritten, not just a new entry.
  */
 function solarOrigin(): PlanetId {
@@ -382,7 +382,7 @@ function applyBody(map: import('maplibre-gl').Map, bodyId: string): void {
   // world had a distinct one. Uranus and Neptune are both Voyager 2 and had
   // the same attribution string, so the source was left alone and Neptune was
   // served Uranus's plate - a pale cyan planet captioned Neptune, which is the
-  // most confident possible way to be wrong (D193). The tiles are the thing
+  // most confident possible way to be wrong (D212). The tiles are the thing
   // that actually has to change; the credit is a second reason, not the only
   // one.
   const existing = map.getStyle()?.sources?.[IMAGERY_FAR] as
