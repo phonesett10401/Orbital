@@ -115,9 +115,9 @@ new layer cost one provider module and one registry entry.
 |---|---|
 | Backend | ~19,400 lines, 85 files |
 | Frontend | ~31,900 lines, 167 files |
-| Automated tests | 1,868 (832 backend, 1,036 frontend) |
+| Automated tests | 2,061 (915 backend, 1,146 frontend) |
 | HTTP endpoints | 17 |
-| Recorded decisions | 169 |
+| Recorded decisions | 213 |
 | Objects served | 14,804 aircraft, 26,262 ships, 1,427 satellites |
 
 Measured on 8 September 2026 against the commit this report was built from.

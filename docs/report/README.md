@@ -117,10 +117,10 @@ D168-D170 moved several of them:
 
 | Claim | Source |
 |---|---|
-| 1,868 tests (832 backend, 1,036 frontend) | Both suites run |
+| 2,061 tests (915 backend, 1,146 frontend) | Both suites collected, 16 September 2026 |
 | 17 HTTP endpoints | The live `openapi.json`, counted |
 | ~19,400 backend / ~31,900 frontend lines | `git ls-files`, then `wc -l` over the tracked sources |
-| 169 recorded decisions | `docs/decisions.md`, counted |
+| 213 recorded decisions | `docs/decisions.md`, counted 16 September 2026 |
 | 14,804 aircraft · 26,262 ships · 1,427 satellites | The live API |
 | Team names, IDs and roles | `Orbital_Team_Roles.pdf` |
 | Entitlement windows (24 h / 7 d) | `accounts/entitlements.py` |
