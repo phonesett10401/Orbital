@@ -616,7 +616,9 @@ body {
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 12px rgba(88, 182, 255, 0.9);
+  /* The accent's own glow. This was the old blue, left behind when D188 moved
+     the accent to amber - an amber dot with a blue halo. */
+  box-shadow: 0 0 12px rgba(255, 209, 102, 0.9);
   animation: journey-pulse 900ms ease-in-out infinite;
 }
 
@@ -1240,6 +1242,7 @@ body {
 .search__input:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: var(--shadow), 0 0 0 1px var(--accent);
 }
 
 .search__input::placeholder {
@@ -2236,7 +2239,8 @@ body {
 /* The thrown text: present for a bug report, quiet enough to ignore. */
 .app .planet-notice .planet-notice-cause {
   margin: 14px 0 0;
-  color: #6f7b90;
+  /* #6f7b90 measured 4.31:1 on the notice; this is 5.05:1. */
+  color: #7b8798;
   font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: anywhere;
 }
@@ -2648,6 +2652,12 @@ body {
   animation: signin-in var(--panel-in, 260ms) ease both;
 }
 
+/* Focused on open so the trap has somewhere to start; it is a container, not
+   a control, so it gets no ring of its own. */
+.premium__surface:focus {
+  outline: none;
+}
+
 .premium__surface {
   width: min(520px, 100%);
   max-height: 100%;
@@ -2911,7 +2921,10 @@ body {
 
 .account__input:focus {
   outline: none;
-  border-color: rgba(120, 190, 255, 0.6);
+  border-color: var(--accent);
+  /* A ring as well as the border: one pixel of colour is a thin thing to find
+     a focused field by. */
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .account__problem {
@@ -4195,6 +4208,55 @@ body {
   }
 
   .search__input {
+    min-height: 44px;
+  }
+
+  /*
+   * **16px on every field a finger can focus, not only the search on a narrow
+   * screen.** Safari's zoom-on-focus is about the device: the 560px rule left a
+   * phone in landscape zooming on search, and the sign-in fields at 12 and 13
+   * zooming everywhere. Same reason as D188's search fix, applied to the
+   * pointer rather than the width.
+   */
+  .search__input,
+  .account__input,
+  .signin .account__input {
+    font-size: 16px;
+  }
+
+  /*
+   * The controls D178's pass did not reach. Computed before: the panel close
+   * about 22x30 - the only way to put the detail panel away on a phone - the
+   * "Return to live" button 22, the ad's action 17, and the sign-in page's
+   * secondary buttons 25 to 34.
+   */
+  .panel__close {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: -10px -10px -10px 0;
+  }
+
+  .timectl__live,
+  .ad__action,
+  .account__switch,
+  .signin__aside,
+  .signin__back,
+  .account__submit,
+  .panel__more {
+    min-height: 44px;
+  }
+
+  .timectl__live,
+  .ad__action {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* The thumb is what the finger has to land on. */
+  .timectl__slider {
     min-height: 44px;
   }
 }

@@ -60,6 +60,18 @@ export function PremiumPage() {
     setBusy(false);
   }, [open]);
 
+  // Focus in on open, and back to whatever opened it on close. Without the
+  // first, focus stayed on the trigger behind the overlay, so the Tab trap
+  // below never engaged and Tab walked the map underneath it.
+  useEffect(() => {
+    if (!open) return undefined;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    surface.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [open]);
+
   // Escape, and Tab kept inside - the same two obligations a full-screen
   // overlay has anywhere (D153).
   useEffect(() => {
@@ -75,6 +87,13 @@ export function PremiumPage() {
       if (stops.length === 0) return;
       const first = stops[0];
       const last = stops[stops.length - 1];
+      // Focus outside the surface altogether - pulled back in, rather than
+      // left to wander the page behind the overlay.
+      if (!surface.current.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return;
+      }
       if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
         first.focus();
@@ -118,7 +137,7 @@ export function PremiumPage() {
       aria-label="About premium"
       style={{ '--panel-in': `${motion.panelIn}ms` } as React.CSSProperties}
     >
-      <div className="premium__surface" ref={surface}>
+      <div className="premium__surface" ref={surface} tabIndex={-1}>
         <div className="signin__brand">
           <img className="signin__mark" src="/logo.svg" alt="" aria-hidden="true" />
           <span className="signin__wordmark">Orbital</span>
