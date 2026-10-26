@@ -64,6 +64,15 @@ class TestMerging:
         )
         assert {r.id for r in store.get()} == {"global1", "focus1"}
 
+    def test_an_older_copy_does_not_replace_a_newer_position(self, store):
+        # The world poll re-applies a cached feed up to ten minutes old while
+        # the viewport feed has already reported the same aircraft since.
+        store.apply([record("a1", lat=41.0, last_seen=NOW)], source="adsbfi")
+        assert store.apply(
+            [record("a1", lat=40.0, last_seen=NOW - timedelta(minutes=8))], source="adsblol"
+        ) == 0
+        assert store.get()[0].lat == 41.0
+
     def test_records_which_provider_produced_the_data(self, store):
         store.apply([record()], source="opensky")
         assert store.source == "opensky"

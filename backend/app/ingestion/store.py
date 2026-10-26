@@ -124,15 +124,25 @@ class ObjectStore:
         last good snapshot (D10).
         """
         now = fetched_at or utcnow()
+        applied = 0
         for record in records:
+            # **Older never replaces newer.** Two feeds answer at different
+            # rates: the world poll re-asserts a cached copy up to ten minutes
+            # old while the viewport feed reports every thirty seconds, and
+            # storing whichever arrived last sent aircraft on screen back to
+            # where they were minutes ago (2026-10-26).
+            held = self._objects.get(record.id)
+            if held is not None and held.last_seen > record.last_seen:
+                continue
             self._objects[record.id] = record
             self._append_track_point(record)
+            applied += 1
 
         self._last_success_at = now
         self._source = source
         self._updates_applied += 1
         self._evict_if_due(now)
-        return len(records)
+        return applied
 
     def _evict_if_due(self, now: datetime) -> None:
         """Run the eviction sweep, but not on every single poll.
