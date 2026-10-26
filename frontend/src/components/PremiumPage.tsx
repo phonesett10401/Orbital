@@ -89,7 +89,12 @@ export function PremiumPage() {
       const last = stops[stops.length - 1];
       // Focus outside the surface altogether - pulled back in, rather than
       // left to wander the page behind the overlay.
-      if (!surface.current.contains(document.activeElement)) {
+      // The surface itself counts as outside: it is where focus lands on
+      // open, and Shift+Tab from it would otherwise leave by the back.
+      if (
+        document.activeElement === surface.current ||
+        !surface.current.contains(document.activeElement)
+      ) {
         event.preventDefault();
         (event.shiftKey ? last : first).focus();
         return;

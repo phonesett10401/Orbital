@@ -157,6 +157,7 @@ export function SolarSystemPage() {
   /** Which one the pointer is over, so it can answer before it is clicked. */
   const [hovered, setHovered] = useState<string | null>(null);
   const [indexOpen, setIndexOpen] = useState(false);
+  const indexToggle = useRef<HTMLButtonElement | null>(null);
   /**
    * A body the camera is still travelling to.
    *
@@ -314,6 +315,8 @@ export function SolarSystemPage() {
       // index and leaves the reader on this page; it used to close both.
       if (indexOpen) {
         setIndexOpen(false);
+        // Back to the toggle, or focus inside the list is lost with it.
+        indexToggle.current?.focus();
         return;
       }
       setPage(null);
@@ -730,6 +733,7 @@ export function SolarSystemPage() {
         <button
           type="button"
           className="system__index-toggle"
+          ref={indexToggle}
           aria-expanded={indexOpen}
           onClick={() => setIndexOpen((v) => !v)}
         >
