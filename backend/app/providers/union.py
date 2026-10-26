@@ -72,9 +72,15 @@ class UnionProvider(Provider):
         supplement: Provider,
         *,
         supplement_interval_seconds: float = DEFAULT_SUPPLEMENT_INTERVAL,
+        viewport: Provider | None = None,
     ) -> None:
         self.primary = primary
         self.supplement = supplement
+        #: Answers viewport polls in the primary's place, when set. The world
+        #: view and the zoomed-in view need different things: the whole planet
+        #: every two minutes, or a small area every thirty seconds. One feed
+        #: rarely affords both (2026-10-26).
+        self.viewport = viewport
         self._interval = supplement_interval_seconds
         self._supplement_cache: list[TrackedObjectRecord] = []
         self._supplement_at: float | None = None
@@ -83,8 +89,10 @@ class UnionProvider(Provider):
     def remaining_credits(self) -> int | None:
         """The metered feed's balance, which is the union's balance.
 
-        The primary is free by construction -- that is the whole point of the
-        pairing -- so whatever the supplement has left is what we have left.
+        Whichever slot it is in. This used to read the supplement alone, because
+        the primary was free by construction; OpenSky moved to the primary slot
+        when adsb.lol capped itself at 500 a day, and the throttle has to follow
+        it. With two balances the tighter one decides.
 
         Without this the poller sees no balance at all and its throttle ladder
         can never step down, in the one configuration where stepping down
@@ -93,21 +101,37 @@ class UnionProvider(Provider):
         attached to anything is worse than no net, because it reads as
         protection on the health endpoint.
         """
-        return self.supplement.remaining_credits
+        feeds = (self.primary, self.supplement, self.viewport)
+        balances = [f.remaining_credits for f in feeds if f is not None]
+        known = [b for b in balances if b is not None]
+        return min(known) if known else None
 
     async def fetch(self, bbox: BBox | None = None) -> list[TrackedObjectRecord]:
-        primary_task = asyncio.create_task(self.primary.fetch(bbox))
+        first = self.viewport if bbox is not None and self.viewport is not None else self.primary
+        primary_task = asyncio.create_task(first.fetch(bbox))
         supplement_task = asyncio.create_task(self._supplement_records(bbox))
         primary, supplement = await asyncio.gather(
             primary_task, supplement_task, return_exceptions=True
         )
 
-        primary_records = _records_or_none(primary, self.primary.name)
+        primary_records = _records_or_none(primary, first.name)
+
+        # **Not asked is not an answer.** A viewport poll does not consult the
+        # supplement, so with the feed that was asked down there is nothing to
+        # show. Treating that as "zero aircraft" put an outage on screen as an
+        # empty sky, marked fresh, for days. The feed's own error goes up as it
+        # is, so a rate limit reaches the poller as one and it backs off.
+        if supplement is None:
+            if primary_records is None:
+                assert isinstance(primary, BaseException)
+                raise primary
+            return primary_records
+
         supplement_records = _records_or_none(supplement, self.supplement.name)
 
         if primary_records is None and supplement_records is None:
             raise ProviderUnavailable(
-                f"both {self.primary.name} and {self.supplement.name} failed"
+                f"both {first.name} and {self.supplement.name} failed"
             )
 
         merged: dict[str, TrackedObjectRecord] = {}
@@ -120,7 +144,7 @@ class UnionProvider(Provider):
             merged[record.id] = record
         return list(merged.values())
 
-    async def _supplement_records(self, bbox: BBox | None) -> list[TrackedObjectRecord]:
+    async def _supplement_records(self, bbox: BBox | None) -> list[TrackedObjectRecord] | None:
         """The metered feed's contribution, refreshed at most once an interval.
 
         **Only the global poll pays for it.** The supplement is here for the
@@ -147,7 +171,7 @@ class UnionProvider(Provider):
         now = time.monotonic()
         due = self._supplement_at is None or now - self._supplement_at >= self._interval
         if bbox is not None:
-            return []
+            return None  # not asked, which `fetch` must not read as "nothing seen"
         if not due:
             return self._supplement_cache
 

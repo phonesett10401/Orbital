@@ -330,6 +330,9 @@ class TestOutageOverHttp:
             poller = client.app.state.poller
             provider.error = ProviderUnavailable("down")
 
+            # Someone is watching: with nobody looking the world sweep idles,
+            # and an outage is found when the next visitor wakes it.
+            poller.note_client()
             job = next(j for j in poller.settings.jobs if j.name == "global")
             run_tick(poller, job, poller._statuses["global"])
 

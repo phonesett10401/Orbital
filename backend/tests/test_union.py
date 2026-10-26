@@ -233,6 +233,20 @@ class TestFailingIndependently:
             await UnionProvider(primary, supplement).fetch()
 
     @pytest.mark.anyio
+    async def test_a_viewport_poll_with_its_only_feed_down_is_an_outage(self) -> None:
+        # The supplement is not asked on a viewport poll, so with the feed that
+        # is asked down there is nothing to show. Returning [] presented exactly
+        # that as an empty sky, marked fresh, for days (adsb.lol's 429s, from
+        # 2026-10-20). And it re-raises the feed's own error, so a rate limit
+        # reaches the poller as a rate limit and it backs off.
+        primary = Fake("adsblol", [], error=ProviderRateLimited("429"))
+        supplement = Fake("opensky", [record("bbb222")])
+        with pytest.raises(ProviderRateLimited):
+            await UnionProvider(primary, supplement).fetch(
+                BBox(lat_min=0, lon_min=0, lat_max=1, lon_max=1)
+            )
+
+    @pytest.mark.anyio
     async def test_an_empty_sky_from_both_is_not_an_outage(self) -> None:
         # Nothing in view is a real answer, and distinguishable from a failure
         # only because neither raised.
@@ -272,12 +286,52 @@ class TestCredits:
         union = UnionProvider(Fake("adsblol", []), Fake("opensky", []))
         assert union.remaining_credits is None
 
-    def test_the_free_feed_s_own_balance_is_not_consulted(self) -> None:
-        # If adsb.lol ever grew a credit counter it would not be the one that
-        # decides whether we can afford to poll.
-        primary = Fake("adsblol", [])
-        primary.remaining_credits = 12
-        assert UnionProvider(primary, Fake("opensky", [])).remaining_credits is None
+    def test_the_metered_feed_decides_from_whichever_slot_it_is_in(self) -> None:
+        # OpenSky moved from supplement to main (2026-10-26). The throttle must
+        # follow it, or it reads no balance at all and never steps down.
+        primary = Fake("opensky", [])
+        primary.remaining_credits = 3350
+        assert UnionProvider(primary, Fake("adsblol", [])).remaining_credits == 3350
+
+    def test_two_balances_the_tighter_one_decides(self) -> None:
+        primary, supplement = Fake("a", []), Fake("b", [])
+        primary.remaining_credits, supplement.remaining_credits = 900, 40
+        assert UnionProvider(primary, supplement).remaining_credits == 40
+
+
+class TestThreeFeeds:
+    """OpenSky for the world, adsb.fi for the viewport, adsb.lol for OpenSky's gaps.
+
+    Each feed does the job it can afford: OpenSky's 4,000 credits cover a world
+    view every 120 s; adsb.fi has no daily cap but answers only 250 nm; adsb.lol
+    sees inland China, where OpenSky sees nothing, but allows 500 a day.
+    """
+
+    VIEW = BBox(lat_min=0, lon_min=0, lat_max=1, lon_max=1)
+
+    def feeds(self):
+        return Fake("opensky", [record("w")]), Fake("adsblol", [record("g")]), Fake("adsbfi", [record("v")])
+
+    @pytest.mark.anyio
+    async def test_a_viewport_poll_goes_to_the_viewport_feed_alone(self) -> None:
+        world, gaps, view = self.feeds()
+        merged = await UnionProvider(world, gaps, viewport=view).fetch(self.VIEW)
+        assert {r.id for r in merged} == {"v"}
+        assert world.calls == 0
+        assert gaps.calls == 0
+
+    @pytest.mark.anyio
+    async def test_a_world_poll_merges_the_main_feed_with_its_gaps(self) -> None:
+        world, gaps, view = self.feeds()
+        merged = await UnionProvider(world, gaps, viewport=view).fetch(None)
+        assert {r.id for r in merged} == {"w", "g"}
+        assert view.calls == 0
+
+    @pytest.mark.anyio
+    async def test_without_a_viewport_feed_the_main_one_answers_viewports(self) -> None:
+        world, gaps, _ = self.feeds()
+        await UnionProvider(world, gaps).fetch(self.VIEW)
+        assert world.calls == 1
 
 class TestRepeatedFailureIsQuiet:
     """One line and then quiet, not a line per poll (D207).

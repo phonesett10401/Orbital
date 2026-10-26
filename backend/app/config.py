@@ -229,17 +229,37 @@ class Settings(BaseSettings):
     #: until then it is a provider nobody can select usefully.
     airplaneslive_base_url: str = "https://api.airplanes.live/v2"
 
-    #: Which feed fills the gaps the primary cannot see, when the provider is
-    #: `union`.
+    #: The three slots of the `union` provider, each given the job its feed
+    #: can afford (2026-10-26):
     #:
-    #: **This was OpenSky until it stopped taking connections from data
-    #: centres** (D207). It is unreachable from Northflank and from Render
-    #: alike, while answering a home connection in 0.23 s, so the default that
-    #: works in the place this actually runs is adsb.fi. `opensky` still works
-    #: from a laptop and is one variable away.
+    #: * **primary, OpenSky: the world view.** 4,000 credits a day covers a
+    #:   world poll every 120 s (2,880).
+    #: * **supplement, adsb.lol: OpenSky's gaps**, inland China above all,
+    #:   where OpenSky sees nothing. It capped itself at 500 a day on
+    #:   2026-10-20, so it is asked every ten minutes, not every poll.
+    #: * **viewport, adsb.fi: the zoomed-in view.** No daily cap, and its
+    #:   250 nm ceiling is no limit on a viewport.
+    #:
+    #: The previous arrangement put adsb.lol in the primary slot at 2,880 calls
+    #: a day, which is what put an empty sky on the live map once it capped.
+    #: **OpenSky's reachability is the open question:** D207 found it refusing
+    #: Northflank and Render alike. If it still does, the world view falls back
+    #: to adsb.lol's ten-minute answer and says it is stale; `union_primary=
+    #: adsblol` with `union_supplement=opensky` is the D83 arrangement back.
+    union_primary: str = Field(
+        default="opensky",
+        description="The union's world-view feed: opensky or adsblol.",
+    )
     union_supplement: str = Field(
+        default="adsblol",
+        description="Which provider fills the primary's gaps: adsblol, adsbfi, opensky or airplaneslive.",
+    )
+    union_viewport: str = Field(
         default="adsbfi",
-        description="Which provider supplements the primary feed: adsbfi, opensky or airplaneslive.",
+        description=(
+            "Which provider answers viewport polls in the primary's place: adsbfi, "
+            "adsblol, airplaneslive or opensky. Empty means the primary does."
+        ),
     )
 
     adsblol_trace_base_url: str = Field(
@@ -400,17 +420,16 @@ class Settings(BaseSettings):
     )
 
     union_supplement_interval_seconds: float = Field(
-        default=120.0,
+        default=600.0,
         gt=0,
         description=(
-            "How often the metered feed is actually called when running 'union'. "
-            "The free feed answers every poll; this one answers at most this often, "
-            "so the poll cadence is no longer set by the credit ladder (D83). "
-            "120 s because that is the freeze threshold (D71): a longer interval "
-            "leaves aircraft only OpenSky can see sitting motionless for the "
-            "difference, which is what 'the planes are not moving' looked like "
-            "(defect #30). At 4 credits a call it is 2,880 a day, still below "
-            "the 3,072 the OpenSky-only preset spent."
+            "How often the supplement is actually called when running 'union', on "
+            "world polls only. 600 s because the supplement is now adsb.lol, which "
+            "allows 500 a day: a world sweep is 4 calls, so this is 24 an hour while "
+            "anyone is watching, about 20 hours of watching a day. The cost is that "
+            "aircraft only adsb.lol sees fade between its answers (D71); they are "
+            "OpenSky's gaps, and a faded aircraft is better than none. 120 s was the "
+            "right value while the supplement was OpenSky (D83, defect #30)."
         ),
     )
 
@@ -448,6 +467,17 @@ class Settings(BaseSettings):
             "Trim the snapped viewport box down to this area before polling. "
             "100 sq deg is the top of the 2-credit band, so tier 2 always costs "
             "exactly two credits and the daily projection stays exact."
+        ),
+    )
+    idle_after_seconds: float = Field(
+        default=300.0,
+        ge=0.0,
+        description=(
+            "Stop the world sweep once no browser has asked for aircraft in this "
+            "many seconds, and resume within a few seconds of the next request. "
+            "It ran every two minutes for weeks with nobody watching, which is "
+            "2,880 requests a day to adsb.lol against its limit of 500. 0 turns "
+            "the gate off and polls continuously."
         ),
     )
     focus_skip_area_sq_deg: float = Field(
@@ -568,11 +598,27 @@ class Settings(BaseSettings):
         zoomed in far enough; real consumption is lower.
         """
         if self.provider == "union":
-            # The union polls the free feed on every job and the metered one
-            # once per supplement interval, on the global poll only (D83). Its
-            # cost is therefore fixed by that interval rather than by how fast
-            # the poller runs, which is the whole point of the arrangement.
-            return daily_credits(self.union_supplement_interval_seconds, GLOBAL_CALL_CREDITS)
+            # Charged by the slot OpenSky sits in, since it is the only metered
+            # feed: the primary answers every world poll, and every viewport poll
+            # too when there is no viewport feed; the supplement answers world
+            # polls once an interval; a viewport feed answers viewport polls.
+            world = next(j for j in self.jobs if j.tier == 1)
+            view = next((j for j in self.jobs if j.tier == 2), None)
+            view_cost = (
+                daily_credits(view.interval_seconds, credits_for_area(self.focus_max_area_sq_deg))
+                if view is not None
+                else 0.0
+            )
+            total = 0.0
+            if self.union_primary == "opensky":
+                total += daily_credits(world.interval_seconds, GLOBAL_CALL_CREDITS)
+                if not self.union_viewport:
+                    total += view_cost
+            if self.union_supplement == "opensky":
+                total += daily_credits(self.union_supplement_interval_seconds, GLOBAL_CALL_CREDITS)
+            if self.union_viewport == "opensky":
+                total += view_cost
+            return total
 
         total = 0.0
         for job in self.jobs:

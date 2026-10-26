@@ -154,6 +154,10 @@ def list_aircraft(
     if box is not None:
         poller.set_viewport(box)
 
+    # Every request, viewport or not: a zoomed-out view sends no box, and it
+    # is exactly the view the world sweep exists to serve.
+    poller.note_client()
+
     # **Clamped, not trusted.** `limit` had no ceiling, so `?limit=999999999`
     # answered 200 and serialised the entire store - measured at 472 ms for
     # 29,000 vessels, on a single-threaded event loop, which stalls every other

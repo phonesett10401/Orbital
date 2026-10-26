@@ -129,6 +129,13 @@ class TestConfiguredPresetsFitTheirBudget:
         assert union.projected_daily_credits() == 2880
         assert union.projected_daily_credits() < authenticated.projected_daily_credits()
 
+    def test_opensky_answering_viewports_too_would_overspend_and_is_refused(self):
+        # As the main feed with no viewport feed beside it, OpenSky would pay
+        # for the world every 120 s *and* the viewport every 30 s: 5,760 a day
+        # against 4,000. That is why the viewport goes to adsb.fi.
+        with pytest.raises(ValueError, match="credits/day"):
+            Settings(quota_preset="union", provider="union", union_viewport="")
+
     @pytest.mark.parametrize("preset", sorted(PRESETS))
     def test_every_preset_names_its_own_allowance(self, preset):
         # daily_allowance falls back to the authenticated 4,000 for a preset it

@@ -98,24 +98,54 @@ def _build_satellites(settings: "Settings") -> Provider:
 #: answer a bounding box, which rules out satellites, and pairing the primary
 #: with itself is a configuration mistake rather than a choice (D208).
 _SUPPLEMENTS: Mapping[str, Callable[["Settings"], Provider]] = {
+    "adsblol": _build_adsblol,
     "adsbfi": _build_adsbfi,
     "opensky": _build_opensky,
     "airplaneslive": _build_airplaneslive,
 }
 
+#: The feeds that may answer the world view. Only the two that can sweep the
+#: planet: adsb.fi and airplanes.live answer 250 nm at most.
+_PRIMARIES: Mapping[str, Callable[["Settings"], Provider]] = {
+    "opensky": _build_opensky,
+    "adsblol": _build_adsblol,
+}
 
-def _build_union(settings: "Settings") -> Provider:
-    """The primary every poll, the supplement occasionally (D83, D208)."""
-    build = _SUPPLEMENTS.get(settings.union_supplement)
+
+def _pick(kind: str, choice: str, options: Mapping[str, Callable[["Settings"], Provider]]):
+    build = options.get(choice)
     if build is None:
         raise ValueError(
-            f"unknown union supplement {settings.union_supplement!r}; "
-            f"choose one of {', '.join(sorted(_SUPPLEMENTS))}"
+            f"unknown union {kind} {choice!r}; choose one of {', '.join(sorted(options))}"
         )
+    return build
+
+
+def _build_union(settings: "Settings") -> Provider:
+    """World view, its gaps, and the viewport, each from the feed that affords it.
+
+    See ``Settings.union_primary`` for which feed does which job and why.
+    """
+    chosen = [settings.union_primary, settings.union_supplement]
+    if settings.union_viewport:
+        chosen.append(settings.union_viewport)
+    repeated = {name for name in chosen if chosen.count(name) > 1}
+    if repeated:
+        # One feed in two slots double-spends its limit and sees nothing new.
+        raise ValueError(f"union uses {', '.join(sorted(repeated))} in more than one slot")
+
+    primary = _pick("primary", settings.union_primary, _PRIMARIES)
+    supplement = _pick("supplement", settings.union_supplement, _SUPPLEMENTS)
+    viewport = (
+        _pick("viewport", settings.union_viewport, _SUPPLEMENTS)
+        if settings.union_viewport
+        else None
+    )
     return UnionProvider(
-        primary=_build_adsblol(settings),
-        supplement=build(settings),
+        primary=primary(settings),
+        supplement=supplement(settings),
         supplement_interval_seconds=settings.union_supplement_interval_seconds,
+        viewport=viewport(settings) if viewport is not None else None,
     )
 
 

@@ -23,6 +23,7 @@ import asyncio
 import logging
 import math
 import random
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -41,6 +42,11 @@ MAX_BACKOFF_SECONDS = 900.0
 #: Multiplicative jitter applied to every delay, so that jobs which fail
 #: together do not then retry together forever.
 JITTER_FRACTION = 0.1
+
+#: How often an idle world sweep checks whether someone has arrived. Checking
+#: costs nothing upstream, so this sets how long a new visitor waits, not what
+#: the feed is charged.
+IDLE_RECHECK_SECONDS = 5.0
 
 
 @dataclass
@@ -111,10 +117,14 @@ class Poller:
         *,
         jobs: tuple[PollJob, ...] | None = None,
         sleep=asyncio.sleep,
+        idle_after_seconds: float = 0.0,
     ) -> None:
         self.provider = provider
         self.store = store
         self.settings = settings
+        # Off unless asked for: only the aircraft poller has a feed with a daily
+        # cap, and nothing on the ship or satellite routes notes a viewer.
+        self._idle_after = idle_after_seconds
         self.jobs = jobs if jobs is not None else settings.jobs
         self._sleep = sleep
 
@@ -126,6 +136,7 @@ class Poller:
             for job in self.jobs
         }
         self._viewport: BBox | None = None
+        self._last_client_at: float | None = None
         self._rate_limited_until: float = 0.0
         self._stopping = asyncio.Event()
 
@@ -168,6 +179,23 @@ class Poller:
         Snapped to a grid first; see :meth:`snap` for what that buys.
         """
         self._viewport = self.snap(bbox) if bbox is not None else None
+
+    def note_client(self) -> None:
+        """Record that a browser asked for aircraft, which keeps the world sweep awake."""
+        self._last_client_at = time.monotonic()
+
+    def _idle(self) -> bool:
+        """Has nobody asked for aircraft recently enough to be worth a sweep?
+
+        Gating on viewers makes the cost scale with hours watched rather than
+        hours elapsed, and not with the number of viewers either: one sweep
+        serves every open tab.
+        """
+        if self._idle_after <= 0:
+            return False
+        if self._last_client_at is None:
+            return True
+        return time.monotonic() - self._last_client_at > self._idle_after
 
     def snap(self, bbox: BBox) -> BBox:
         """Expand a box outward to the configured grid.
@@ -298,6 +326,12 @@ class Poller:
             status.skipped_polls += 1
             logger.warning("credits exhausted; serving cache only")
             return self._jitter(MAX_BACKOFF_SECONDS)
+
+        # After the first sweep only: the server starts with data, so the first
+        # visitor is not met by an empty map.
+        if job.tier == 1 and status.successful_polls > 0 and self._idle():
+            status.skipped_polls += 1
+            return IDLE_RECHECK_SECONDS
 
         bbox = self._resolve_bbox(job)
         if job.tier == 2 and bbox is None:

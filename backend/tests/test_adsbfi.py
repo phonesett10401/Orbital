@@ -243,19 +243,35 @@ class TestTheSupplementIsChosen:
 
         return Settings(**kw)
 
-    def test_the_default_is_the_one_that_works_where_this_runs(self):
+    def test_the_default_gives_each_feed_the_job_it_can_afford(self):
+        """OpenSky for the world, adsb.lol for its gaps, adsb.fi for the viewport.
+
+        adsb.lol capped itself at 500 a day on 2026-10-20 and the old default,
+        which polled it 2,880 times a day, put an empty sky on the live map.
+        """
         from app.providers.registry import build
 
         union = build("union", self._settings())
-        assert union.primary.label == "adsb.lol"
-        assert union.supplement.label == "adsb.fi"
+        assert union.primary.name == "opensky"
+        assert union.supplement.label == "adsb.lol"
+        assert union.viewport.label == "adsb.fi"
 
-    def test_opensky_is_still_one_variable_away(self):
-        """It works from a laptop, and the switch back must not have rusted."""
+    def test_the_old_arrangement_is_still_one_variable_away(self):
+        """adsb.lol first and OpenSky second (D83), for wherever OpenSky is blocked."""
         from app.providers.registry import build
 
-        union = build("union", self._settings(union_supplement="opensky"))
+        union = build(
+            "union", self._settings(union_primary="adsblol", union_supplement="opensky")
+        )
+        assert union.primary.label == "adsb.lol"
         assert union.supplement.name == "opensky"
+
+    def test_the_same_feed_in_two_slots_is_refused(self):
+        """It would double-spend one feed's limit and add nothing it does not already see."""
+        from app.providers.registry import build
+
+        with pytest.raises(ValueError, match="opensky"):
+            build("union", self._settings(union_supplement="opensky"))
 
     def test_an_unknown_supplement_is_refused_by_name(self):
         """Silently falling back would hide a typo in a deployment variable

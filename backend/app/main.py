@@ -113,7 +113,9 @@ def create_app(
             snapshot_ttl_seconds=settings.snapshot_ttl,
             object_type=settings.object_type,
         )
-        poller = Poller(active_provider, store, settings)
+        poller = Poller(
+            active_provider, store, settings, idle_after_seconds=settings.idle_after_seconds
+        )
         # Bought per selection rather than polled, so it hangs off the app
         # beside the poller rather than inside it (D78).
         flights = FlightHistory(active_provider)

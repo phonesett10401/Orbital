@@ -12516,3 +12516,62 @@ reason does not reach them. Recorded here rather than left to look like an
 oversight.
 
 **1,146 frontend tests**, 915 backend.
+
+## D215 - Each feed the job it can afford, and none of them while nobody watches
+
+The live map showed **zero aircraft, marked fresh**, and had for days. The
+Northflank log said why in one line: `adsb.lol rate-limited us with 429`.
+
+**adsb.lol added a daily cap.** Its own headers now read `x-ratelimit-limit: 4,
+4;w=1, 60;w=60, 500;w=86400` - 500 a day, alongside the per-second and
+per-minute limits it always had. Other projects started reporting it on
+2026-10-20; there was no announcement. Orbital's world sweep alone asked 2,880
+times a day, so the day's allowance was spent within hours and every call after
+it was refused.
+
+### Why it said fresh
+
+The union reads the supplement as having answered on a viewport poll, when by
+design it is not asked at all (defect #30 is why: replaying its cache froze
+the map). So *primary refused, supplement not asked* came out as *success,
+zero aircraft*, and the stale path - which needs both feeds to raise - was
+never reached. The health endpoint reported 17,782 successful polls and none
+failed while it happened.
+
+**Not asked is now not an answer.** With the feed that was asked down, the
+union re-raises that feed's own error: a rate limit reaches the poller as a
+rate limit, and the poller backs off and keeps the last good snapshot, marked
+stale (D10).
+
+### Each feed gets the job it can afford
+
+| Job | Feed | What it costs |
+|---|---|---|
+| World view, every 120 s | **OpenSky**, primary | 2,880 of its 4,000 credits, worst case |
+| OpenSky's gaps, every 600 s | **adsb.lol**, supplement | about 24 calls an hour while watched |
+| Zoomed-in view, every 30 s | **adsb.fi**, new viewport slot | no daily cap; 250 nm is no limit on a viewport |
+
+OpenSky alone could not do it: paying for the world every 120 s *and* the
+viewport every 30 s is 5,760 credits a day, and `_budget_must_fit` refuses to
+start - which is now a test. The 600 s supplement interval means aircraft only
+adsb.lol sees, inland China above all, fade between its answers (D71). A faded
+aircraft is better than none.
+
+**OpenSky's reachability is the open question.** D207 found it refusing
+Northflank and Render alike. If it still does, the world view falls back to
+adsb.lol's ten-minute answer and is marked stale; `union_primary=adsblol` with
+`union_supplement=opensky` is the D83 arrangement again.
+
+### And the world sweep sleeps when nobody is looking
+
+It had run every two minutes for 24.7 days straight. Every `/api/aircraft`
+request now marks someone as watching; with no request for five minutes the
+world sweep stops, and checks every five seconds whether anyone has come back.
+Checking costs nothing upstream. The first sweep always runs, so the server
+starts with data. Only the aircraft poller is gated: ships and satellites cost
+nothing, and nothing on their routes would ever wake them.
+
+Cost now scales with hours watched, not hours elapsed - and not with viewers,
+since one sweep serves every tab. The trade: with nobody watching, an outage is
+noticed when the next visitor arrives rather than before. The data is marked
+stale in the meantime, so nothing claims to be current.

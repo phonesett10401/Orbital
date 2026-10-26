@@ -124,6 +124,56 @@ class TestSuccessfulPolling:
         assert delay == pytest.approx(300.0, rel=0.15)  # interval plus jitter
 
 
+class TestPollingOnlyWhileWatched:
+    """The world sweep runs only while someone is looking.
+
+    It used to run every two minutes for 24.7 days straight with nobody
+    watching, which is 2,880 requests a day to a feed that now allows 500.
+    """
+
+    @pytest.fixture
+    def watched(self, provider, store, settings) -> Poller:
+        return Poller(provider, store, settings, idle_after_seconds=300)
+
+    @pytest.mark.anyio
+    async def test_the_first_sweep_runs_with_nobody_watching(self, watched, provider):
+        # So the server starts with data and the first visitor is not met by an empty map.
+        await tick(watched, "global")
+        assert provider.calls == [None]
+
+    @pytest.mark.anyio
+    async def test_after_that_nobody_watching_means_no_fetch(self, watched, provider):
+        await tick(watched, "global")
+        delay = await tick(watched, "global")
+        assert provider.calls == [None]
+        assert status_of(watched, "global").skipped_polls == 1
+        # Rechecked soon, so a visitor who arrives is not kept waiting a whole interval.
+        assert delay <= 10.0
+
+    @pytest.mark.anyio
+    async def test_a_viewer_wakes_the_sweep(self, watched, provider):
+        await tick(watched, "global")
+        watched.note_client()
+        await tick(watched, "global")
+        assert provider.calls == [None, None]
+
+    @pytest.mark.anyio
+    async def test_the_sweep_sleeps_again_once_the_viewer_has_gone(self, watched, provider):
+        await tick(watched, "global")
+        watched.note_client()
+        watched._last_client_at -= 301  # their last request was just over five minutes ago
+        await tick(watched, "global")
+        assert provider.calls == [None]
+
+    @pytest.mark.anyio
+    async def test_other_pollers_are_never_gated(self, poller, provider):
+        # Ships and satellites share this class and cost nothing; a gate there
+        # would stop them for good, because nothing on their routes notes a viewer.
+        await tick(poller, "global")
+        await tick(poller, "global")
+        assert provider.calls == [None, None]
+
+
 # ---------------------------------------------------------------------------
 # Tier 2: the viewport
 # ---------------------------------------------------------------------------
