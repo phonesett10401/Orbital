@@ -44,6 +44,42 @@ export function BodyPicker() {
   };
   useEffect(() => cancelClose, []);
 
+  /*
+   * Escape, and a press anywhere else. `mouseleave` was the only way to close
+   * the list without choosing, and a finger never leaves anything - on a phone
+   * the list is most of the screen and only the trigger put it away. Every
+   * other overlay here already answers Escape.
+   */
+  const root = useRef<HTMLDivElement | null>(null);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  // Set while Escape hands focus back to the trigger, whose own focus handler
+  // would otherwise open the list straight back up.
+  const returning = useRef(false);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      cancelClose();
+      setOpen(false);
+      if (root.current?.contains(document.activeElement) && document.activeElement !== trigger.current) {
+        returning.current = true;
+        trigger.current?.focus();
+        returning.current = false;
+      }
+    };
+    const onPointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && root.current?.contains(event.target)) return;
+      cancelClose();
+      setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointer);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointer);
+    };
+  }, [open]);
+
   const current = bodyFor(activeBody);
 
   const choose = (body: Body) => {
@@ -62,6 +98,7 @@ export function BodyPicker() {
   return (
     <div
       className="bodies"
+      ref={root}
       onMouseEnter={() => {
         cancelClose();
         setOpen(true);
@@ -71,10 +108,13 @@ export function BodyPicker() {
       <button
         className="bodies__current"
         type="button"
+        ref={trigger}
         aria-expanded={open}
         aria-haspopup="listbox"
         onClick={() => setOpen((was) => !was)}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          if (!returning.current) setOpen(true);
+        }}
       >
         <span className={`bodies__dot bodies__dot--${current.id}`} aria-hidden="true" />
         {current.name}

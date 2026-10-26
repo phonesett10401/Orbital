@@ -160,6 +160,13 @@ export function SearchBar() {
       <input
         className="search__input"
         type="search"
+        // Callsigns, registrations and hex addresses, not words: nothing to
+        // spell-check, and a phone's autocorrect turns "N123AB" into a word.
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="characters"
+        autoComplete="off"
+        enterKeyHint="search"
         value={query}
         placeholder={chromeFor(activeLayer.id, []).searchPlaceholder}
         // The placeholder has been layer-aware since D103; this was not, so a

@@ -61,6 +61,7 @@ export function SignInPage() {
 
   const surface = useRef<HTMLDivElement | null>(null);
   const firstField = useRef<HTMLInputElement | null>(null);
+  const passwordField = useRef<HTMLInputElement | null>(null);
   const timers = useRef<number[]>([]);
   const later = (run: () => void, ms: number) => {
     timers.current.push(window.setTimeout(run, ms));
@@ -121,6 +122,16 @@ export function SignInPage() {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setTouched(true);
+    // The first field that is wrong takes focus, so the message beside it is
+    // where the reader already is rather than somewhere to go looking.
+    if (emailProblem(email)) {
+      firstField.current?.focus();
+      return;
+    }
+    if (passwordProblem(password)) {
+      passwordField.current?.focus();
+      return;
+    }
     if (!canSubmit(email, password) || !acceptsInput(phase)) return;
     setPhase('working');
     setError(null);
@@ -198,23 +209,38 @@ export function SignInPage() {
                   className="account__input"
                   type="email"
                   autoComplete="username"
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  aria-invalid={emailError ? true : undefined}
+                  aria-describedby={emailError ? 'signin-email-problem' : undefined}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
-                {emailError && <p className="account__problem">{emailError}</p>}
+                {emailError && (
+                  <p className="account__problem" id="signin-email-problem" role="alert">
+                    {emailError}
+                  </p>
+                )}
 
                 <label className="account__label" htmlFor="signin-password">
                   Password
                 </label>
                 <input
                   id="signin-password"
+                  ref={passwordField}
                   className="account__input"
                   type="password"
                   autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                  aria-invalid={passwordError ? true : undefined}
+                  aria-describedby={passwordError ? 'signin-password-problem' : undefined}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
-                {passwordError && <p className="account__problem">{passwordError}</p>}
+                {passwordError && (
+                  <p className="account__problem" id="signin-password-problem" role="alert">
+                    {passwordError}
+                  </p>
+                )}
               </div>
 
               {error && (

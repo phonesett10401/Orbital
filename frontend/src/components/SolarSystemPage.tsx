@@ -157,6 +157,7 @@ export function SolarSystemPage() {
   /** Which one the pointer is over, so it can answer before it is clicked. */
   const [hovered, setHovered] = useState<string | null>(null);
   const [indexOpen, setIndexOpen] = useState(false);
+  const indexToggle = useRef<HTMLButtonElement | null>(null);
   /**
    * A body the camera is still travelling to.
    *
@@ -309,11 +310,20 @@ export function SolarSystemPage() {
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPage(null);
+      if (event.key !== 'Escape') return;
+      // The innermost thing first. With the index open, Escape closes the
+      // index and leaves the reader on this page; it used to close both.
+      if (indexOpen) {
+        setIndexOpen(false);
+        // Back to the toggle, or focus inside the list is lost with it.
+        indexToggle.current?.focus();
+        return;
+      }
+      setPage(null);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, setPage]);
+  }, [open, setPage, indexOpen]);
 
   // Left and right step between bodies, which is the keyboard half of the two
   // arrows in the corner. Bound once per chosen body rather than per frame -
@@ -322,6 +332,10 @@ export function SolarSystemPage() {
     if (!open) return undefined;
     const onArrow = (event: KeyboardEvent) => {
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      // A modified arrow belongs to the browser - Alt+Left is Back - and while
+      // the index is open the keys belong to it, not to the camera behind it.
+      if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
+      if (indexOpen) return;
       const next = stepFocus(focused, event.key === 'ArrowRight' ? 1 : -1, presentRef.current);
       if (!next) return;
       event.preventDefault();
@@ -330,7 +344,7 @@ export function SolarSystemPage() {
     };
     document.addEventListener('keydown', onArrow);
     return () => document.removeEventListener('keydown', onArrow);
-  }, [open, focused]);
+  }, [open, focused, indexOpen]);
 
   if (!open) return null;
 
@@ -719,6 +733,7 @@ export function SolarSystemPage() {
         <button
           type="button"
           className="system__index-toggle"
+          ref={indexToggle}
           aria-expanded={indexOpen}
           onClick={() => setIndexOpen((v) => !v)}
         >
