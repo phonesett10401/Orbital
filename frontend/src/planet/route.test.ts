@@ -20,6 +20,7 @@ import {
   ORIGIN_SOURCE,
   ROUTE_CASING_LAYER,
   ROUTE_LAYER,
+  ROUTE_PLANNED_LAYER,
   ROUTE_SOURCE,
   leaderFeature,
   leaderLayers,
@@ -28,6 +29,9 @@ import {
   greatCircleLatLon,
   routeFeatures,
   routeLayers,
+  scheduledFeatures,
+  selectedOrigin,
+  selectedRouteFeatures,
   unwrapLongitudes,
 } from './routeLayer';
 
@@ -226,7 +230,7 @@ describe('leaderLayers', () => {
     // and for the same reason as the leader: it is inference (D82).
     for (const layer of routeLayers()) {
       const dashed = (layer as { paint: Record<string, unknown> }).paint['line-dasharray'];
-      if (layer.id === ROUTE_GAP_LAYER) expect(dashed).toBeDefined();
+      if (layer.id === ROUTE_GAP_LAYER || layer.id === ROUTE_PLANNED_LAYER) expect(dashed).toBeDefined();
       else expect(dashed).toBeUndefined();
     }
   });
@@ -360,5 +364,72 @@ describe('coverage gaps in the track', () => {
     // before it - just the bridge and what follows.
     const collection = routeFeatures([at(0, 0, 0), at(0, 2, 1200), at(0, 2.013, 1206)]);
     expect(collection.features.map((f) => f.properties.gap)).toEqual([true, false]);
+  });
+});
+
+describe('the estimated route, when no flight history exists', () => {
+  // Singapore to Bangkok, with the aircraft roughly halfway, over Malaysia.
+  const sin = { icao: 'WSSS', name: 'Changi', lat: 1.35, lon: 103.99, country: 'SG', municipality: null, iata: 'SIN', distanceKm: null };
+  const bkk = { icao: 'VTBS', name: 'Suvarnabhumi', lat: 13.69, lon: 100.75, country: 'TH', municipality: null, iata: 'BKK', distanceKm: null };
+  const detail = (over: Partial<NonNullable<Parameters<typeof selectedOrigin>[0]>> = {}) => ({
+    lat: 7.5,
+    lon: 101.0,
+    track: [point(7.0, 101.4), point(7.5, 101.0)],
+    trackSource: 'observed' as const,
+    route: { airline: 'Test', origin: sin, destination: bkk },
+    origin: null,
+    ...over,
+  });
+
+  it('draws the dashed leg from the departure airport and a fainter one ahead', () => {
+    const features = scheduledFeatures(detail()).features;
+    expect(features).toHaveLength(2);
+    const [behind, ahead] = features;
+    expect(behind.properties).toEqual({ gap: true, planned: false });
+    expect(behind.geometry.coordinates[0][0]).toBeCloseTo(sin.lon, 6);
+    expect(behind.geometry.coordinates[0][1]).toBeCloseTo(sin.lat, 6);
+    // It meets the watched path where watching began, not where the plane is now.
+    const end = behind.geometry.coordinates[behind.geometry.coordinates.length - 1];
+    expect(end[0]).toBeCloseTo(101.4, 6);
+    expect(end[1]).toBeCloseTo(7.0, 6);
+    expect(ahead.properties).toEqual({ gap: true, planned: true });
+    const last = ahead.geometry.coordinates[ahead.geometry.coordinates.length - 1];
+    expect(last[0]).toBeCloseTo(bkk.lon, 6);
+  });
+
+  it('starts from the aircraft itself when nothing has been watched yet', () => {
+    const [behind] = scheduledFeatures(detail({ track: [] })).features;
+    const end = behind.geometry.coordinates[behind.geometry.coordinates.length - 1];
+    expect(end[0]).toBeCloseTo(101.0, 6);
+    expect(end[1]).toBeCloseTo(7.5, 6);
+  });
+
+  it('draws nothing when the aircraft is nowhere near the published route', () => {
+    // Over Japan while "flying" Singapore to Bangkok: a stale row or a reused callsign.
+    expect(scheduledFeatures(detail({ lat: 35.7, lon: 139.7 })).features).toHaveLength(0);
+  });
+
+  it('leaves the departure leg to the network when its history starts at the runway', () => {
+    const features = scheduledFeatures(detail({ trackSource: 'provider' })).features;
+    expect(features.every((f) => f.properties.planned)).toBe(true);
+  });
+
+  it('draws nothing without a published route', () => {
+    expect(scheduledFeatures(detail({ route: null })).features).toHaveLength(0);
+    expect(scheduledFeatures(null).features).toHaveLength(0);
+  });
+
+  it('puts the departure ring on the published origin only while the estimate is drawn', () => {
+    expect(selectedOrigin(detail())?.icao).toBe('WSSS');
+    expect(selectedOrigin(detail({ lat: 35.7, lon: 139.7 }))).toBeNull();
+    // An airport the track itself began at always wins.
+    expect(selectedOrigin(detail({ origin: { ...bkk, distanceKm: 1.2 } }))?.icao).toBe('VTBS');
+  });
+
+  it('keeps the watched path solid and the estimate in the dashed layers', () => {
+    const all = selectedRouteFeatures(detail()).features;
+    expect(all.filter((f) => !f.properties.gap)).toHaveLength(1);
+    const ids = routeLayers().map((l) => l.id);
+    expect(ids).toContain(ROUTE_PLANNED_LAYER);
   });
 });

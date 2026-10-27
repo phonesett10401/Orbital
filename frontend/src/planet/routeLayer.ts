@@ -21,7 +21,7 @@
  * — which MapLibre draws correctly and which loses nothing.
  */
 
-import type { TrackPoint } from '../types';
+import type { TrackPoint, TrackedObjectDetail } from '../types';
 
 /** Ids, exported so the view can add and update them. */
 export const ROUTE_SOURCE = 'orbital-route';
@@ -30,6 +30,9 @@ export const ROUTE_CASING_LAYER = 'orbital-route-casing';
 
 /** The thin line bridging a stretch nobody watched. */
 export const ROUTE_GAP_LAYER = 'orbital-route-gap';
+
+/** The faint line on to the published destination. */
+export const ROUTE_PLANNED_LAYER = 'orbital-route-planned';
 
 /**
  * The segment joining the last reported position to where the aircraft is
@@ -80,7 +83,11 @@ const DEG = Math.PI / 180;
 export interface RouteFeature {
   type: 'Feature';
   geometry: { type: 'LineString'; coordinates: Array<[number, number]> };
-  properties: { gap: boolean };
+  /**
+   * `gap`: inferred rather than watched, drawn dashed. `planned`: the leg still
+   * ahead, to the published destination, drawn fainter than either.
+   */
+  properties: { gap: boolean; planned: boolean };
 }
 
 export type RouteCollection = {
@@ -206,7 +213,7 @@ export const ROUTE_GAP_SECONDS = 300;
 export const ROUTE_MAX_SPEED_MS = 400;
 
 /** Metres between two points on the sphere. */
-function metresBetween(a: TrackPoint, b: TrackPoint): number {
+function metresBetween(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
   const R = 6_371_008.8;
   const phi1 = (a.lat * Math.PI) / 180;
   const phi2 = (b.lat * Math.PI) / 180;
@@ -237,7 +244,7 @@ export function routeFeatures(track: TrackPoint[] | null | undefined): RouteColl
       features.push({
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: unwrapLongitudes(run) },
-        properties: { gap: false },
+        properties: { gap: false, planned: false },
       });
     }
     run = [];
@@ -261,7 +268,7 @@ export function routeFeatures(track: TrackPoint[] | null | undefined): RouteColl
       features.push({
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: unwrapLongitudes(arc) },
-        properties: { gap: true },
+        properties: { gap: true, planned: false },
       });
       run = [arc[arc.length - 1]];
       continue;
@@ -275,6 +282,88 @@ export function routeFeatures(track: TrackPoint[] | null | undefined): RouteColl
   flush();
 
   return { type: 'FeatureCollection', features };
+}
+
+/**
+ * How far off the direct line an aircraft may be and still be flying its
+ * published route: the trip via the aircraft may be this much longer than
+ * the direct one, plus a fixed allowance for the climb-out and approach.
+ *
+ * Past it the schedule and the aircraft disagree - a stale community row, a
+ * diversion, a callsign reused for a different leg - and a line from that
+ * airport would be a confident drawing of somewhere it never was.
+ */
+export const SCHEDULE_DETOUR_RATIO = 1.3;
+export const SCHEDULE_DETOUR_SLACK_M = 300_000;
+
+/**
+ * The legs drawn from the *published* route, around whatever we watched.
+ *
+ * Flight histories stopped being available in October 2026: adsb.lol's trace
+ * files answer 403, and OpenSky's do not reach the deployment. What is left is
+ * the path we watched ourselves, often a few minutes long, plus the route the
+ * callsign is published as flying. So the map draws what Flightradar draws
+ * before it has a track: the great circle from the departure airport to where
+ * our watching began, dashed because it is an estimate, and a fainter one on
+ * to the destination.
+ *
+ * Nothing is drawn when the aircraft is not plausibly between the two
+ * airports, and the departure leg is skipped when the network's own history
+ * already starts at the runway.
+ */
+export function scheduledFeatures(
+  detail: Pick<TrackedObjectDetail, 'lat' | 'lon' | 'track' | 'trackSource' | 'route'> | null | undefined,
+): RouteCollection {
+  const route = detail?.route;
+  if (!detail || !route || (!route.origin && !route.destination)) return emptyRoute();
+
+  const here = { lat: detail.lat, lon: detail.lon };
+  const { origin, destination } = route;
+  if (origin && destination) {
+    const direct = metresBetween(origin, destination);
+    const via = metresBetween(origin, here) + metresBetween(here, destination);
+    if (via > direct * SCHEDULE_DETOUR_RATIO + SCHEDULE_DETOUR_SLACK_M) return emptyRoute();
+  }
+
+  const track = detail.track ?? [];
+  const first = track.length > 0 ? track[0] : here;
+  const last = track.length > 0 ? track[track.length - 1] : here;
+  const features: RouteFeature[] = [];
+  const leg = (from: { lat: number; lon: number }, to: { lat: number; lon: number }, planned: boolean) => {
+    if (metresBetween(from, to) < 1_000) return;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: unwrapLongitudes(greatCircleLatLon(from, to, 48)) },
+      properties: { gap: true, planned },
+    });
+  };
+
+  if (origin && detail.trackSource !== 'provider') leg(origin, first, false);
+  if (destination) leg(last, destination, true);
+  return { type: 'FeatureCollection', features };
+}
+
+/** Everything the route source draws for the selected aircraft. */
+export function selectedRouteFeatures(
+  detail: Pick<TrackedObjectDetail, 'lat' | 'lon' | 'track' | 'trackSource' | 'route'> | null | undefined,
+): RouteCollection {
+  return {
+    type: 'FeatureCollection',
+    features: [...routeFeatures(detail?.track).features, ...scheduledFeatures(detail).features],
+  };
+}
+
+/**
+ * Where to put the departure ring: the airport the track itself began at, or
+ * the published origin when the estimated leg is drawn to it.
+ */
+export function selectedOrigin(
+  detail: Pick<TrackedObjectDetail, 'lat' | 'lon' | 'track' | 'trackSource' | 'route' | 'origin'> | null | undefined,
+): OriginPoint | null {
+  if (!detail) return null;
+  if (detail.origin) return detail.origin;
+  const drawn = scheduledFeatures(detail).features.some((f) => !f.properties.planned);
+  return drawn && detail.route?.origin ? detail.route.origin : null;
 }
 
 /**
@@ -319,12 +408,26 @@ export function routeLayers(): import('maplibre-gl').LayerSpecification[] {
       id: ROUTE_GAP_LAYER,
       type: 'line',
       source: ROUTE_SOURCE,
-      filter: ['get', 'gap'],
+      filter: ['all', ['get', 'gap'], ['!', ['get', 'planned']]],
       layout: { 'line-cap': 'butt', 'line-join': 'round' },
       paint: {
         'line-color': 'rgba(255, 255, 255, 0.75)',
         'line-width': ['interpolate', ['linear'], ['zoom'], 2, 1, 12, 1.6],
         'line-dasharray': [2.5, 2],
+      },
+    },
+    {
+      // The leg still ahead: a published intention, not anything flown, so it
+      // is the faintest line on the map.
+      id: ROUTE_PLANNED_LAYER,
+      type: 'line',
+      source: ROUTE_SOURCE,
+      filter: ['get', 'planned'],
+      layout: { 'line-cap': 'butt', 'line-join': 'round' },
+      paint: {
+        'line-color': 'rgba(255, 255, 255, 0.6)',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 2, 1.3, 12, 1.8],
+        'line-dasharray': [1.5, 2],
       },
     },
   ];
@@ -359,7 +462,7 @@ export function leaderFeature(
     features: [
       {
         type: 'Feature',
-        properties: { gap: false },
+        properties: { gap: false, planned: false },
         geometry: { type: 'LineString', coordinates: arc },
       },
     ],

@@ -34,6 +34,7 @@ import { useAirline } from '../airlines';
 import type { Airport } from '../types';
 import { wingspanFor } from '../wingspan';
 import { generalMetaRows } from './panelFields';
+import { scheduledFeatures } from '../planet/routeLayer';
 import { legLabel, missingRouteReason, summariseRoute } from './routeSummary';
 import { SATELLITE_META_SHOWN, satelliteRows } from './satelliteFacts';
 import { SHIP_META_SHOWN, shipRows } from './shipFacts';
@@ -126,6 +127,8 @@ export function DetailPanel() {
     detail,
     airline ?? null,
   );
+  // Whether the map is drawing the estimate, so the panel says so only when it is.
+  const estimated = scheduledFeatures(detail).features.length > 0;
 
   const header = (
     <header className="panel__header">
@@ -434,6 +437,8 @@ export function DetailPanel() {
           <p className="panel__note">
             Not enough observations yet to draw a path. The route builds up as we
             keep seeing this aircraft.
+            {estimated &&
+              ' Until then the map shows an estimate along the scheduled route, dashed.'}
           </p>
         ) : (
           <>
@@ -470,6 +475,9 @@ export function DetailPanel() {
               <p className="panel__caveat">
                 This is the path we have watched, not a filed flight plan. It begins
                 when the aircraft entered our polling window, not at takeoff.
+                {estimated &&
+                  ' The dashed line before it is estimated from the scheduled route, ' +
+                    'and the faint one ahead runs to the scheduled destination.'}
               </p>
             ) : detail.origin ? (
               <p className="panel__caveat">

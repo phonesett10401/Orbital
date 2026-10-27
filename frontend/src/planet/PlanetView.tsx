@@ -155,8 +155,9 @@ import {
   leaderLayers,
   originFeature,
   originLayers,
-  routeFeatures,
   routeLayers,
+  selectedOrigin,
+  selectedRouteFeatures,
 } from './routeLayer';
 import { createAircraftIconCanvas, createUnknownIconCanvas } from './aircraftSprite';
 import { whenRenderable } from './container';
@@ -720,7 +721,7 @@ export function PlanetView() {
           // would never be drawn at all.
           map.addSource(ROUTE_SOURCE, {
             type: 'geojson',
-            data: routeFeatures(useOrbitalStore.getState().selectedDetail?.track),
+            data: selectedRouteFeatures(useOrbitalStore.getState().selectedDetail),
           });
           for (const layer of routeLayers()) map.addLayer(layer);
 
@@ -734,7 +735,7 @@ export function PlanetView() {
           // the route is: the subscription below only fires on change (D65).
           map.addSource(ORIGIN_SOURCE, {
             type: 'geojson',
-            data: originFeature(useOrbitalStore.getState().selectedDetail?.origin),
+            data: originFeature(selectedOrigin(useOrbitalStore.getState().selectedDetail)),
           });
           for (const layer of originLayers()) map.addLayer(layer);
 
@@ -1307,7 +1308,16 @@ export function PlanetView() {
             const source = map.getSource(ROUTE_SOURCE);
             if (source && 'setData' in source) {
               (source as { setData: (data: unknown) => void }).setData(
-                routeFeatures(state.selectedDetail?.track),
+                selectedRouteFeatures(state.selectedDetail),
+              );
+            }
+            // The departure ring follows the selection too. It was seeded once
+            // when the map loaded and never updated, so it marked whichever
+            // airport was selected first, or nothing, for the whole session.
+            const ring = map.getSource(ORIGIN_SOURCE);
+            if (ring && 'setData' in ring) {
+              (ring as { setData: (data: unknown) => void }).setData(
+                originFeature(selectedOrigin(state.selectedDetail)),
               );
             }
           }
