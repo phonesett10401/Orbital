@@ -301,7 +301,15 @@ class OpenSkyProvider(Provider):
                 "the caller must skip this request rather than split it (see D25)"
             )
 
-        payload = await self._request_states(bbox, retry_on_401=True)
+        return self.parse_states(await self._request_states(bbox, retry_on_401=True))
+
+    @classmethod
+    def parse_states(cls, payload: dict[str, Any]) -> list[TrackedObjectRecord]:
+        """Normalise one ``/states/all`` answer, wherever it was fetched.
+
+        Public because the relay (D216) fetches on a home connection, which
+        OpenSky does not refuse, and posts the raw answer here.
+        """
         states = payload.get("states")
         if states is None:
             # A quiet box legitimately returns null rather than an empty list.
@@ -309,10 +317,10 @@ class OpenSkyProvider(Provider):
         if not isinstance(states, list):
             raise ProviderBadResponse("'states' was not a list")
 
-        fallback_time = self._parse_epoch(payload.get("time"))
+        fallback_time = cls._parse_epoch(payload.get("time"))
         records = []
         for state in states:
-            record = self._to_record(state, fallback_time)
+            record = cls._to_record(state, fallback_time)
             if record is not None:
                 records.append(record)
         return records
@@ -477,8 +485,9 @@ class OpenSkyProvider(Provider):
         except (TypeError, ValueError, OSError, OverflowError):
             return None
 
+    @classmethod
     def _to_record(
-        self, state: Sequence[Any], fallback_time: datetime | None
+        cls, state: Sequence[Any], fallback_time: datetime | None
     ) -> TrackedObjectRecord | None:
         """Map one state vector to the normalized shape, or None if unusable.
 
@@ -516,7 +525,7 @@ class OpenSkyProvider(Provider):
         # 3. The two differ by a median of 290 m and up to 846 m in that same
         #    sample, so this is not a rounding difference - it is the gap
         #    between our number and everyone else's.
-        altitude = self._first_number(
+        altitude = cls._first_number(
             state[_BARO_ALTITUDE],
             state[_GEO_ALTITUDE] if len(state) > _GEO_ALTITUDE else None,
         )
@@ -526,8 +535,8 @@ class OpenSkyProvider(Provider):
             altitude = 0.0
 
         last_seen = (
-            self._parse_epoch(state[_LAST_CONTACT])
-            or self._parse_epoch(state[_TIME_POSITION])
+            cls._parse_epoch(state[_LAST_CONTACT])
+            or cls._parse_epoch(state[_TIME_POSITION])
             or fallback_time
             or datetime.now(timezone.utc)
         )
@@ -538,12 +547,12 @@ class OpenSkyProvider(Provider):
                 lat=float(lat),
                 lon=float(lon),
                 altitude=altitude,
-                velocity=self._first_number(state[_VELOCITY]),
-                heading=self._first_number(state[_TRUE_TRACK]),
+                velocity=cls._first_number(state[_VELOCITY]),
+                heading=cls._first_number(state[_TRUE_TRACK]),
                 label=label or identifier,
                 last_seen=last_seen,
                 type=ObjectType.AIRCRAFT,
-                meta=self._build_meta(state),
+                meta=cls._build_meta(state),
             )
         except (ValueError, TypeError) as exc:
             # One bad row must not lose the other ten thousand.

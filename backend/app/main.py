@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api import aircraft, auth, health, moon, search
+from app.api import aircraft, auth, health, moon, relay, search
 from app.api import satellites as satellites_api
 from app.api import ships as ships_api
 from app.config import SHIP_JOBS, Settings, get_settings
@@ -327,6 +327,7 @@ def create_app(
     app.include_router(ships_api.router)
     app.include_router(health.router)
     app.include_router(search.router)
+    app.include_router(relay.router)
     return app
 
 

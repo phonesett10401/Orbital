@@ -480,6 +480,14 @@ class Settings(BaseSettings):
             "the gate off and polls continuously."
         ),
     )
+    relay_token: str = Field(
+        default="",
+        description=(
+            "Shared secret for the OpenSky relay (D216): a home connection, "
+            "which OpenSky does not refuse, fetches the world and posts it to "
+            "/api/relay. Empty turns the relay routes off (404)."
+        ),
+    )
     focus_skip_area_sq_deg: float = Field(
         default=400.0,
         gt=0.0,

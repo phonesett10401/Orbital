@@ -197,6 +197,10 @@ class Poller:
             return True
         return time.monotonic() - self._last_client_at > self._idle_after
 
+    def wanted(self) -> bool:
+        """Whether a world sweep is worth making now; the relay asks this (D216)."""
+        return not self._idle()
+
     def snap(self, bbox: BBox) -> BBox:
         """Expand a box outward to the configured grid.
 

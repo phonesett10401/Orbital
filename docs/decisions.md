@@ -12575,3 +12575,26 @@ Cost now scales with hours watched, not hours elapsed - and not with viewers,
 since one sweep serves every tab. The trade: with nobody watching, an outage is
 noticed when the next visitor arrives rather than before. The data is marked
 stale in the meantime, so nothing claims to be current.
+
+## D216
+
+### The world view comes from a home PC (2026-11-22)
+
+Both world feeds closed to the server. OpenSky refuses cloud hosts, Northflank
+included (D207), and adsb.lol began answering a world-sized circle with
+`403 radius exceeds 250 NM`, so the four-circle sweep (D85) cannot work for
+anyone. The world view had been empty since 2026-10-31; only adsb.fi's
+viewport answered.
+
+OpenSky does answer a home connection. So `scripts/opensky_relay.py` runs on a
+home PC at sign-in and, every 120 s, asks `GET /api/relay/wanted` whether anyone
+is watching (the same idle gate as the world sweep), fetches `/states/all` with
+the project's OpenSky account if so, and posts the raw answer gzipped to
+`POST /api/relay/opensky`. The server parses it with the provider's own
+`OpenSkyProvider.parse_states` and applies it to the store like any poll.
+
+Both routes need `ORBITAL_RELAY_TOKEN` as a bearer token and are 404 without
+one. A world answer measured 5,526 aircraft in 219 KB gzipped, 4 credits.
+
+The trade: the world view exists while that PC is on. With it off, the map
+falls back to the viewport feed, which is what it already did.
