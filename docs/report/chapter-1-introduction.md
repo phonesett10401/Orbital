@@ -102,7 +102,7 @@ new layer cost one provider module and one registry entry.
 
 | Source | Provides | Access |
 |---|---|---|
-| adsb.lol | Aircraft | Open Database Licence, no key |
+| adsb.lol | Aircraft | Open Database Licence; a key for automated use since November 2026 |
 | OpenSky Network | Aircraft | Free, non-commercial, OAuth2, metered |
 | Digitraffic (Fintraffic) | Ships, Baltic | CC BY 4.0, commercial permitted, no key |
 | aisstream.io | Ships, global | Free, key required |

@@ -114,7 +114,7 @@ new layer cost one provider module and one registry entry.
 
 | Source | Provides | Access |
 |---|---|---|
-| adsb.lol | Aircraft | Open Database Licence, no key |
+| adsb.lol | Aircraft | Open Database Licence; a key for automated use since November 2026 |
 | OpenSky Network | Aircraft | Free, non-commercial, OAuth2, metered |
 | Digitraffic (Fintraffic) | Ships, Baltic | CC BY 4.0, commercial permitted, no key |
 | aisstream.io | Ships, global | Free, key required |
@@ -988,10 +988,12 @@ late.
 
 ### Data
 
-Five upstream feeds, all free and public: adsb.lol and adsb.fi for aircraft,
+Six upstream feeds, all free: OpenSky, adsb.fi and adsb.lol for aircraft,
 Celestrak and SatNOGS for orbital elements and satellite identity, Digitraffic
-and aisstream for vessels. OpenSky remains supported in the code and is not
-in use.
+and aisstream for vessels. OpenSky refuses cloud hosts, so its world view and
+flight tracks are fetched from a team member's PC and relayed to the server
+(§5.1). adsb.lol now limits a query to 250 nautical miles and asks automated
+clients to use a key, which has been requested.
 
 ### Environment
 
@@ -1087,6 +1089,14 @@ provider kept the interface identical, and **nothing above the ingestion layer
 changed**. The cost was one provider module and one registry entry — the same
 cost the architecture had been designed to make it.
 
+It was realised a second time in November 2026. adsb.lol began refusing any
+query wider than 250 nautical miles and closed its flight traces to automated
+clients, so the world view and the flown route were both lost. OpenSky still
+answers a home connection, so a small relay now runs on a team member's PC,
+fetches from OpenSky and posts to the server (§5.1). Again nothing above the
+ingestion layer changed: the server parses the relayed answer with the same
+OpenSky code and stores it like any poll.
+
 ### R9 was also realised, and cost more
 
 Six working sessions went to a single defect that was misdiagnosed five times.
@@ -1171,6 +1181,7 @@ does not break it.
 | Landing page | Vercel | `/landing`, the same deployment, static files |
 | Backend | Northflank | One container, **one worker** |
 | Accounts database | Northflank volume | SQLite file |
+| OpenSky relay | A team member's PC | Script started at Windows sign-in |
 
 **One worker, deliberately.** The backend holds a websocket open to the AIS
 stream, polls on a schedule, and answers every request from memory. A second
@@ -1178,6 +1189,20 @@ worker would open a second AIS socket, run its own poller and keep its own
 store: the upstream cost would double and two requests could disagree about
 where an aircraft is. It is scaled by making the box bigger, not by adding
 boxes.
+
+**The relay exists because OpenSky refuses cloud hosts.** It answers a home
+connection, so a small script on a team member's PC does the fetching. Every
+three seconds it asks the server what it wants, and the server answers with two
+things:
+
+| Request | Relay does | Cost |
+|---|---|---|
+| Someone is watching, and two minutes have passed | Fetches the world (about 5,500 aircraft) and posts it, gzipped, about 220 KB | 4 credits |
+| A visitor clicked an aircraft | Fetches that aircraft's flown track and posts it | 4 credits |
+
+Both addresses on the server need a shared secret, and are switched off without
+one. With the PC off, the map falls back to adsb.fi for the area in view and to
+the trail the server observed itself, which is now kept for four hours.
 
 ### The numbers that shape it
 

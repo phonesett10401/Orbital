@@ -215,10 +215,12 @@ late.
 
 ### Data
 
-Five upstream feeds, all free and public: adsb.lol and adsb.fi for aircraft,
+Six upstream feeds, all free: OpenSky, adsb.fi and adsb.lol for aircraft,
 Celestrak and SatNOGS for orbital elements and satellite identity, Digitraffic
-and aisstream for vessels. OpenSky remains supported in the code and is not
-in use.
+and aisstream for vessels. OpenSky refuses cloud hosts, so its world view and
+flight tracks are fetched from a team member's PC and relayed to the server
+(§5.1). adsb.lol now limits a query to 250 nautical miles and asks automated
+clients to use a key, which has been requested.
 
 ### Environment
 
@@ -313,6 +315,14 @@ mitigation was not theoretical: a second aircraft feed was added, the union
 provider kept the interface identical, and **nothing above the ingestion layer
 changed**. The cost was one provider module and one registry entry — the same
 cost the architecture had been designed to make it.
+
+It was realised a second time in November 2026. adsb.lol began refusing any
+query wider than 250 nautical miles and closed its flight traces to automated
+clients, so the world view and the flown route were both lost. OpenSky still
+answers a home connection, so a small relay now runs on a team member's PC,
+fetches from OpenSky and posts to the server (§5.1). Again nothing above the
+ingestion layer changed: the server parses the relayed answer with the same
+OpenSky code and stores it like any poll.
 
 ### R9 was also realised, and cost more
 

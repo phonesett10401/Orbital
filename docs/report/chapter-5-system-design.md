@@ -39,6 +39,7 @@ does not break it.
 | Landing page | Vercel | `/landing`, the same deployment, static files |
 | Backend | Northflank | One container, **one worker** |
 | Accounts database | Northflank volume | SQLite file |
+| OpenSky relay | A team member's PC | Script started at Windows sign-in |
 
 **One worker, deliberately.** The backend holds a websocket open to the AIS
 stream, polls on a schedule, and answers every request from memory. A second
@@ -46,6 +47,20 @@ worker would open a second AIS socket, run its own poller and keep its own
 store: the upstream cost would double and two requests could disagree about
 where an aircraft is. It is scaled by making the box bigger, not by adding
 boxes.
+
+**The relay exists because OpenSky refuses cloud hosts.** It answers a home
+connection, so a small script on a team member's PC does the fetching. Every
+three seconds it asks the server what it wants, and the server answers with two
+things:
+
+| Request | Relay does | Cost |
+|---|---|---|
+| Someone is watching, and two minutes have passed | Fetches the world (about 5,500 aircraft) and posts it, gzipped, about 220 KB | 4 credits |
+| A visitor clicked an aircraft | Fetches that aircraft's flown track and posts it | 4 credits |
+
+Both addresses on the server need a shared secret, and are switched off without
+one. With the PC off, the map falls back to adsb.fi for the area in view and to
+the trail the server observed itself, which is now kept for four hours.
 
 ### The numbers that shape it
 
