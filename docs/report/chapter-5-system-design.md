@@ -59,9 +59,39 @@ boxes.
 
 ---
 
+### Structure chart
+
+![Figure 5.2 — Structure chart. Orbital as four modules, each with the parts it is made of.](figures/5-1b-structure-chart.png){width=6.5in}
+
+The structure chart breaks Orbital into four modules, matching the layers
+above with the store drawn as its own module. Each module calls only the one
+beside it, so a change inside one leaves the others untouched.
+
+| Module | Made of |
+|---|---|
+| 1 Data ingestion | The poller, which asks on a timer; one provider per feed; the union provider, which merges feeds |
+| 2 Data store | Live objects held in memory; track history; the accounts database |
+| 3 API service | Live map data; search; sign-in and health |
+| 4 Map frontend | Map layers; details and search; time control |
+
+### Data flow diagram, Level 1
+
+![Figure 5.3 — Data flow diagram, Level 1. From live feeds to the visitor's screen.](figures/5-1c-data-flow-level-1.png){width=6.5in}
+
+| Process | Takes in | Gives out |
+|---|---|---|
+| 1.0 Collect and normalise | Raw positions from the live feeds | Common records |
+| 2.0 Merge, keep newest | Common records | The newest position of each object, written to D1 |
+| 3.0 Serve map data | The visitor's view area or search, and objects from D1 | Map data for that area only |
+| 4.0 Sign in | Email and password | A session, checked against D2 |
+
+D1, the live objects, is held in memory and rebuilt from the feeds after a
+restart. D2, the accounts, is the one store saved to disk. Process 3.0 only
+reads D1 and never calls a feed, so the map never waits for an outside service.
+
 ## 5.2 Database Design
 
-![Figure 5.2 — Entity relationship diagram. Two persisted tables, and the domain entities that have no table.](figures/5-2-er-diagram.png){width=6.5in}
+![Figure 5.4 — Entity relationship diagram. Two persisted tables, and the domain entities that have no table.](figures/5-2-er-diagram.png){width=6.5in}
 
 ### Two tables, and that is the design
 
@@ -119,7 +149,7 @@ still in memory, not by a query.
 `TrackedObject` is the shared shape all three object types normalise to, with
 `TrackPoint`, `Airport` and `FlightRoute` hanging off it. They have real
 structure, real relationships and real cardinality — they simply have no rows.
-They are drawn dashed in Figure 5.2 because omitting them would make the data
+They are drawn dashed in Figure 5.4 because omitting them would make the data
 model look like two tables about sign-in, which is the least interesting part of
 this system.
 
@@ -134,7 +164,7 @@ schema to add.
 
 ### 5.3.1 Class Diagram
 
-![Figure 5.3 — Class diagram of the ingestion layer.](figures/5-3-class-diagram.png){width=6.5in}
+![Figure 5.5 — Class diagram of the ingestion layer.](figures/5-3-class-diagram.png){width=6.5in}
 
 The ingestion layer is the part of Orbital with real class structure, so it is
 the part worth drawing. `Provider` is abstract and declares one required
@@ -161,9 +191,18 @@ that the sky had emptied. Raising makes a failure a failure.
 to a socket, which is the structural reason §5.1's third property is true rather
 than merely intended.
 
+### Class relationships
+
+| Relationship | In Orbital |
+|---|---|
+| Inheritance | Every feed is a `Provider` (AdsbLol, AdsbFi, OpenSky, Satellites), so the poller treats them all the same way |
+| Composition | `UnionProvider` owns its feeds: they are created with it and closed with it |
+| Aggregation | A `Poller` has an `ObjectStore`, but the store outlives it and the API shares it |
+| Association | The API uses the `ObjectStore` to answer requests and never touches a feed |
+
 ### 5.3.2 Sequence Diagram
 
-![Figure 5.4 — Sequence diagram. The poll loop, and a request that does not wait for it.](figures/5-4-sequence-diagram.png){width=6.5in}
+![Figure 5.6 — Sequence diagram. The poll loop, and a request that does not wait for it.](figures/5-4-sequence-diagram.png){width=6.5in}
 
 Two interactions are drawn on one page deliberately. Separately they look like
 an ordinary background job and an ordinary request; together, the actual design
@@ -185,7 +224,7 @@ why viewer count is decoupled from upstream cost entirely.
 
 ### 5.3.3 Activity Diagram
 
-![Figure 5.5 — Activity diagram. One poll cycle, including the ways it fails.](figures/5-5-activity-diagram.png){width=4.9in}
+![Figure 5.7 — Activity diagram. One poll cycle, including the ways it fails.](figures/5-5-activity-diagram.png){width=4.9in}
 
 An activity diagram of the happy path would be a straight line and would say
 nothing. The branches are the content: **three of the four outcomes of a fetch
@@ -209,7 +248,7 @@ failed request.
 
 ## 5.4 User Interface Design
 
-![Figure 5.6 — The deployed interface, annotated. Captured headlessly at 1600 × 950 while the deployment was live.](figures/5-6-ui-design.png){width=6.5in}
+![Figure 5.8 — The deployed interface, annotated. Captured headlessly at 1600 × 950 while the deployment was live.](figures/5-6-ui-design.png){width=6.5in}
 
 This is a screenshot of the running system rather than a wireframe. The counts
 in the status bar — objects drawn, objects in view, data age, and which feed
