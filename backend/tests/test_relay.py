@@ -54,6 +54,25 @@ def test_garbage_is_a_400_not_a_crash():
 
 def test_wanted_follows_viewers():
     with client() as c:
-        assert c.get("/api/relay/wanted", headers=AUTH).json() == {"wanted": False}
+        assert c.get("/api/relay/wanted", headers=AUTH).json()["wanted"] is False
         c.get("/api/aircraft")
-        assert c.get("/api/relay/wanted", headers=AUTH).json() == {"wanted": True}
+        assert c.get("/api/relay/wanted", headers=AUTH).json()["wanted"] is True
+
+
+def test_a_clicked_aircraft_gets_the_track_the_relay_supplies():
+    """D217: the detail request lists the id, the relay posts the path, the line is real."""
+    path = [[1_790_000_000 + 60 * i, 13.0 + 0.1 * i, 100.0 + 0.1 * i, 11_000.0] for i in range(6)]
+    with client() as c:
+        c.post("/api/relay/opensky", content=RAW_SAMPLE.read_bytes(), headers=AUTH)
+        object_id = c.get("/api/aircraft").json()["objects"][0]["id"]
+        c.get("/api/relay/wanted", headers=AUTH)  # the relay checks in
+
+        first = c.get(f"/api/aircraft/{object_id}").json()  # waits its budget, then answers
+        assert first.get("trackSource") != "provider"
+        assert c.get("/api/relay/wanted", headers=AUTH).json()["tracks"] == [object_id]
+
+        r = c.post(f"/api/relay/track/{object_id}", json={"path": path}, headers=AUTH)
+        assert r.json() == {"accepted": True}
+        second = c.get(f"/api/aircraft/{object_id}").json()
+        assert second["trackSource"] == "provider"
+        assert c.get("/api/relay/wanted", headers=AUTH).json()["tracks"] == []

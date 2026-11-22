@@ -14,6 +14,7 @@ from app.config import Settings
 from app.ingestion.flights import FlightHistory
 from app.ingestion.flightroutes import FlightRoutes
 from app.ingestion.poller import Poller
+from app.ingestion.relaytracks import RelayTracks
 from app.ingestion.store import ObjectStore
 
 
@@ -35,3 +36,7 @@ def get_routes(request: Request) -> FlightRoutes:
 
 def get_settings_dep(request: Request) -> Settings:
     return request.app.state.settings
+
+
+def get_relay_tracks(request: Request) -> RelayTracks:
+    return request.app.state.relay_tracks

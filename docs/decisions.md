@@ -12598,3 +12598,25 @@ one. A world answer measured 5,526 aircraft in 219 KB gzipped, 4 credits.
 
 The trade: the world view exists while that PC is on. With it off, the map
 falls back to the viewport feed, which is what it already did.
+
+## D217
+
+### A clicked aircraft's real track, fetched from home (2026-11-22)
+
+The route line had gone back to a guess: 2 observed points and a straight line
+from the schedule. Both sources of a flown path refuse the server now. OpenSky
+blocks it (D207), and adsb.lol's trace host answers every automated client,
+home connections included, with "Automated clients belong on the keyed API".
+A key has been requested.
+
+Until then the relay (D216) fetches it. `FlightHistory` now asks a
+`RelayTracks` instead of the provider: while the relay is checking in, a track
+request puts the id on the list `GET /api/relay/wanted` returns, the relay
+fetches `/tracks/all` from home (4 credits) and posts the path to
+`POST /api/relay/track/{id}`, and the waiting call returns it. The API's
+shielded 3 s budget (D181) means the first poll answers without it and a later
+poll gets it. The relay checks every 3 s, so a click waits about 5 s. Without a
+relay checking in, `RelayTracks` passes straight through to the provider.
+
+And the observed trail is longer: `track_history_points` 50 to 120, four hours
+at the relay's two-minute world poll, for when no track is available at all.

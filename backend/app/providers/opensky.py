@@ -364,11 +364,15 @@ class OpenSkyProvider(Provider):
         if response.status_code >= 400:
             raise ProviderUnavailable(f"OpenSky track request returned {response.status_code}")
 
-        payload = response.json()
+        return self.parse_track(response.json())
+
+    @classmethod
+    def parse_track(cls, payload: Any) -> tuple[TrackPoint, ...] | None:
+        """A ``/tracks/all`` answer as points; public for the relay (D217)."""
         path = payload.get("path") if isinstance(payload, dict) else None
         if not isinstance(path, list) or not path:
             return None
-        return tuple(point for point in map(self._to_track_point, path) if point is not None)
+        return tuple(point for point in map(cls._to_track_point, path) if point is not None)
 
     @staticmethod
     def _to_track_point(waypoint: Any) -> TrackPoint | None:

@@ -20,6 +20,7 @@ from app.api import satellites as satellites_api
 from app.api import ships as ships_api
 from app.config import SHIP_JOBS, Settings, get_settings
 from app.ingestion.poller import Poller
+from app.ingestion.relaytracks import RelayTracks
 from app.ingestion.flights import FlightHistory
 from app.ingestion.flightroutes import FlightRoutes
 from app.ingestion.store import ObjectStore
@@ -118,7 +119,9 @@ def create_app(
         )
         # Bought per selection rather than polled, so it hangs off the app
         # beside the poller rather than inside it (D78).
-        flights = FlightHistory(active_provider)
+        # Tracks come from the home relay while it is checking in (D217).
+        relay_tracks = RelayTracks(active_provider)
+        flights = FlightHistory(relay_tracks)
         # Free, keyless, and unrelated to the position provider: adsbdb answers
         # what a callsign is scheduled to fly, which no position feed carries
         # (D88).
@@ -224,6 +227,7 @@ def create_app(
         app.state.ship_poller = ship_poller
         app.state.ship_stream = ship_stream
         app.state.flights = flights
+        app.state.relay_tracks = relay_tracks
         app.state.routes = route_lookup
         app.state.poller = poller
 

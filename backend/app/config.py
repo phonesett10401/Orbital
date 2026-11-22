@@ -533,9 +533,13 @@ class Settings(BaseSettings):
         ),
     )
     track_history_points: int = Field(
-        default=50,
+        default=120,
         ge=2,
-        description="Ring buffer length per object. This is the route (D6).",
+        description=(
+            "Ring buffer length per object. This is the route (D6). 120 is four "
+            "hours at the relay's two-minute world poll (D217): the trail behind "
+            "an aircraft when no feed will sell its track."
+        ),
     )
 
     # ---- API ---------------------------------------------------------------

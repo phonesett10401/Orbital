@@ -1,11 +1,13 @@
 """Fetch the world from OpenSky on this PC and post it to the Orbital server (D216).
 
 OpenSky refuses cloud hosts but answers a home connection, so this runs at
-Windows sign-in (pythonw, no window) and, every two minutes:
+Windows sign-in (pythonw, no window) and every few seconds asks the server
+what it wants (free):
 
-1. asks the server whether anyone is watching (free), and skips if not;
-2. fetches /states/all with the OpenSky account in backend/.env (4 credits);
-3. posts the raw answer, gzipped, to /api/relay/opensky.
+* any aircraft a visitor has clicked: fetch its /tracks/all (4 credits each)
+  and post it to /api/relay/track/{id} (D217);
+* if anyone is watching and two minutes have passed: fetch /states/all
+  (4 credits) and post it, gzipped, to /api/relay/opensky.
 
 Reads ORBITAL_OPENSKY_CLIENT_ID/SECRET and ORBITAL_RELAY_TOKEN from backend/.env.
 ORBITAL_RELAY_TARGET overrides the server URL. Logs to backend/.cache/relay.log.
@@ -21,6 +23,7 @@ import json
 import logging
 import os
 import sys
+import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -31,34 +34,23 @@ os.chdir(BACKEND)  # so Settings finds backend/.env
 import httpx  # noqa: E402
 
 from app.config import Settings  # noqa: E402
-from app.providers.base import ProviderError, ProviderRateLimited  # noqa: E402
+from app.providers.base import ProviderError  # noqa: E402
 from app.providers.registry import _build_opensky  # noqa: E402
 
 DEFAULT_TARGET = "https://p01--orbital-backend--94zyc488v6xh.code.run"
-INTERVAL_SECONDS = 120.0
+WORLD_INTERVAL_SECONDS = 120.0
+#: How often the server is asked what it wants. Free, and what a click waits on.
+CHECK_SECONDS = 3.0
 
 log = logging.getLogger("relay")
 
 
-async def cycle(opensky, server: httpx.AsyncClient) -> float:
-    """One round. Returns seconds to wait before the next."""
-    try:
-        wanted = (await server.get("/api/relay/wanted")).raise_for_status().json()["wanted"]
-    except (httpx.HTTPError, KeyError, ValueError) as exc:
-        log.warning("server unreachable or refused: %s", exc)
-        return INTERVAL_SECONDS
-    if not wanted:
-        return INTERVAL_SECONDS
-
+async def post_world(opensky, server: httpx.AsyncClient) -> None:
     try:
         payload = await opensky._request_states(None, retry_on_401=True)
-    except ProviderRateLimited as exc:
-        log.warning("OpenSky rate limit: %s", exc)
-        return max(exc.retry_after or 0, INTERVAL_SECONDS)
     except ProviderError as exc:
-        log.warning("OpenSky failed: %s", exc)
-        return INTERVAL_SECONDS
-
+        log.warning("OpenSky world fetch failed: %s", exc)
+        return
     body = gzip.compress(json.dumps(payload).encode())
     try:
         result = (
@@ -69,14 +61,45 @@ async def cycle(opensky, server: httpx.AsyncClient) -> float:
             )
         ).raise_for_status().json()
     except httpx.HTTPError as exc:
-        log.warning("post failed: %s", exc)
-        return INTERVAL_SECONDS
+        log.warning("world post failed: %s", exc)
+        return
     log.info(
-        "posted %d KB: applied=%s held=%s credits_left=%s",
+        "world: posted %d KB, applied=%s held=%s credits_left=%s",
         len(body) // 1024, result.get("applied"), result.get("objects"),
         opensky.remaining_credits,
     )
-    return INTERVAL_SECONDS
+
+
+async def post_track(opensky, server: httpx.AsyncClient, object_id: str) -> None:
+    try:
+        track = await opensky.fetch_track(object_id)
+    except ProviderError as exc:
+        log.warning("OpenSky track %s failed: %s", object_id, exc)
+        track = None
+    # Posted even when empty, so the waiting request is answered now rather
+    # than at its timeout.
+    path = [[p.timestamp.timestamp(), p.lat, p.lon, p.altitude] for p in track or ()]
+    try:
+        (await server.post(f"/api/relay/track/{object_id}", json={"path": path})).raise_for_status()
+    except httpx.HTTPError as exc:
+        log.warning("track post failed: %s", exc)
+        return
+    log.info("track %s: %d points, credits_left=%s", object_id, len(path), opensky.remaining_credits)
+
+
+async def cycle(opensky, server: httpx.AsyncClient, world_due: bool) -> bool:
+    """One check. Returns whether the world was posted."""
+    try:
+        asked = (await server.get("/api/relay/wanted")).raise_for_status().json()
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning("server unreachable or refused: %s", exc)
+        return False
+    for object_id in asked.get("tracks", []):
+        await post_track(opensky, server, object_id)
+    if world_due and asked.get("wanted"):
+        await post_world(opensky, server)
+        return True
+    return False
 
 
 async def main(once: bool) -> None:
@@ -90,12 +113,15 @@ async def main(once: bool) -> None:
         headers={"Authorization": f"Bearer {settings.relay_token}"},
         timeout=60.0,
     ) as server:
+        last_world = -WORLD_INTERVAL_SECONDS
         try:
             while True:
-                delay = await cycle(opensky, server)
+                now = time.monotonic()
+                if await cycle(opensky, server, now - last_world >= WORLD_INTERVAL_SECONDS):
+                    last_world = now
                 if once:
                     return
-                await asyncio.sleep(delay)
+                await asyncio.sleep(CHECK_SECONDS)
         finally:
             await opensky.aclose()
 
@@ -109,4 +135,7 @@ if __name__ == "__main__":
     if once:
         handlers.append(logging.StreamHandler())
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", handlers=handlers)
+    # httpx logs every request at INFO, which at one check every three seconds
+    # is the whole log.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     asyncio.run(main(once))
