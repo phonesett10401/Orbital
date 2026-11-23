@@ -16,25 +16,33 @@ from figures_style import (
 )
 
 apply_base_style()
-fig = plt.figure(figsize=(9.6, 7.4))
-ax = blank_axes(fig, ylim=(-4, 104))
+fig = plt.figure(figsize=(9.6, 8.3))
+ax = blank_axes(fig, ylim=(-4, 117))
 
 # ---- tier 0: the upstreams, outside our boundary -------------------------
+# OpenSky refuses cloud hosts (D216), so its arrow stops at the home relay
+# below instead of reaching the server directly.
 feeds = [
-    (1.5, "adsb.lol", ["primary aircraft feed", "free, rate limited"], AIRCRAFT),
-    (21.0, "adsb.fi", ["supplement, every 120 s", "fills the primary's gaps"], AIRCRAFT),
-    (40.5, "Celestrak", ["TLE orbital elements", "propagated locally"], SATELLITE),
-    (60.0, "SatNOGS", ["satellite names", "and families"], SATELLITE),
-    (79.5, "digitraffic.fi", ["+ aisstream websocket", "vessel positions"], SHIP),
+    (1.5, "OpenSky", ["world aircraft", "refuses cloud hosts"], AIRCRAFT),
+    (17.8, "adsb.lol", ["close-up aircraft", "250 nm radius"], AIRCRAFT),
+    (34.1, "adsb.fi", ["close-up aircraft", "area in view"], AIRCRAFT),
+    (50.4, "Celestrak", ["TLE elements", "propagated locally"], SATELLITE),
+    (66.7, "SatNOGS", ["satellite names", "and families"], SATELLITE),
+    (83.0, "digitraffic.fi", ["+ aisstream", "vessel positions"], SHIP),
 ]
-for x, name, lines, colour in feeds:
-    box(ax, x, 86.5, 19.0, 11.0, colour=colour, title=name, lines=lines,
-        title_size=9.0, body_size=6.9, dashed=True)
-    arrow(ax, (x + 9.5, 86.5), (x + 9.5, 79.5), colour=colour, width=1.3)
+for i, (x, name, lines, colour) in enumerate(feeds):
+    box(ax, x, 99.5, 15.5, 11.0, colour=colour, title=name, lines=lines,
+        title_size=8.8, body_size=6.7, dashed=True)
+    arrow(ax, (x + 7.75, 99.5), (x + 7.75, 94.0 if i == 0 else 79.5),
+          colour=colour, width=1.3)
 
-# A white halo, because this line crosses two of the arrows above it and the
-# alternative - moving it clear - costs the vertical space the tiers need.
-ax.text(50, 82.9, "HTTPS, once per interval, once per server  —  the browser never talks to a source",
+# The relay: outside the server, on a team member's PC.
+box(ax, 1.5, 84.5, 15.5, 9.5, colour=AIRCRAFT, title="Home relay",
+    lines=["team member's PC", "posts to /api/relay"], title_size=8.4, body_size=6.5)
+arrow(ax, (9.25, 84.5), (9.25, 79.5), colour=AIRCRAFT, width=1.3)
+
+# A white halo, because this line crosses the feed arrows.
+ax.text(58, 89.2, "HTTPS, once per interval, once per server  —  the browser never talks to a source",
         ha="center", va="center", fontsize=7.4, color=ACCENT, fontweight="bold",
         path_effects=[pe.withStroke(linewidth=5.0, foreground="#FFFFFF")])
 
@@ -100,7 +108,7 @@ for x, title, lines in front:
 legend(ax, [
     (AIRCRAFT, "Aircraft"), (SATELLITE, "Satellites"), (SHIP, "Ships"),
     (BACKEND, "Backend"), (FRONTEND, "Frontend"), (STORE, "Persistent / stateful"),
-], x=1.5, y=99.6, gap=16.2)
+], x=1.5, y=113.2, gap=16.2)
 
 out = pathlib.Path(__file__).parent / "figures" / "5-1-system-architecture.png"
 fig.savefig(out, dpi=DPI)

@@ -5,7 +5,7 @@
 Orbital is three layers with one rule between them: **data flows in one
 direction, and each layer knows only the layer directly beneath it.**
 
-![Figure 5.1 — System architecture. Five external feeds, three internal layers, and one direction of flow.](figures/5-1-system-architecture.png){width=6.5in}
+![Figure 5.1 — System architecture. Six external feeds, one reached through a home relay, three internal layers, and one direction of flow.](figures/5-1-system-architecture.png){width=6.5in}
 
 ### The three layers
 
@@ -39,7 +39,7 @@ does not break it.
 | Landing page | Vercel | `/landing`, the same deployment, static files |
 | Backend | Northflank | One container, **one worker** |
 | Accounts database | Northflank volume | SQLite file |
-| OpenSky relay | A team member's PC | Script started at Windows sign-in |
+| OpenSky relay | A team member's PC | Script kept running by a Windows task, on mains or battery |
 
 **One worker, deliberately.** The backend holds a websocket open to the AIS
 stream, polls on a schedule, and answers every request from memory. A second
