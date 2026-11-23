@@ -12,7 +12,9 @@ what it wants (free):
 Reads ORBITAL_OPENSKY_CLIENT_ID/SECRET and ORBITAL_RELAY_TOKEN from backend/.env.
 ORBITAL_RELAY_TARGET overrides the server URL. Logs to backend/.cache/relay.log.
 
-Run once by hand with ``--once`` to test.
+Kept alive by the Windows task "Orbital OpenSky relay", which starts it every
+five minutes; a running copy makes the new one exit. Run once by hand with
+``--once`` to test (stop the running copy first).
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import gzip
 import json
 import logging
 import os
+import socket
 import sys
 import time
 from logging.handlers import RotatingFileHandler
@@ -41,6 +44,8 @@ DEFAULT_TARGET = "https://p01--orbital-backend--94zyc488v6xh.code.run"
 WORLD_INTERVAL_SECONDS = 120.0
 #: How often the server is asked what it wants. Free, and what a click waits on.
 CHECK_SECONDS = 3.0
+#: Held while a relay runs, so a second one exits at once.
+INSTANCE_PORT = 47816
 
 log = logging.getLogger("relay")
 
@@ -117,8 +122,11 @@ async def main(once: bool) -> None:
         try:
             while True:
                 now = time.monotonic()
-                if await cycle(opensky, server, now - last_world >= WORLD_INTERVAL_SECONDS):
-                    last_world = now
+                try:
+                    if await cycle(opensky, server, now - last_world >= WORLD_INTERVAL_SECONDS):
+                        last_world = now
+                except Exception:  # noqa: BLE001 - one bad cycle must not end the relay
+                    log.exception("cycle failed")
                 if once:
                     return
                 await asyncio.sleep(CHECK_SECONDS)
@@ -128,6 +136,13 @@ async def main(once: bool) -> None:
 
 if __name__ == "__main__":
     once = "--once" in sys.argv
+    # One relay at a time: a scheduled task restarts it every few minutes, and
+    # a second copy would double every OpenSky fetch.
+    _instance = socket.socket()
+    try:
+        _instance.bind(("127.0.0.1", INSTANCE_PORT))
+    except OSError:
+        sys.exit(0 if not once else "a relay is already running")
     (BACKEND / ".cache").mkdir(exist_ok=True)
     handlers: list[logging.Handler] = [
         RotatingFileHandler(BACKEND / ".cache" / "relay.log", maxBytes=1_000_000, backupCount=1)
