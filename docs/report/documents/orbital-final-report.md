@@ -22,13 +22,13 @@ and free to collect.
 
 It is difficult to use. Four problems stand in the way.
 
-**The raw formats cannot be displayed as received.** ADS-B reports altitude in
+The raw formats cannot be displayed as received. ADS-B reports altitude in
 feet and speed in knots. AIS encodes "not available" as a number inside the
 valid range, so a vessel with no speed reading transmits 102.3 knots. Orbital
 elements are a text format that must be run through a physics model before it
 means a position.
 
-**Every free source is incomplete, in different places.** Measured on identical
+Every free source is incomplete, in different places. Measured on identical
 areas, OpenSky reported 22 aircraft over Myanmar where adsb.lol reported 4;
 adsb.lol reported 33 over inland China where OpenSky reported none.
 
@@ -224,8 +224,7 @@ system, not just the code.
 once a second. Coverage depends on a receiver being in range, which is why
 oceanic regions are sparse in every terrestrial network.
 
-**AIS.** Vessels broadcast position every few seconds and identity — name, type,
-dimensions, destination — every six minutes. Two consequences follow. "Not
+**AIS.** Vessels broadcast position every few seconds and identity (name, type, dimensions and destination) every six minutes. Two consequences follow. "Not
 available" is a number rather than a blank: a speed of 102.3 knots, a course of
 360° and a heading of 511 all mean the transmitter did not say. And identity
 accumulates far more slowly than position: measured at 26.5 static messages per
@@ -240,7 +239,7 @@ in one live feed, 87 were over a year old and the oldest was from 1975. Anything
 past seven days is refused.
 
 **Map projection.** A pixel covers a different ground distance at every zoom and
-latitude — about 750 m at zoom 7, about 6 m at zoom 14. This arithmetic
+latitude: about 750 m at zoom 7, about 6 m at zoom 14. This arithmetic
 determines how often the display needs redrawing, and it is why drawing every
 object at every zoom is neither useful nor affordable.
 
@@ -250,7 +249,7 @@ The alpha channel encodes distance rather than coverage, so thin detail
 dissolves when scaled down; marker artwork is therefore deliberately chunky.
 
 **HTTP conditional requests.** The polled endpoints use ETags. When the data has
-not changed the server returns 304 Not Modified before reading its store — no
+not changed the server returns 304 Not Modified before reading its store, so there is no
 filtering, thinning, serialisation or compression.
 
 ## 2.3 Related Information Systems
@@ -266,8 +265,7 @@ filtering, thinning, serialisation or compression.
 
 Each individual layer is done better elsewhere by organisations with larger
 networks. What distinguishes Orbital is that three classes of object with three
-different acquisition models — observed and metered, observed and free, and
-computed — are presented on one map through one shared data shape.
+different acquisition models (observed and metered, observed and free, and computed) are presented on one map through one shared data shape.
 
 A deliberate search found no free, global, key-less ship feed equivalent to
 adsb.lol. An AIS receiver is a real installation rather than a cheap dongle, so
@@ -280,7 +278,7 @@ Orbital's stakeholder map has an unusual shape: most of its stakeholders are
 upstream. The parties with the greatest power over whether the system works are
 the data providers, none of whom have any relationship with the project.
 
-**Upstream — the data providers**
+**Upstream: the data providers**
 
 | Stakeholder | Interest | Power | How the design responds |
 |---|---|---|---|
@@ -296,7 +294,7 @@ system is designed so any of them failing degrades the display rather than
 breaking it. That is a requirement derived from stakeholder analysis rather than
 a technical preference.
 
-**Downstream — the users**
+**Downstream: the users**
 
 | Stakeholder | Needs | Power |
 |---|---|---|
@@ -333,7 +331,7 @@ interfaces, the shared data contract and the operating constraints.
 
 ```
   External feeds  ->  1. INGESTION  ->  2. API  ->  3. FRONTEND
-  (six sources)       providers,        reads the    MapLibre and
+(six sources)       providers,        reads the    MapLibre and
                       poller, store     store only   React client
 ```
 
@@ -512,8 +510,8 @@ Measurable conditions on speed, failure behaviour, security and how the code is 
 | NFR-03 | List endpoint response | < 100 ms | 23 ms |
 | NFR-04 | Combined search response | < 100 ms | 47 ms |
 | NFR-05 | Detail lookup | < 10 ms | 0.01 ms |
-| NFR-06 | Responses compressed | — | 366 KB to 24.5 KB |
-| NFR-07 | No request may block the event loop indefinitely | — | Result count clamped |
+| NFR-06 | Responses compressed | Required | 366 KB to 24.5 KB |
+| NFR-07 | No request may block the event loop indefinitely | Required | Result count clamped |
 
 **Reliability**
 
@@ -621,8 +619,8 @@ four-minute-old positions looks exactly like a map of live ones.
 
 # Chapter 4: Project Methodology
 
-The project was run as a sequence of **incremental phases, each delivering a
-working vertical slice**: one kind of object taken all the way from its data
+The project was run as a sequence of incremental phases, each delivering a
+working vertical slice: one kind of object taken all the way from its data
 feed to a marker on the deployed map before the next was started. Each phase
 ended with a team review that accepted the phase or listed what was
 outstanding. The phases are listed in §6.2.
@@ -643,7 +641,7 @@ The work is broken down to the level at which one person owns one deliverable.
 Decomposing further produces a task list that is stale within a week;
 decomposing less leaves nobody accountable for anything.
 
-![Figure 4.1 — Work breakdown structure. Six work packages, each decomposed to a deliverable with a named owner.](figures/4-1-work-breakdown.png){width=6.4in}
+![Figure 4.1: Work breakdown structure. Six work packages, each decomposed to a deliverable with a named owner.](figures/4-1-work-breakdown.png){width=6.4in}
 
 | WBS | Work package | Primary owner | Key deliverable |
 |---|---|---|---|
@@ -654,18 +652,17 @@ decomposing less leaves nobody accountable for anything.
 | 5 | Quality and Testing | Han Phyo Htet, Nyan Lin Htet, Pyae Phyo Maung | Test plan, suites, defect log, UAT |
 | 6 | Environment and Delivery | Nyan Lin Htet | Build, feeds and keys, deployment, report |
 
-**Package 3 is decomposed by phase rather than by component**, which is not the
-conventional choice. A component breakdown — "the ingestion layer", "the API" —
-would describe the architecture rather than the work, and would hide the fact
+Package 3 is decomposed by phase rather than by component, which is not the
+conventional choice. A component breakdown, such as "the ingestion layer" and "the API", would describe the architecture rather than the work, and would hide the fact
 that most later packages touch the ingestion layer only by adding one file to
 it. Breaking it down by delivered phase makes the actual shape of the effort
 visible: each new object type is one provider module and one registry entry.
 
 **Schedule**
 
-![Figure 4.2 — Planned schedule. Twelve weeks, six work packages, three milestones.](figures/4-2-gantt-chart.png){width=6.6in}
+![Figure 4.2: Planned schedule. Twelve weeks, six work packages, three milestones.](figures/4-2-gantt-chart.png){width=6.6in}
 
-**This is the plan, not the log.** The bars are what the team undertook to do
+This is the plan, not the log. The bars are what the team undertook to do
 and the order the dependencies allow. What was actually delivered, phase by
 phase, is listed in §6.2 and Appendix A.4. Keeping
 them apart matters: a Gantt chart redrawn after the fact to match what happened
@@ -687,7 +684,7 @@ vertical slice is parallel: the satellite layer, the ship layer and the accounts
 work each touch a different provider or a different route, and none of them
 blocks another.
 
-**That is a designed property, not a fortunate one.** The shared data shape was
+That is a designed property, not a fortunate one. The shared data shape was
 specified before any provider was written precisely so that the second and third
 object types would not sit behind the first. The measured evidence that it
 worked is in Appendix A.4: the ship layer cost the same as the satellite layer four
@@ -695,15 +692,15 @@ months later, and the polling logic was not modified for either.
 
 **Scheduling assumption**
 
-The window is twelve weeks from **25 August 2026**, the date of the first
-commit. If the module's submission date differs, the plan shifts with it — the
+The window is twelve weeks from 25 August 2026, the date of the first
+commit. If the module's submission date differs, the plan shifts with it; the
 dependencies and durations do not change, only the calendar they are laid
 against.
 
 ## 4.2 Risk Management Plan (Traceability Matrix)
 
-Probability and impact are graded **H/M/L**. The response column says what was
-actually built or done, not what would ideally be done — a risk register of
+Probability and impact are graded H/M/L. The response column says what was
+actually built or done, not what would ideally be done, because a risk register of
 intentions is a document nobody checks against the system.
 
 | # | Risk | P | I | Response |
@@ -719,23 +716,27 @@ intentions is a document nobody checks against the system.
 | R9 | A defect resists diagnosis and consumes the schedule | M | H | Every defect written down with how it was found; a fix counts as fixed when demonstrated, not when written |
 | R10 | A decision correct when made becomes wrong later | M | M | Decision record carries alternatives and reasoning, so a reversal is cheap and evidenced |
 
-**Ordered by how much each one shaped the system, rather than by probability
-times impact.** R1 to R5 are the ones with a *structural* mitigation — something
+Ordered by how much each one shaped the system, rather than by probability
+times impact. R1 to R5 are the ones with a structural mitigation: something
 in the architecture exists because of them, and would not exist otherwise:
 
-- **R1** is why a provider can be two providers. The union hides the pair
-  behind one interface, so a feed disappearing costs one module.
-- **R2** is why there is exactly one backend. A hundred open tabs cost the same
-  upstream quota as one, because the browser never calls a source.
-- **R3** is why responses are capped at 2,000, why one object layer is drawn at
-  a time, and why positions are interpolated between polls rather than fetched.
-- **R4** is why the list endpoint answers conditional requests, and why the
-  ETag is computed from the store's version counter *before* the store is read.
-- **R5** is why the status bar exists in the form it does, why a marker fades
-  rather than simply staying put, and why a provider raises instead of
-  returning what it managed to get.
+**R1** is why a provider can be two providers. The union hides the pair
+behind one interface, so a feed disappearing costs one module.
 
-The remaining five are managed by practice rather than by structure — a
+**R2** is why there is exactly one backend. A hundred open tabs cost the same
+upstream quota as one, because the browser never calls a source.
+
+**R3** is why responses are capped at 2,000, why one object layer is drawn at
+a time, and why positions are interpolated between polls rather than fetched.
+
+**R4** is why the list endpoint answers conditional requests, and why the
+ETag is computed from the store's version counter before the store is read.
+
+**R5** is why the status bar exists in the form it does, why a marker fades
+rather than simply staying put, and why a provider raises instead of
+returning what it managed to get.
+
+The remaining five are managed by practice rather than by structure: a
 credential kept out of a file, a defect written down, a decision recorded. That
 is a weaker kind of mitigation, because it depends on somebody continuing to do
 it, and that is why they come second.
@@ -762,20 +763,20 @@ requirement and a test behind it.
 **R4 in detail, because it is the one with a ceiling**
 
 The client polls every 10 seconds and tier 1 refreshes every 300, so roughly
-**twenty-nine polls in thirty ask for a snapshot that has not changed**. Each
+twenty-nine polls in thirty ask for a snapshot that has not changed. Each
 of those would otherwise serialise two thousand objects, gzip them and write
-them to a socket — on the single event loop the poller runs on. The ETag turns
+them to a socket, on the single event loop the poller runs on. The ETag turns
 them into a header comparison, and because the tag is computed from the store's
 version counter and the query before the store is read, a 304 never builds the
 response at all.
 
 The one poll in thirty that does change costs the measured work in Appendix A.1: a
 bounding-box filter and a thinning pass, together under one and a half
-milliseconds at the 2,000 cap. **Upstream cost does not move at all** with
+milliseconds at the 2,000 cap. Upstream cost does not move at all with
 viewer count, because the browser never calls a source.
 
-**Where the ceiling is, honestly.** Scaling is vertical only. A second worker
-would open a second AIS websocket, run its own poller and keep its own store —
+Where the ceiling is, honestly. Scaling is vertical only. A second worker
+would open a second AIS websocket, run its own poller and keep its own store,
 doubling the upstream cost and letting two requests disagree about where an
 aircraft is. So the answer to sustained growth is a bigger box until a bigger
 box runs out, and past that the design has to change: a shared store the
@@ -786,12 +787,12 @@ risk register that records only the risks with comfortable answers is not one.
 **R5 is the one a tracker has to take seriously**
 
 Every other risk here is visible when it happens: a blank layer, a slow page, a
-failed deploy. **This one is invisible by construction.** A map showing
+failed deploy. This one is invisible by construction. A map showing
 positions from four minutes ago looks exactly like a map showing positions from
 four seconds ago, and a sample of two thousand aircraft looks exactly like all
 of them. The user cannot detect the failure, so the system has to declare it.
 
-That is why Objective O5 — honest reporting of what is shown — is an objective
+That is why Objective O5, honest reporting of what is shown, is an objective
 rather than a nicety, and why the status bar reports sampling, age and source
 rather than leaving them to be assumed.
 
@@ -799,8 +800,8 @@ rather than leaving them to be assumed.
 
 OpenSky became unreachable from every cloud host during the project. The
 mitigation was not theoretical: a second aircraft feed was added, the union
-provider kept the interface identical, and **nothing above the ingestion layer
-changed**. The cost was one provider module and one registry entry — the same
+provider kept the interface identical, and nothing above the ingestion layer
+changed. The cost was one provider module and one registry entry, the same
 cost the architecture had been designed to make it.
 
 It was realised a second time in November 2026. adsb.lol began refusing any
@@ -814,8 +815,7 @@ OpenSky code and stores it like any poll.
 **R9 was also realised, and cost more**
 
 Six working sessions went to a single defect that was misdiagnosed five times.
-The cause was structural — one camera serving two pictures at very different
-scales — and the resolution deleted 376 lines, added 130, and cost no feature.
+The cause was structural (one camera serving two pictures at very different scales), and the resolution deleted 376 lines, added 130, and cost no feature.
 It is recorded here because a risk register that lists only the risks that were
 survived cheaply is not a risk register.
 
@@ -848,7 +848,7 @@ and backs up another, so no area depends on one person alone.
 Seven roles across five people, so most members hold two. That is a
 consequence of team size rather than a design: with five people, a role per
 person would leave two roles unfilled, and the two that would go are quality
-assurance and technical environment — the two whose absence is invisible until
+assurance and technical environment, the two whose absence is invisible until
 late.
 
 ## 4.4 Communication and Coordination Channels
@@ -867,15 +867,15 @@ late.
 The single largest risk to a part-time team is not technical: it is that context
 is lost between sessions and re-derived at full cost. Every session therefore
 ends with a written handover, and it is package 1.4 in the WBS with an owner
-against it — because a practice that is only a good intention is a practice that
+against it, because a practice that is only a good intention is a practice that
 stops the first week somebody is busy.
 
 **Escalation**
 
 A blocked item is raised in the handover. If it remains blocked at the next
 session it goes to the Project Manager, who decides whether it is in the current
-phase at all. **A blocker that is out of the phase is closed rather than
-carried**, which is how the phase boundary does its job: the alternative is a
+phase at all. A blocker that is out of the phase is closed rather than
+carried, which is how the phase boundary does its job: the alternative is a
 list that grows all semester and is resolved by the deadline rather than by
 anyone.
 
@@ -888,10 +888,10 @@ anyone.
 
 ## 5.1 System Architecture
 
-Orbital is three layers with one rule between them: **data flows in one
-direction, and each layer knows only the layer directly beneath it.**
+Orbital is three layers with one rule between them: data flows in one
+direction, and each layer knows only the layer directly beneath it.
 
-![Figure 5.1 — System architecture. Six external feeds, one reached through a home relay, three internal layers, and one direction of flow.](figures/5-1-system-architecture.png){width=6.5in}
+![Figure 5.1: System architecture. Six external feeds, one reached through a home relay, three internal layers, and one direction of flow.](figures/5-1-system-architecture.png){width=6.5in}
 
 **The three layers**
 
@@ -903,17 +903,17 @@ direction, and each layer knows only the layer directly beneath it.**
 
 **Three properties follow, and they are the design**
 
-**The browser never talks to a data source.** Every external call goes through
+The browser never talks to a data source. Every external call goes through
 the backend, so rate limiting and caching are enforced in exactly one place. A
 hundred open browser tabs cost the same upstream quota as one. This is what made
 adding a second aircraft feed a backend-only change: the frontend was never
 told, because there was nothing to tell it.
 
-**Either end can be replaced without touching the other**, and both have been.
+Either end can be replaced without touching the other, and both have been.
 The backend gained a second upstream and the frontend gained an entirely
 different renderer, neither requiring a change on the other side of the wire.
 
-**Upstream failure is contained at layer 1.** The API serves the last good
+Upstream failure is contained at layer 1. The API serves the last good
 snapshot with an explicit staleness flag. A feed outage degrades the display; it
 does not break it.
 
@@ -934,7 +934,7 @@ store: the upstream cost would double and two requests could disagree about
 where an aircraft is. It is scaled by making the box bigger, not by adding
 boxes.
 
-**The relay exists because OpenSky refuses cloud hosts.** It answers a home
+The relay exists because OpenSky refuses cloud hosts. It answers a home
 connection, so a small script on a team member's PC does the fetching. Every
 three seconds it asks the server what it wants, and the server answers with two
 things:
@@ -960,7 +960,7 @@ the trail the server observed itself, which is now kept for four hours.
 
 **Data flow diagram, Level 1**
 
-![Figure 5.2 — Data flow diagram, Level 1. From live feeds to the visitor's screen.](figures/5-1c-data-flow-level-1.png){width=6.5in}
+![Figure 5.2: Data flow diagram, Level 1. From live feeds to the visitor's screen.](figures/5-1c-data-flow-level-1.png){width=6.5in}
 
 | Process | Takes in | Gives out |
 |---|---|---|
@@ -977,7 +977,7 @@ reads D1 and never calls a feed, so the map never waits for an outside service.
 
 ### 5.2.1 Database Design
 
-![Figure 5.3 — Entity relationship diagram. Two persisted tables, and the domain entities that have no table.](figures/5-2-er-diagram.png){width=6.5in}
+![Figure 5.3: Entity relationship diagram. Two persisted tables, and the domain entities that have no table.](figures/5-2-er-diagram.png){width=6.5in}
 
 **Two tables, and that is the design**
 
@@ -1005,7 +1005,7 @@ CREATE INDEX sessions_account ON sessions (account_id);
 An account holds many sessions: one per signed-in device, each expiring on its
 own schedule.
 
-**The raw session token is returned once, at creation, and never stored.** Only
+The raw session token is returned once, at creation, and never stored. Only
 its hash is in the table, so the token exists in the user's cookie and nowhere
 else. A copy of the database does not let anyone sign in as anybody.
 
@@ -1018,13 +1018,14 @@ window is evicted. Nothing about an aircraft is written to disk at all.
 
 Three consequences, and all three are wanted:
 
-- **The API cannot be slow because a database is slow**, because there is no
-  database on the request path for tracked objects.
-- **There is no schema migration** for the thing that changes most often — the
-  shape of a feed — because a feed's shape is normalised at the boundary and
-  never stored in its own form.
-- **Restarting is cheap and safe.** The only state worth keeping is an account,
-  and that is the only state kept.
+The API cannot be slow because a database is slow, because there is no
+database on the request path for tracked objects.
+
+There is no schema migration for the thing that changes most often, the shape of a feed, because a feed's shape is normalised at the boundary and
+never stored in its own form.
+
+Restarting is cheap and safe. The only state worth keeping is an account,
+and that is the only state kept.
 
 The cost is equally plain: Orbital cannot answer a question about last Tuesday.
 Entitlement windows of twenty-four hours and seven days are bounded by what is
@@ -1034,12 +1035,12 @@ still in memory, not by a query.
 
 `TrackedObject` is the shared shape all three object types normalise to, with
 `TrackPoint`, `Airport` and `FlightRoute` hanging off it. They have real
-structure, real relationships and real cardinality — they simply have no rows.
+structure, real relationships and real cardinality; they simply have no rows.
 They are drawn dashed in Figure 5.3 because omitting them would make the data
 model look like two tables about sign-in, which is the least interesting part of
 this system.
 
-**One shape holds all three object types, and the absent fields are `None`.** An
+One shape holds all three object types, and the absent fields are `None`. An
 aircraft has a route and a track; a satellite and a ship have neither. This is
 what makes a new object type cost one ingestion module: there is no per-type
 schema to add.
@@ -1054,7 +1055,7 @@ schema to add.
 
 #### 5.2.2.1 Use Case Diagram
 
-![Figure 5.4 — Use case diagram. Eleven use cases, five actors, one system boundary.](figures/3-1-use-case-diagram.png){width=6.5in}
+![Figure 5.4: Use case diagram. Eleven use cases, five actors, one system boundary.](figures/3-1-use-case-diagram.png){width=6.5in}
 
 UC-03 includes UC-01. UC-06 extends UC-01 when an instant is chosen, if that
 instant lies within the actor's entitlement window. UC-07 to UC-10 are started
@@ -1085,7 +1086,7 @@ figures are reported.
 
 1. The viewer selects Aircraft, Satellites or Ships.
 2. The system clears the current selection and objects.
-3. All surrounding text changes with the layer — subtitle, search placeholder,
+3. All surrounding text changes with the layer: subtitle, search placeholder,
    count noun and colour key.
 4. Layer-specific furniture is hidden; airports and receiver coverage belong to
    the aircraft layer.
@@ -1186,16 +1187,16 @@ There is no interface for this and no endpoint that can perform it.
 
 #### 5.2.2.2 Class Diagram
 
-![Figure 5.5 — Class diagram of the ingestion layer.](figures/5-3-class-diagram.png){width=6.5in}
+![Figure 5.5: Class diagram of the ingestion layer.](figures/5-3-class-diagram.png){width=6.5in}
 
 The ingestion layer is the part of Orbital with real class structure, so it is
 the part worth drawing. `Provider` is abstract and declares one required
 operation: fetch, given an optional bounding box, and return the normalised
-shape. Seven concrete providers implement it — one per upstream, plus an offline
+shape. Seven concrete providers implement it: one per upstream, plus an offline
 fixture that needs no credentials.
 
-**`UnionProvider` is the design point.** It inherits `Provider` *and holds two
-of them*: the primary answers every poll, the supplement answers every 120
+`UnionProvider` is the design point. It inherits `Provider` and holds two
+of them: the primary answers every poll, the supplement answers every 120
 seconds, and the results are merged. A caller cannot tell a pair of feeds from a
 single feed.
 
@@ -1204,12 +1205,11 @@ became unreachable from every cloud host, the change was one provider module and
 one registry entry; the poller, the store, the API and the entire frontend were
 untouched, because none of them can observe the difference.
 
-`Provider` also raises rather than returning partial results —
-`ProviderUnavailable`, `ProviderRateLimited`, `ProviderBadResponse`. A provider
+`Provider` also raises rather than returning partial results, raising `ProviderUnavailable`, `ProviderRateLimited`, `ProviderBadResponse`. A provider
 that returned nine hundred aircraft instead of two thousand would be reporting
 that the sky had emptied. Raising makes a failure a failure.
 
-**The API never holds a `Provider`.** There is no call path from an HTTP request
+The API never holds a `Provider`. There is no call path from an HTTP request
 to a socket, which is the structural reason §5.1's third property is true rather
 than merely intended.
 
@@ -1224,11 +1224,11 @@ than merely intended.
 
 #### 5.2.2.3 Sequence Diagram
 
-![Figure 5.6 — Sequence diagram. The poll loop, and a request that does not wait for it.](figures/5-4-sequence-diagram.png){width=6.5in}
+![Figure 5.6: Sequence diagram. The poll loop, and a request that does not wait for it.](figures/5-4-sequence-diagram.png){width=6.5in}
 
 Two interactions are drawn on one page deliberately. Separately they look like
 an ordinary background job and an ordinary request; together, the actual design
-is visible — **they never touch.**
+is visible: they never touch.
 
 **A.** The poller wakes on its interval, asks the provider to fetch, normalises
 what comes back, and applies it to the store. This runs whether or not anyone is
@@ -1246,7 +1246,7 @@ why viewer count is decoupled from upstream cost entirely.
 
 ## 5.3 Structure Chart
 
-![Figure 5.7 — Structure chart. Orbital as four modules, each with the parts it is made of.](figures/5-1b-structure-chart.png){width=6.5in}
+![Figure 5.7: Structure chart. Orbital as four modules, each with the parts it is made of.](figures/5-1b-structure-chart.png){width=6.5in}
 
 The structure chart breaks Orbital into four modules, matching the layers
 above with the store drawn as its own module. Each module calls only the one
@@ -1277,13 +1277,13 @@ Orbital is tested at four levels, each answering a different question:
 | Integration (§6.1.4) | Do the pieces, and the outside services, work together? | API tests through the full server, plus checks against every real feed | On every change, and against live feeds before release |
 | System (§6.1.5) | Does the whole system meet its performance, reliability and usability targets? | Measurement in the browser, benchmarks, observed outages | Per phase, and whenever a target could be affected |
 
-**No automated test touches the network or spends an API credit.** Every
+No automated test touches the network or spends an API credit. Every
 provider is tested against recorded responses, so both suites run anywhere, in
 seconds to minutes, and give the same answer every time. The price is that a
 change in a real feed is invisible to them, which is why the integration and
 system levels run against the live services.
 
-**A test only counts if it can fail.** When a test is written for a bug, the
+A test only counts if it can fail. When a test is written for a bug, the
 fix is removed again to confirm the test fails without it. Two kinds of test
 that passed while proving nothing were found this way and are now checked for.
 
@@ -1358,7 +1358,7 @@ cd frontend && npm test
 | Panels and interface logic | 224 | Detail panel fields, search history, airline decoding, page routing, the application state |
 | Accounts, tiers and ads | 78 | Sign-in flows, entitlements, the time control's window, advertising and premium |
 
-**What the unit tests do not cover.** No unit test runs the graphics card, so
+What the unit tests do not cover. No unit test runs the graphics card, so
 what is drawn on screen is checked by looking at the running application
 (§6.1.3, §6.1.5). React components are tested through their logic, not by
 rendering them. Both gaps are why the functional and system tests exist.
@@ -1387,8 +1387,7 @@ orbital-liveview.vercel.app, in Chrome at 1600 × 950. They were last run on
 
 ### 6.1.4 Integration Testing
 
-**Inside the system.** The API tests start the whole server in memory —
-providers, poller, store and routes together — and talk to it over HTTP the way
+**Inside the system.** The API tests start the whole server in memory (providers, poller, store and routes together) and talk to it over HTTP the way
 the browser does. The most complete one follows the relay end to end: the
 relay posts the worldwide answer, a visitor opens an aircraft, the server puts
 it on the relay's list, the relay posts the flown track, and the visitor's
@@ -1434,7 +1433,7 @@ within two minutes.
 **Usability.** Every layer was used signed out (NFR-30) and at 375 px phone
 width (NFR-33).
 
-**Defects found in system testing.** Each was fixed and re-tested.
+Defects found in system testing. Each was fixed and re-tested.
 
 | # | Defect | Found | Cause | Fix |
 |---|---|---|---|---|
@@ -1456,7 +1455,7 @@ is accepted.
 |---|---|---|---|
 | Development | Vite dev server on the developer's PC | uvicorn on the developer's PC | Recorded fixtures, or the live feeds |
 | Production | Vercel, orbital-liveview.vercel.app | Northflank, one container, one worker | Live feeds; accounts on a persistent volume |
-| Relay | — | Python script on a team member's PC, kept running by Windows Task Scheduler | OpenSky, posted to production |
+| Relay | Not used | Python script on a team member's PC, kept running by Windows Task Scheduler | OpenSky, posted to production |
 
 **Deployment process**
 
@@ -1467,8 +1466,7 @@ is accepted.
 5. The live site is checked again: the affected screens, the status bar and the
    health endpoint.
 
-Secrets — the OpenSky client credentials, the aisstream key and the relay's
-shared token — are set as environment variables on Northflank and in a
+Secrets, namely the OpenSky client credentials, the aisstream key and the relay's shared token, are set as environment variables on Northflank and in a
 git-ignored file on the relay PC. They are never committed or printed.
 
 **Phased implementation**
@@ -1515,44 +1513,42 @@ screenshot is followed by what the screen is for and how it works. The
 
 ## 7.1 Interface Layout
 
-![Figure 7.1 — The deployed interface, annotated. Captured headlessly at 1600 × 950 while the deployment was live.](figures/5-6-ui-design.png){width=6.5in}
+![Figure 7.1: The deployed interface, annotated. Captured headlessly at 1600 × 950 while the deployment was live.](figures/5-6-ui-design.png){width=6.5in}
 
 This is a screenshot of the running system rather than a wireframe. The counts
-in the status bar — objects drawn, objects in view, data age, and which feed
-answered — are the real ones at the moment of capture.
+in the status bar (objects drawn, objects in view, data age, and which feed answered) are the real ones at the moment of capture.
 
 **The principles the layout follows**
 
-**The map is the product; everything else is chrome at the edges.** Controls
+The map is the product; everything else is chrome at the edges. Controls
 occupy the corners and the top strip. Nothing floats over the centre, because
 the centre is the thing the user came for.
 
-**One layer at a time.** Aircraft, satellites and ships are a switch rather than
+One layer at a time. Aircraft, satellites and ships are a switch rather than
 three checkboxes. All three at once is roughly forty thousand markers and no
 legible map; the switch makes that impossible rather than merely discouraged.
 
-**The corner is one column, not four floating controls.** Brand, world chooser,
+The corner is one column, not four floating controls. Brand, world chooser,
 sign-in and about stack under one another, and the world chooser opens to the
 right rather than downward so it does not cover the items beneath it.
 
-**The status bar is the honesty line.** It states that 2,000 of 13,607 objects
+The status bar is the honesty line. It states that 2,000 of 13,607 objects
 in view are drawn, how old the data is, and which feed answered. A tracker that
 quietly showed a sample as though it were everything would be easier to build
 and would be lying.
 
-**Colour carries meaning, and only meaning.** Altitude is a ramp; marker shape
+Colour carries meaning, and only meaning. Altitude is a ramp; marker shape
 distinguishes a known heading from an unknown one; a faded marker has not been
 reported for over two minutes. The key states all three rather than expecting
 the reader to infer them.
 
-**The revenue model is visible in the product.** Advertisement slots are shown to
+The revenue model is visible in the product. Advertisement slots are shown to
 anonymous and free accounts and removed by the premium tier, and the upgrade
-prompt says what premium changes in concrete terms — a full week of history
-instead of twenty-four hours — rather than in adjectives.
+prompt says what premium changes in concrete terms (a full week of history instead of twenty-four hours) rather than in adjectives.
 
 ## 7.2 Live Aircraft
 
-![Figure 7.2 — The worldwide aircraft view.](figures/6-01-world-aircraft.png){width=6.5in}
+![Figure 7.2: The worldwide aircraft view.](figures/6-01-world-aircraft.png){width=6.5in}
 
 **Purpose.** The opening screen. It shows every aircraft the system currently
 knows about, worldwide, on a 3D globe, so a visitor sees air traffic at a
@@ -1565,7 +1561,7 @@ adsb.fi supplement. When more than 2,000 are in view, the API returns a sample,
 and the status bar at the bottom says so ("showing a sample of 5,842 in view")
 along with the data's age and source. Colour is altitude, explained in the key.
 
-![Figure 7.3 — Aircraft over mainland Southeast Asia, zoomed in.](figures/6-02-regional-aircraft.png){width=6.5in}
+![Figure 7.3: Aircraft over mainland Southeast Asia, zoomed in.](figures/6-02-regional-aircraft.png){width=6.5in}
 
 **Purpose.** Following traffic in one region with callsigns readable.
 
@@ -1577,7 +1573,7 @@ between updates by dead reckoning along its last known heading and speed.
 
 ## 7.3 Search
 
-![Figure 7.4 — Search suggestions while typing a callsign.](figures/6-03-search.png){width=6.5in}
+![Figure 7.4: Search suggestions while typing a callsign.](figures/6-03-search.png){width=6.5in}
 
 **Purpose.** Finding a particular flight, airport, satellite or ship without
 looking for it on the map.
@@ -1591,7 +1587,7 @@ changes to say what it accepts.
 
 ## 7.4 Aircraft Details and Flown Route
 
-![Figure 7.5 — The detail panel of Thai Airways flight THA923, with the route it has flown.](figures/6-04-aircraft-detail.png){width=6.5in}
+![Figure 7.5: The detail panel of Thai Airways flight THA923, with the route it has flown.](figures/6-04-aircraft-detail.png){width=6.5in}
 
 **Purpose.** Everything known about one aircraft: its photo, airline, aircraft
 type, registration, altitude, speed and heading, its scheduled route, and the
@@ -1608,7 +1604,7 @@ destination.
 
 ## 7.5 Satellites
 
-![Figure 7.6 — The satellite layer: about 1,500 satellites, coloured by orbit.](figures/6-05-satellites.png){width=6.5in}
+![Figure 7.6: The satellite layer: about 1,500 satellites, coloured by orbit.](figures/6-05-satellites.png){width=6.5in}
 
 **Purpose.** Showing where active satellites are right now, and what kind of
 orbit each is on.
@@ -1620,7 +1616,7 @@ browser asks. Colour shows the orbit class (low, medium, geostationary or
 elliptical), and the icon's shape shows what kind of spacecraft it is, as the
 key explains.
 
-![Figure 7.7 — The International Space Station selected, with its orbit drawn.](figures/6-06-satellite-detail.png){width=6.5in}
+![Figure 7.7: The International Space Station selected, with its orbit drawn.](figures/6-06-satellite-detail.png){width=6.5in}
 
 **Purpose.** Details of one satellite: its catalogue number, type, altitude,
 speed, orbital period and inclination, and the orbit it follows.
@@ -1634,7 +1630,7 @@ of 52° or south of −52°.
 
 ## 7.6 Time Control
 
-![Figure 7.8 — The sky as it was one hour ago.](figures/6-07-time-control.png){width=6.5in}
+![Figure 7.8: The sky as it was one hour ago.](figures/6-07-time-control.png){width=6.5in}
 
 **Purpose.** Seeing where the satellites were, or will be, at another moment.
 
@@ -1646,7 +1642,7 @@ to live". Free users can move 24 hours either way and premium users 7 days.
 
 ## 7.7 Ships
 
-![Figure 7.9 — Ships in the Gulf of Finland, coloured by vessel type.](figures/6-08-ships.png){width=6.5in}
+![Figure 7.9: Ships in the Gulf of Finland, coloured by vessel type.](figures/6-08-ships.png){width=6.5in}
 
 **Purpose.** Showing vessels near the coast, by type: cargo, passenger, tanker,
 tug, fishing and others.
@@ -1657,7 +1653,7 @@ updates to the server over a WebSocket. Both are received by stations on the
 shore, which is why the layer is labelled "ships in coastal waters" and is
 densest around Finland.
 
-![Figure 7.10 — The detail panel of the passenger ship Silja Serenade.](figures/6-09-ship-detail.png){width=6.5in}
+![Figure 7.10: The detail panel of the passenger ship Silja Serenade.](figures/6-09-ship-detail.png){width=6.5in}
 
 **Purpose.** Details of one vessel: its type, navigational status, speed,
 heading, destination and arrival time, size, and identifying numbers.
@@ -1670,7 +1666,7 @@ is entered by hand on board.
 
 ## 7.8 The Moon
 
-![Figure 7.11 — The Moon, with the three spacecraft in lunar orbit.](figures/6-10-moon.png){width=6.5in}
+![Figure 7.11: The Moon, with the three spacecraft in lunar orbit.](figures/6-10-moon.png){width=6.5in}
 
 **Purpose.** Visiting other worlds under the same camera, and following the
 spacecraft that orbit the Moon.
@@ -1683,7 +1679,7 @@ drawn over the surface.
 
 ## 7.9 The Solar System
 
-![Figure 7.12 — The solar system page, with the planets where they are today.](figures/6-11-solar-system.png){width=6.5in}
+![Figure 7.12: The solar system page, with the planets where they are today.](figures/6-11-solar-system.png){width=6.5in}
 
 **Purpose.** An overview of the Sun, the eight planets and the Moon, as a way
 to choose a world and to see where Earth is.
@@ -1695,7 +1691,7 @@ returns to the map.
 
 ## 7.10 Accounts and Premium
 
-![Figure 7.13 — The sign-in page.](figures/6-12-sign-in.png){width=6.5in}
+![Figure 7.13: The sign-in page.](figures/6-12-sign-in.png){width=6.5in}
 
 **Purpose.** Signing in to an existing account or creating a new one. The map
 works without an account; an account is needed only for premium.
@@ -1705,7 +1701,7 @@ server checks the password against a scrypt hash stored in its SQLite
 database, and on success sets a session cookie that scripts on the page cannot
 read. Passwords are never stored, logged or returned.
 
-![Figure 7.14 — The premium page, comparing the free and premium tiers.](figures/6-13-premium.png){width=6.5in}
+![Figure 7.14: The premium page, comparing the free and premium tiers.](figures/6-13-premium.png){width=6.5in}
 
 **Purpose.** Explaining what premium adds: time travel 7 days either way
 instead of 24 hours, and no advertising. Everything else is free.
@@ -1743,8 +1739,8 @@ them, to anyone who opens the page and without an account.
 All 2,087 automated tests pass, every functional test case passes on the live
 site, and the four defects found in final system testing are fixed (§6.1.5).
 
-The project's main lesson is that **the data sources, not the code, set the
-limits.** The architecture's most valuable property turned out to be the one
+The project's main lesson is that the data sources, not the code, set the
+limits. The architecture's most valuable property turned out to be the one
 designed for failure: when a feed was lost, twice, the fix each time was one
 new module at the edge of the system, and nothing above the ingestion layer
 changed.
@@ -1762,23 +1758,23 @@ changed.
 
 ## 8.3 Recommendations
 
-1. **Move the relay to an always-on device.** A small single-board computer
+1. Move the relay to an always-on device. A small single-board computer
    such as a Raspberry Pi on a home connection would keep the worldwide view
    available around the clock, instead of only while a team member's laptop is
    on.
-2. **Add the adsb.lol key as soon as it is issued**, together with adsb.lol's
+2. Add the adsb.lol key as soon as it is issued, together with adsb.lol's
    credit on the map. That restores a second worldwide aircraft source that
    does not depend on the relay.
-3. **Add a shared store before adding servers.** The single worker is the
+3. Add a shared store before adding servers. The single worker is the
    scaling limit (§4.2, R4). Moving the live objects into a shared store such as
    Redis would let several workers serve visitors while one poller fetches.
-4. **Store aircraft and ship history.** Time travel currently covers satellites
+4. Store aircraft and ship history. Time travel currently covers satellites
    only, because they can be computed for any moment. Keeping observed
    positions in a database would extend it to aircraft and ships.
-5. **Widen the testing.** Add rendering tests for the main React components
+5. Widen the testing. Add rendering tests for the main React components
    and test in Safari and Firefox as well as Chrome, so that the gaps listed in
    §6.1.2 shrink.
-6. **Decide what premium is for.** Premium is free to switch on because
+6. Decide what premium is for. Premium is free to switch on because
    Orbital takes no money and OpenSky's licence is non-commercial. A paid tier
    would need a payment provider and a feed licensed for commercial use.
 
@@ -1805,13 +1801,13 @@ depended on it.
 
 **Two measurements that changed the design**
 
-**One global query is not enough.** A single 6,000 nautical-mile circle returned
+One global query is not enough. A single 6,000 nautical-mile circle returned
 10,013 aircraft and four circles returned 10,009, which appeared to prove one
 was sufficient. The other three sample points were inside the area the first
 already covered. Over Australia the single circle returned 0 and a direct query
 returned 27. The global sweep uses four circles.
 
-**A rate limit cannot be characterised with a burst.** adsb.lol appeared to
+A rate limit cannot be characterised with a burst. adsb.lol appeared to
 tolerate any rate when tested with occasional bursts. Under continuous load it
 refused 38% of requests. The real limit is four requests, then approximately one
 every twelve seconds.
@@ -1929,8 +1925,7 @@ layer cost the same four months later; and the polling logic was not modified
 for either.
 
 Where time was lost: six sessions went to one defect misdiagnosed five times.
-The cause was structural — one camera serving two pictures at very different
-scales — and the resolution deleted 376 lines, added 130, and cost no feature.
+The cause was structural (one camera serving two pictures at very different scales), and the resolution deleted 376 lines, added 130, and cost no feature.
 
 
 ```{=openxml}
@@ -1989,8 +1984,7 @@ report, a decision record, a test plan, and a demonstration.
 
 That the public feeds remain available and free; that their terms do not change
 mid-project; that free hosting tiers remain sufficient for a demonstration
-workload. **The first of these did not hold** — OpenSky became unreachable from
-every cloud host partway through — and §4.2 treats it as the realised risk it
+workload. The first of these did not hold: OpenSky became unreachable from every cloud host partway through, and §4.2 treats it as the realised risk it
 turned out to be rather than as an assumption that was merely unlucky.
 
 **Authority**
@@ -2027,7 +2021,7 @@ upstream request allowance. It was budgeted like money:
 | OpenSky daily credits | 4,000 | 3,072 (77%) | 928, for user-triggered lookups |
 | adsb.lol request rate | Burst 4, then ~5/min | Within the measured limit | Enforced by a gate, not by convention |
 | Celestrak / SatNOGS | Courtesy limits | Refreshed every six hours, cached to disk | Falls back to cache on failure |
-| Ships (Digitraffic, aisstream) | No metered limit | Continuous websocket | — |
+| Ships (Digitraffic, aisstream) | No metered limit | Continuous websocket | Not metered |
 
 The startup refuses a configuration projected to exceed 85% of the OpenSky
 allowance. A budget that is only written down is a budget nobody keeps; one the
@@ -2045,7 +2039,7 @@ under assumptions that are stated rather than implied:
 | Effort per member per week | 8 hours |
 | **Total effort** | **480 person-hours** |
 
-At a notional junior developer rate of **£25 per hour**, that is **£12,000** of
+At a notional junior developer rate of £25 per hour, that is £12,000 of
 labour delivered at zero cash cost. The rate is an assumption for comparison
 only; the hours are the figure worth arguing about, and they are an estimate,
 not a measurement. The project did not keep timesheets, and inventing precise
@@ -2089,11 +2083,11 @@ as long as a previous one has run.
 
 # Appendix C: Activity Diagram
 
-![Figure C.1 — Activity diagram. One poll cycle, including the ways it fails.](figures/5-5-activity-diagram.png){width=4.9in}
+![Figure C.1: Activity diagram. One poll cycle, including the ways it fails.](figures/5-5-activity-diagram.png){width=4.9in}
 
 An activity diagram of the happy path would be a straight line and would say
-nothing. The branches are the content: **three of the four outcomes of a fetch
-are failures**, and what happens to each is the reason the map does not go blank
+nothing. The branches are the content: three of the four outcomes of a fetch
+are failures, and what happens to each is the reason the map does not go blank
 when a feed does.
 
 | Outcome | Response |
@@ -2101,10 +2095,10 @@ when a feed does.
 | Records returned | Normalise, apply to the store, reset the backoff |
 | `ProviderRateLimited` | Honour `Retry-After`, double the backoff, keep the snapshot |
 | `ProviderUnavailable` | Keep the previous snapshot, mark the store stale |
-| `ProviderBadResponse` | As above — a malformed answer is treated as no answer |
+| `ProviderBadResponse` | As above; a malformed answer is treated as no answer |
 
-**None of the three failures empties the store.** A feed that goes dark costs
+None of the three failures empties the store. A feed that goes dark costs
 freshness, which is visible and labelled in the status bar, rather than costing
 the map, which would not be. The retention window is what finally removes an
-object that nobody is reporting — a decision made by elapsed time, not by one
+object that nobody is reporting, a decision made by elapsed time, not by one
 failed request.

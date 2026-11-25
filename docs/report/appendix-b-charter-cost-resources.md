@@ -50,8 +50,7 @@ report, a decision record, a test plan, and a demonstration.
 
 That the public feeds remain available and free; that their terms do not change
 mid-project; that free hosting tiers remain sufficient for a demonstration
-workload. **The first of these did not hold** — OpenSky became unreachable from
-every cloud host partway through — and §4.2 treats it as the realised risk it
+workload. The first of these did not hold: OpenSky became unreachable from every cloud host partway through, and §4.2 treats it as the realised risk it
 turned out to be rather than as an assumption that was merely unlucky.
 
 ### Authority
@@ -88,7 +87,7 @@ upstream request allowance. It was budgeted like money:
 | OpenSky daily credits | 4,000 | 3,072 (77%) | 928, for user-triggered lookups |
 | adsb.lol request rate | Burst 4, then ~5/min | Within the measured limit | Enforced by a gate, not by convention |
 | Celestrak / SatNOGS | Courtesy limits | Refreshed every six hours, cached to disk | Falls back to cache on failure |
-| Ships (Digitraffic, aisstream) | No metered limit | Continuous websocket | — |
+| Ships (Digitraffic, aisstream) | No metered limit | Continuous websocket | Not metered |
 
 The startup refuses a configuration projected to exceed 85% of the OpenSky
 allowance. A budget that is only written down is a budget nobody keeps; one the
@@ -106,7 +105,7 @@ under assumptions that are stated rather than implied:
 | Effort per member per week | 8 hours |
 | **Total effort** | **480 person-hours** |
 
-At a notional junior developer rate of **£25 per hour**, that is **£12,000** of
+At a notional junior developer rate of £25 per hour, that is £12,000 of
 labour delivered at zero cash cost. The rate is an assumption for comparison
 only; the hours are the figure worth arguing about, and they are an estimate,
 not a measurement. The project did not keep timesheets, and inventing precise

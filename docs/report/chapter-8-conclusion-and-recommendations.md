@@ -21,8 +21,8 @@ them, to anyone who opens the page and without an account.
 All 2,087 automated tests pass, every functional test case passes on the live
 site, and the four defects found in final system testing are fixed (§6.1.5).
 
-The project's main lesson is that **the data sources, not the code, set the
-limits.** The architecture's most valuable property turned out to be the one
+The project's main lesson is that the data sources, not the code, set the
+limits. The architecture's most valuable property turned out to be the one
 designed for failure: when a feed was lost, twice, the fix each time was one
 new module at the edge of the system, and nothing above the ingestion layer
 changed.
@@ -40,22 +40,22 @@ changed.
 
 ## 8.3 Recommendations
 
-1. **Move the relay to an always-on device.** A small single-board computer
+1. Move the relay to an always-on device. A small single-board computer
    such as a Raspberry Pi on a home connection would keep the worldwide view
    available around the clock, instead of only while a team member's laptop is
    on.
-2. **Add the adsb.lol key as soon as it is issued**, together with adsb.lol's
+2. Add the adsb.lol key as soon as it is issued, together with adsb.lol's
    credit on the map. That restores a second worldwide aircraft source that
    does not depend on the relay.
-3. **Add a shared store before adding servers.** The single worker is the
+3. Add a shared store before adding servers. The single worker is the
    scaling limit (§4.2, R4). Moving the live objects into a shared store such as
    Redis would let several workers serve visitors while one poller fetches.
-4. **Store aircraft and ship history.** Time travel currently covers satellites
+4. Store aircraft and ship history. Time travel currently covers satellites
    only, because they can be computed for any moment. Keeping observed
    positions in a database would extend it to aircraft and ships.
-5. **Widen the testing.** Add rendering tests for the main React components
+5. Widen the testing. Add rendering tests for the main React components
    and test in Safari and Firefox as well as Chrome, so that the gaps listed in
    §6.1.2 shrink.
-6. **Decide what premium is for.** Premium is free to switch on because
+6. Decide what premium is for. Premium is free to switch on because
    Orbital takes no money and OpenSky's licence is non-commercial. A paid tier
    would need a payment provider and a feed licensed for commercial use.

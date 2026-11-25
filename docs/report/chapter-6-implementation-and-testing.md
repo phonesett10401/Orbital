@@ -11,13 +11,13 @@ Orbital is tested at four levels, each answering a different question:
 | Integration (§6.1.4) | Do the pieces, and the outside services, work together? | API tests through the full server, plus checks against every real feed | On every change, and against live feeds before release |
 | System (§6.1.5) | Does the whole system meet its performance, reliability and usability targets? | Measurement in the browser, benchmarks, observed outages | Per phase, and whenever a target could be affected |
 
-**No automated test touches the network or spends an API credit.** Every
+No automated test touches the network or spends an API credit. Every
 provider is tested against recorded responses, so both suites run anywhere, in
 seconds to minutes, and give the same answer every time. The price is that a
 change in a real feed is invisible to them, which is why the integration and
 system levels run against the live services.
 
-**A test only counts if it can fail.** When a test is written for a bug, the
+A test only counts if it can fail. When a test is written for a bug, the
 fix is removed again to confirm the test fails without it. Two kinds of test
 that passed while proving nothing were found this way and are now checked for.
 
@@ -92,7 +92,7 @@ cd frontend && npm test
 | Panels and interface logic | 224 | Detail panel fields, search history, airline decoding, page routing, the application state |
 | Accounts, tiers and ads | 78 | Sign-in flows, entitlements, the time control's window, advertising and premium |
 
-**What the unit tests do not cover.** No unit test runs the graphics card, so
+What the unit tests do not cover. No unit test runs the graphics card, so
 what is drawn on screen is checked by looking at the running application
 (§6.1.3, §6.1.5). React components are tested through their logic, not by
 rendering them. Both gaps are why the functional and system tests exist.
@@ -121,8 +121,7 @@ orbital-liveview.vercel.app, in Chrome at 1600 × 950. They were last run on
 
 ### 6.1.4 Integration Testing
 
-**Inside the system.** The API tests start the whole server in memory —
-providers, poller, store and routes together — and talk to it over HTTP the way
+**Inside the system.** The API tests start the whole server in memory (providers, poller, store and routes together) and talk to it over HTTP the way
 the browser does. The most complete one follows the relay end to end: the
 relay posts the worldwide answer, a visitor opens an aircraft, the server puts
 it on the relay's list, the relay posts the flown track, and the visitor's
@@ -168,7 +167,7 @@ within two minutes.
 **Usability.** Every layer was used signed out (NFR-30) and at 375 px phone
 width (NFR-33).
 
-**Defects found in system testing.** Each was fixed and re-tested.
+Defects found in system testing. Each was fixed and re-tested.
 
 | # | Defect | Found | Cause | Fix |
 |---|---|---|---|---|
@@ -190,7 +189,7 @@ is accepted.
 |---|---|---|---|
 | Development | Vite dev server on the developer's PC | uvicorn on the developer's PC | Recorded fixtures, or the live feeds |
 | Production | Vercel, orbital-liveview.vercel.app | Northflank, one container, one worker | Live feeds; accounts on a persistent volume |
-| Relay | — | Python script on a team member's PC, kept running by Windows Task Scheduler | OpenSky, posted to production |
+| Relay | Not used | Python script on a team member's PC, kept running by Windows Task Scheduler | OpenSky, posted to production |
 
 ### Deployment process
 
@@ -201,8 +200,7 @@ is accepted.
 5. The live site is checked again: the affected screens, the status bar and the
    health endpoint.
 
-Secrets — the OpenSky client credentials, the aisstream key and the relay's
-shared token — are set as environment variables on Northflank and in a
+Secrets, namely the OpenSky client credentials, the aisstream key and the relay's shared token, are set as environment variables on Northflank and in a
 git-ignored file on the relay PC. They are never committed or printed.
 
 ### Phased implementation

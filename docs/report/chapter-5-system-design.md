@@ -2,10 +2,10 @@
 
 ## 5.1 System Architecture
 
-Orbital is three layers with one rule between them: **data flows in one
-direction, and each layer knows only the layer directly beneath it.**
+Orbital is three layers with one rule between them: data flows in one
+direction, and each layer knows only the layer directly beneath it.
 
-![Figure 5.1 — System architecture. Six external feeds, one reached through a home relay, three internal layers, and one direction of flow.](figures/5-1-system-architecture.png){width=6.5in}
+![Figure 5.1: System architecture. Six external feeds, one reached through a home relay, three internal layers, and one direction of flow.](figures/5-1-system-architecture.png){width=6.5in}
 
 ### The three layers
 
@@ -17,17 +17,17 @@ direction, and each layer knows only the layer directly beneath it.**
 
 ### Three properties follow, and they are the design
 
-**The browser never talks to a data source.** Every external call goes through
+The browser never talks to a data source. Every external call goes through
 the backend, so rate limiting and caching are enforced in exactly one place. A
 hundred open browser tabs cost the same upstream quota as one. This is what made
 adding a second aircraft feed a backend-only change: the frontend was never
 told, because there was nothing to tell it.
 
-**Either end can be replaced without touching the other**, and both have been.
+Either end can be replaced without touching the other, and both have been.
 The backend gained a second upstream and the frontend gained an entirely
 different renderer, neither requiring a change on the other side of the wire.
 
-**Upstream failure is contained at layer 1.** The API serves the last good
+Upstream failure is contained at layer 1. The API serves the last good
 snapshot with an explicit staleness flag. A feed outage degrades the display; it
 does not break it.
 
@@ -48,7 +48,7 @@ store: the upstream cost would double and two requests could disagree about
 where an aircraft is. It is scaled by making the box bigger, not by adding
 boxes.
 
-**The relay exists because OpenSky refuses cloud hosts.** It answers a home
+The relay exists because OpenSky refuses cloud hosts. It answers a home
 connection, so a small script on a team member's PC does the fetching. Every
 three seconds it asks the server what it wants, and the server answers with two
 things:
@@ -74,7 +74,7 @@ the trail the server observed itself, which is now kept for four hours.
 
 ### Data flow diagram, Level 1
 
-![Figure 5.2 — Data flow diagram, Level 1. From live feeds to the visitor's screen.](figures/5-1c-data-flow-level-1.png){width=6.5in}
+![Figure 5.2: Data flow diagram, Level 1. From live feeds to the visitor's screen.](figures/5-1c-data-flow-level-1.png){width=6.5in}
 
 | Process | Takes in | Gives out |
 |---|---|---|
@@ -91,7 +91,7 @@ reads D1 and never calls a feed, so the map never waits for an outside service.
 
 ### 5.2.1 Database Design
 
-![Figure 5.3 — Entity relationship diagram. Two persisted tables, and the domain entities that have no table.](figures/5-2-er-diagram.png){width=6.5in}
+![Figure 5.3: Entity relationship diagram. Two persisted tables, and the domain entities that have no table.](figures/5-2-er-diagram.png){width=6.5in}
 
 #### Two tables, and that is the design
 
@@ -119,7 +119,7 @@ CREATE INDEX sessions_account ON sessions (account_id);
 An account holds many sessions: one per signed-in device, each expiring on its
 own schedule.
 
-**The raw session token is returned once, at creation, and never stored.** Only
+The raw session token is returned once, at creation, and never stored. Only
 its hash is in the table, so the token exists in the user's cookie and nowhere
 else. A copy of the database does not let anyone sign in as anybody.
 
@@ -132,13 +132,14 @@ window is evicted. Nothing about an aircraft is written to disk at all.
 
 Three consequences, and all three are wanted:
 
-- **The API cannot be slow because a database is slow**, because there is no
-  database on the request path for tracked objects.
-- **There is no schema migration** for the thing that changes most often — the
-  shape of a feed — because a feed's shape is normalised at the boundary and
-  never stored in its own form.
-- **Restarting is cheap and safe.** The only state worth keeping is an account,
-  and that is the only state kept.
+The API cannot be slow because a database is slow, because there is no
+database on the request path for tracked objects.
+
+There is no schema migration for the thing that changes most often, the shape of a feed, because a feed's shape is normalised at the boundary and
+never stored in its own form.
+
+Restarting is cheap and safe. The only state worth keeping is an account,
+and that is the only state kept.
 
 The cost is equally plain: Orbital cannot answer a question about last Tuesday.
 Entitlement windows of twenty-four hours and seven days are bounded by what is
@@ -148,12 +149,12 @@ still in memory, not by a query.
 
 `TrackedObject` is the shared shape all three object types normalise to, with
 `TrackPoint`, `Airport` and `FlightRoute` hanging off it. They have real
-structure, real relationships and real cardinality — they simply have no rows.
+structure, real relationships and real cardinality; they simply have no rows.
 They are drawn dashed in Figure 5.3 because omitting them would make the data
 model look like two tables about sign-in, which is the least interesting part of
 this system.
 
-**One shape holds all three object types, and the absent fields are `None`.** An
+One shape holds all three object types, and the absent fields are `None`. An
 aircraft has a route and a track; a satellite and a ship have neither. This is
 what makes a new object type cost one ingestion module: there is no per-type
 schema to add.
@@ -162,7 +163,7 @@ schema to add.
 
 #### 5.2.2.1 Use Case Diagram
 
-![Figure 5.4 — Use case diagram. Eleven use cases, five actors, one system boundary.](figures/3-1-use-case-diagram.png){width=6.5in}
+![Figure 5.4: Use case diagram. Eleven use cases, five actors, one system boundary.](figures/3-1-use-case-diagram.png){width=6.5in}
 
 UC-03 includes UC-01. UC-06 extends UC-01 when an instant is chosen, if that
 instant lies within the actor's entitlement window. UC-07 to UC-10 are started
@@ -193,7 +194,7 @@ figures are reported.
 
 1. The viewer selects Aircraft, Satellites or Ships.
 2. The system clears the current selection and objects.
-3. All surrounding text changes with the layer — subtitle, search placeholder,
+3. All surrounding text changes with the layer: subtitle, search placeholder,
    count noun and colour key.
 4. Layer-specific furniture is hidden; airports and receiver coverage belong to
    the aircraft layer.
@@ -294,16 +295,16 @@ There is no interface for this and no endpoint that can perform it.
 
 #### 5.2.2.2 Class Diagram
 
-![Figure 5.5 — Class diagram of the ingestion layer.](figures/5-3-class-diagram.png){width=6.5in}
+![Figure 5.5: Class diagram of the ingestion layer.](figures/5-3-class-diagram.png){width=6.5in}
 
 The ingestion layer is the part of Orbital with real class structure, so it is
 the part worth drawing. `Provider` is abstract and declares one required
 operation: fetch, given an optional bounding box, and return the normalised
-shape. Seven concrete providers implement it — one per upstream, plus an offline
+shape. Seven concrete providers implement it: one per upstream, plus an offline
 fixture that needs no credentials.
 
-**`UnionProvider` is the design point.** It inherits `Provider` *and holds two
-of them*: the primary answers every poll, the supplement answers every 120
+`UnionProvider` is the design point. It inherits `Provider` and holds two
+of them: the primary answers every poll, the supplement answers every 120
 seconds, and the results are merged. A caller cannot tell a pair of feeds from a
 single feed.
 
@@ -312,12 +313,11 @@ became unreachable from every cloud host, the change was one provider module and
 one registry entry; the poller, the store, the API and the entire frontend were
 untouched, because none of them can observe the difference.
 
-`Provider` also raises rather than returning partial results —
-`ProviderUnavailable`, `ProviderRateLimited`, `ProviderBadResponse`. A provider
+`Provider` also raises rather than returning partial results, raising `ProviderUnavailable`, `ProviderRateLimited`, `ProviderBadResponse`. A provider
 that returned nine hundred aircraft instead of two thousand would be reporting
 that the sky had emptied. Raising makes a failure a failure.
 
-**The API never holds a `Provider`.** There is no call path from an HTTP request
+The API never holds a `Provider`. There is no call path from an HTTP request
 to a socket, which is the structural reason §5.1's third property is true rather
 than merely intended.
 
@@ -332,11 +332,11 @@ than merely intended.
 
 #### 5.2.2.3 Sequence Diagram
 
-![Figure 5.6 — Sequence diagram. The poll loop, and a request that does not wait for it.](figures/5-4-sequence-diagram.png){width=6.5in}
+![Figure 5.6: Sequence diagram. The poll loop, and a request that does not wait for it.](figures/5-4-sequence-diagram.png){width=6.5in}
 
 Two interactions are drawn on one page deliberately. Separately they look like
 an ordinary background job and an ordinary request; together, the actual design
-is visible — **they never touch.**
+is visible: they never touch.
 
 **A.** The poller wakes on its interval, asks the provider to fetch, normalises
 what comes back, and applies it to the store. This runs whether or not anyone is
@@ -354,7 +354,7 @@ why viewer count is decoupled from upstream cost entirely.
 
 ## 5.3 Structure Chart
 
-![Figure 5.7 — Structure chart. Orbital as four modules, each with the parts it is made of.](figures/5-1b-structure-chart.png){width=6.5in}
+![Figure 5.7: Structure chart. Orbital as four modules, each with the parts it is made of.](figures/5-1b-structure-chart.png){width=6.5in}
 
 The structure chart breaks Orbital into four modules, matching the layers
 above with the store drawn as its own module. Each module calls only the one

@@ -10,13 +10,13 @@ and free to collect.
 
 It is difficult to use. Four problems stand in the way.
 
-**The raw formats cannot be displayed as received.** ADS-B reports altitude in
+The raw formats cannot be displayed as received. ADS-B reports altitude in
 feet and speed in knots. AIS encodes "not available" as a number inside the
 valid range, so a vessel with no speed reading transmits 102.3 knots. Orbital
 elements are a text format that must be run through a physics model before it
 means a position.
 
-**Every free source is incomplete, in different places.** Measured on identical
+Every free source is incomplete, in different places. Measured on identical
 areas, OpenSky reported 22 aircraft over Myanmar where adsb.lol reported 4;
 adsb.lol reported 33 over inland China where OpenSky reported none.
 

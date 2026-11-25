@@ -37,8 +37,7 @@
 once a second. Coverage depends on a receiver being in range, which is why
 oceanic regions are sparse in every terrestrial network.
 
-**AIS.** Vessels broadcast position every few seconds and identity — name, type,
-dimensions, destination — every six minutes. Two consequences follow. "Not
+**AIS.** Vessels broadcast position every few seconds and identity (name, type, dimensions and destination) every six minutes. Two consequences follow. "Not
 available" is a number rather than a blank: a speed of 102.3 knots, a course of
 360° and a heading of 511 all mean the transmitter did not say. And identity
 accumulates far more slowly than position: measured at 26.5 static messages per
@@ -53,7 +52,7 @@ in one live feed, 87 were over a year old and the oldest was from 1975. Anything
 past seven days is refused.
 
 **Map projection.** A pixel covers a different ground distance at every zoom and
-latitude — about 750 m at zoom 7, about 6 m at zoom 14. This arithmetic
+latitude: about 750 m at zoom 7, about 6 m at zoom 14. This arithmetic
 determines how often the display needs redrawing, and it is why drawing every
 object at every zoom is neither useful nor affordable.
 
@@ -63,7 +62,7 @@ The alpha channel encodes distance rather than coverage, so thin detail
 dissolves when scaled down; marker artwork is therefore deliberately chunky.
 
 **HTTP conditional requests.** The polled endpoints use ETags. When the data has
-not changed the server returns 304 Not Modified before reading its store — no
+not changed the server returns 304 Not Modified before reading its store, so there is no
 filtering, thinning, serialisation or compression.
 
 ## 2.3 Related Information Systems
@@ -79,8 +78,7 @@ filtering, thinning, serialisation or compression.
 
 Each individual layer is done better elsewhere by organisations with larger
 networks. What distinguishes Orbital is that three classes of object with three
-different acquisition models — observed and metered, observed and free, and
-computed — are presented on one map through one shared data shape.
+different acquisition models (observed and metered, observed and free, and computed) are presented on one map through one shared data shape.
 
 A deliberate search found no free, global, key-less ship feed equivalent to
 adsb.lol. An AIS receiver is a real installation rather than a cheap dongle, so
@@ -93,7 +91,7 @@ Orbital's stakeholder map has an unusual shape: most of its stakeholders are
 upstream. The parties with the greatest power over whether the system works are
 the data providers, none of whom have any relationship with the project.
 
-### Upstream — the data providers
+### Upstream: the data providers
 
 | Stakeholder | Interest | Power | How the design responds |
 |---|---|---|---|
@@ -109,7 +107,7 @@ system is designed so any of them failing degrades the display rather than
 breaking it. That is a requirement derived from stakeholder analysis rather than
 a technical preference.
 
-### Downstream — the users
+### Downstream: the users
 
 | Stakeholder | Needs | Power |
 |---|---|---|

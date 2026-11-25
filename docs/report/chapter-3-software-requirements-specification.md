@@ -12,7 +12,7 @@ interfaces, the shared data contract and the operating constraints.
 
 ```
   External feeds  ->  1. INGESTION  ->  2. API  ->  3. FRONTEND
-  (six sources)       providers,        reads the    MapLibre and
+(six sources)       providers,        reads the    MapLibre and
                       poller, store     store only   React client
 ```
 
@@ -191,8 +191,8 @@ Measurable conditions on speed, failure behaviour, security and how the code is 
 | NFR-03 | List endpoint response | < 100 ms | 23 ms |
 | NFR-04 | Combined search response | < 100 ms | 47 ms |
 | NFR-05 | Detail lookup | < 10 ms | 0.01 ms |
-| NFR-06 | Responses compressed | — | 366 KB to 24.5 KB |
-| NFR-07 | No request may block the event loop indefinitely | — | Result count clamped |
+| NFR-06 | Responses compressed | Required | 366 KB to 24.5 KB |
+| NFR-07 | No request may block the event loop indefinitely | Required | Result count clamped |
 
 ##### Reliability
 

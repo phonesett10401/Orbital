@@ -16,13 +16,13 @@ depended on it.
 
 ### Two measurements that changed the design
 
-**One global query is not enough.** A single 6,000 nautical-mile circle returned
+One global query is not enough. A single 6,000 nautical-mile circle returned
 10,013 aircraft and four circles returned 10,009, which appeared to prove one
 was sufficient. The other three sample points were inside the area the first
 already covered. Over Australia the single circle returned 0 and a direct query
 returned 27. The global sweep uses four circles.
 
-**A rate limit cannot be characterised with a burst.** adsb.lol appeared to
+A rate limit cannot be characterised with a burst. adsb.lol appeared to
 tolerate any rate when tested with occasional bursts. Under continuous load it
 refused 38% of requests. The real limit is four requests, then approximately one
 every twelve seconds.
@@ -140,5 +140,4 @@ layer cost the same four months later; and the polling logic was not modified
 for either.
 
 Where time was lost: six sessions went to one defect misdiagnosed five times.
-The cause was structural — one camera serving two pictures at very different
-scales — and the resolution deleted 376 lines, added 130, and cost no feature.
+The cause was structural (one camera serving two pictures at very different scales), and the resolution deleted 376 lines, added 130, and cost no feature.
