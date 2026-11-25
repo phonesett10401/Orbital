@@ -111,7 +111,12 @@ export function BodyPicker() {
         ref={trigger}
         aria-expanded={open}
         aria-haspopup="listbox"
-        onClick={() => setOpen((was) => !was)}
+        // Opens, never toggles: hover and focus have already opened it by the time
+        // the click lands, so a toggle closed it again - on a phone, every tap.
+        onClick={() => {
+          cancelClose();
+          setOpen(true);
+        }}
         onFocus={() => {
           if (!returning.current) setOpen(true);
         }}
