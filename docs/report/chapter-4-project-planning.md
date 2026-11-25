@@ -41,7 +41,7 @@ report, a decision record, a test plan, and a demonstration.
 | Constraint | Consequence for the plan |
 |---|---|
 | Free data sources only | Rate limits, not money, are the budget (§4.4) |
-| No commercial licence on one feed | The revenue model cannot use OpenSky (§2.2) |
+| No commercial licence on one feed | The revenue model cannot use OpenSky (§2.5.2) |
 | One backend worker | Vertical scaling only; a second worker would double upstream cost |
 | Five part-time students | Parallel work must be separable, or it serialises |
 | One semester | Scope is fixed by phase boundaries rather than by deadline pressure |
@@ -95,7 +95,7 @@ visible: each new object type is one provider module and one registry entry.
 
 **This is the plan, not the log.** The bars are what the team undertook to do
 and the order the dependencies allow. What was actually delivered, phase by
-phase, is recorded in §2.4, and Chapter 8 is where the two are compared. Keeping
+phase, is recorded in §2.5.4, and Chapter 8 is where the two are compared. Keeping
 them apart matters: a Gantt chart redrawn after the fact to match what happened
 is not a plan and cannot be used to judge whether planning worked.
 
@@ -118,7 +118,7 @@ blocks another.
 **That is a designed property, not a fortunate one.** The shared data shape was
 specified before any provider was written precisely so that the second and third
 object types would not sit behind the first. The measured evidence that it
-worked is in §2.4: the ship layer cost the same as the satellite layer four
+worked is in §2.5.4: the ship layer cost the same as the satellite layer four
 months later, and the polling logic was not modified for either.
 
 ### Scheduling assumption
@@ -143,7 +143,7 @@ against.
 | **Total cash cost** | **0** |
 
 Every input is a free public service or an open-source library, and both hosts
-run on free tiers. This is not an accident of a student budget: §2.2 records
+run on free tiers. This is not an accident of a student budget: §2.5.2 records
 that free sources were a requirement, because a tracker that costs money per
 viewer cannot be free to look at.
 
@@ -247,7 +247,7 @@ intentions is a document nobody checks against the system.
 | R5 | The map shows something false and nothing says so | M | H | Every response carries its age and a staleness flag; a marker fades after two minutes unreported; the status bar states how many of how many are drawn |
 | R6 | Secrets committed to the repository | L | H | Credentials in environment variables only; configuration never printed as an object, only field by field |
 | R7 | Work serialises behind one member | M | M | The shared data shape fixed before any provider was written, so the layers proceed in parallel; handover written every session |
-| R8 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in §2.2 rather than assumed away |
+| R8 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in §2.5.2 rather than assumed away |
 | R9 | A defect resists diagnosis and consumes the schedule | M | H | Every defect written down with how it was found; a fix counts as fixed when demonstrated, not when written |
 | R10 | A decision correct when made becomes wrong later | M | M | Decision record carries alternatives and reasoning, so a reversal is cheap and evidenced |
 
@@ -282,7 +282,7 @@ them into a header comparison, and because the tag is computed from the store's
 version counter and the query before the store is read, a 304 never builds the
 response at all.
 
-The one poll in thirty that does change costs the measured work in §2.1: a
+The one poll in thirty that does change costs the measured work in §2.5.1: a
 bounding-box filter and a thinning pass, together under one and a half
 milliseconds at the 2,000 cap. **Upstream cost does not move at all** with
 viewer count, because the browser never calls a source.

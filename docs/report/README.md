@@ -7,12 +7,12 @@ Draft chapters for the CSC480 report, following the structure in
 
 | Chapter | Sections | State |
 |---|---|---|
-| **1. Introduction** | Background and Problem Statement · Project Objectives · Project Scope · Expected Benefits · Tools and Technologies | **Draft complete** |
-| **2. Feasibility Study and Related Work** | Technical · Economic · Operational · Schedule · Related Systems · Relevant Theories | **Draft complete** |
-| **3. Requirements Analysis** | Stakeholder Analysis · Functional · Non-Functional · Use Case Diagram · Use Case Descriptions · SRS | **Draft complete** |
+| **1. Introduction** | Background · Objectives · Scope · Limitations · Software Development Tools · Software Success Indicators | **Draft complete** |
+| **2. Software Overview Analysis** | Definitions of Terms · Related Theories · Related Information Systems · Stakeholders · Feasibility Study | **Draft complete** |
+| **3. Requirements Analysis** | Functional · Non-Functional · Use Case Diagram · Use Case Descriptions · SRS | **Draft complete** |
 | **4. Project Planning** | Charter · WBS · Gantt · Cost · Resources · Risk · Communication | **Draft complete** |
 | **5. System Design** | Architecture · ER · UML · UI · Prototype | **Draft complete** |
-| 6. System Development | Environment · Modules · Database · Screens · Code | Not started |
+| **6. Program Screenshots** | 13 key screens, each with its purpose and how it works | **Draft complete** |
 | 7. System Testing | Plan · Cases · Unit · Integration · System · UAT · Results | Not started |
 | 8. Conclusion | Summary · Objectives · Problems · Improvements · Lessons | Not started |
 
@@ -28,8 +28,8 @@ not artifacts nobody needs to keep.
 
 | File | |
 |---|---|
-| `Orbital-Report-Chapters-1-5.docx` | Word, 40 pages, nine colour figures |
-| `Orbital-Report-Chapters-1-5.pdf` | The same document, exported by Word itself |
+| `Orbital-Report-Chapters-1-6.docx` | Word, chapters 1-6 with figures and program screenshots |
+| `Orbital-Report-Chapters-1-6.pdf` | The same document, exported by Word itself |
 
 | `Orbital-Presentation.pptx` | 13 slides |
 | `Orbital-Outline.txt` | Plain-text outline of both, with page and slide numbers |
@@ -184,3 +184,6 @@ anyone edits it:
   delivered. Chapter 8, when it is written, is where the plan and the outcome
   are compared — and that comparison is only worth anything because the plan
   was not quietly redrawn to match.
+
+The chapter 6 screenshots are captured from the live site by `capture_screens.py` (Playwright, a visible Chrome window). Pass fresh `--aircraft` and `--ship` names, since the defaults land and sail.
+

@@ -16,7 +16,7 @@ import re
 
 HERE = pathlib.Path(__file__).parent
 OUT = HERE / "documents" / "Orbital-Outline.txt"
-PDF = HERE / "documents" / "Orbital-Report-Chapters-1-5.pdf"
+PDF = HERE / "documents" / "Orbital-Report-Chapters-1-6.pdf"
 PPTX = HERE / "documents" / "Orbital-Presentation.pptx"
 
 CHAPTERS = [
@@ -25,6 +25,7 @@ CHAPTERS = [
     "chapter-3-requirements-analysis.md",
     "chapter-4-project-planning.md",
     "chapter-5-system-design.md",
+    "chapter-6-program-screenshots.md",
 ]
 
 WIDTH = 78

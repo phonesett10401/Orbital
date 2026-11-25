@@ -12,7 +12,7 @@ lang: en-GB
 ---
 # Chapter 1: Introduction
 
-## 1.1 Background and Problem Statement
+## 1.1 Background
 
 At any moment roughly fourteen thousand aircraft are in the air, tens of
 thousands of ships are at sea, and thousands of satellites are in orbit. Almost
@@ -44,7 +44,7 @@ is abundant and free, but fragmented across sources with different formats,
 different coverage gaps and different access limits. No free tool presents all
 three on one map while being explicit about what it does not know.
 
-## 1.2 Project Objectives
+## 1.2 Objectives
 
 | | Objective |
 |---|---|
@@ -58,7 +58,22 @@ three on one map while being explicit about what it does not know.
 
 O5 exists to test whether the abstraction in O4 is real or accidental.
 
-## 1.3 Project Scope
+### Expected benefits
+
+**For viewers.** One free view of aircraft, ships and satellites, with no
+account required and no claim of completeness the data cannot support. Markers
+older than two minutes fade. The ship layer is labelled "ships in coastal
+waters" because both AIS feeds are received from the shore.
+
+**For data providers.** One backend makes a fixed number of requests regardless
+of how many people are watching, polling each source at the rate that source
+asks for.
+
+**For the team.** A worked example of a system with three interchangeable data
+layers, where the interchangeability was tested twice by adding a layer. Each
+new layer cost one provider module and one registry entry.
+
+## 1.3 Scope
 
 ### In scope
 
@@ -81,47 +96,7 @@ O5 exists to test whether the abstraction in O4 is real or accidental.
 | Ground-station passes | Feasible but outside the objectives |
 | Flight or voyage prediction | Orbital reports observations, it does not forecast |
 
-## 1.4 Expected Benefits
-
-**For viewers.** One free view of aircraft, ships and satellites, with no
-account required and no claim of completeness the data cannot support. Markers
-older than two minutes fade. The ship layer is labelled "ships in coastal
-waters" because both AIS feeds are received from the shore.
-
-**For data providers.** One backend makes a fixed number of requests regardless
-of how many people are watching, polling each source at the rate that source
-asks for.
-
-**For the team.** A worked example of a system with three interchangeable data
-layers, where the interchangeability was tested twice by adding a layer. Each
-new layer cost one provider module and one registry entry.
-
-## 1.5 Tools and Technologies Used
-
-| Layer | Technology | Reason |
-|---|---|---|
-| Map | MapLibre GL JS | One continuous view from globe to street level on real imagery |
-| 3D models | three.js | Draws the selected aircraft inside MapLibre's WebGL context |
-| Frontend | React, TypeScript, Vite | Contract enforced at compile time |
-| Backend | FastAPI, Python | Pydantic makes the same contract executable |
-| HTTP | httpx | Async, so polling never blocks a request |
-| WebSocket | websockets | The global AIS feed pushes rather than answers |
-| Storage | In-process memory; SQLite for accounts | One process, one poller; accounts are the only state that must survive a restart |
-| Orbits | sgp4 | The standard propagator for the published element format |
-| Tests | pytest, Vitest | Both run offline against fixture data |
-
-### Data sources
-
-| Source | Provides | Access |
-|---|---|---|
-| adsb.lol | Aircraft | Open Database Licence; a key for automated use since November 2026 |
-| OpenSky Network | Aircraft | Free, non-commercial, OAuth2, metered |
-| Digitraffic (Fintraffic) | Ships, Baltic | CC BY 4.0, commercial permitted, no key |
-| aisstream.io | Ships, global | Free, key required |
-| CelesTrak / SatNOGS | Orbital elements | Free |
-| NASA GIBS, OpenFreeMap | Imagery and map tiles | Open |
-
-## 1.6 Scale of the System
+### Scale of the system
 
 | Measure | Value |
 |---|---|
@@ -136,176 +111,114 @@ Measured on 8 September 2026 against the commit this report was built from.
 The three object counts move continuously; the rest move whenever the code
 does, which is why this table carries a date.
 
+## 1.4 Limitations
+
+Scope says what Orbital chose not to do. These are the limits of what it does,
+and most come from the data rather than the code.
+
+| Limitation | Cause | What the visitor sees |
+|---|---|---|
+| Coverage has gaps over oceans and remote land | Aircraft and ships are heard by ground receivers, which have a range of a few hundred kilometres | Empty areas where nobody is listening; the map does not invent positions there |
+| Ships are coastal only | Both AIS feeds are received from the shore, not by satellite | The layer is labelled "ships in coastal waters", and search explains when a ship is out of range |
+| The worldwide aircraft view needs the relay PC to be on | OpenSky refuses requests from cloud servers, so a team member's PC fetches the world (§5.1) | With that PC off, aircraft appear only around the area in view, and the status bar says the data is stale |
+| Positions are up to two minutes old | Free quotas allow the world to be fetched once every 120 seconds | Markers move smoothly by dead reckoning between updates; markers older than two minutes fade |
+| At most 2,000 objects are drawn per view | The browser cannot draw more within a frame's time budget | Zoomed far out, the status bar reads "showing a sample of N in view" |
+| Satellite positions are computed, not observed | Orbits are propagated from published elements with SGP4 | Accurate to about a kilometre, worse as elements age; elements older than seven days are refused |
+| Only about 1,500 satellites | Debris and rocket bodies are excluded (§1.3) | Active, named satellites only |
+| Scheduled routes may be wrong | The origin and destination come from a community database, not from the aircraft | The detail panel labels the route as published, not reported, and shows the observed path separately |
+| Time travel covers satellites only | Only satellites can be computed for any moment; aircraft and ships would need stored history | The time control appears on the satellite layer only, 24 hours either way for free users |
+| One server process holds the live data in memory | A second process would double every upstream request (§5.1) | After a restart the map refills within one polling cycle |
+| Premium has no payment | The project takes no money; OpenSky's licence is also non-commercial | Premium is switched on for free from the account menu |
+
+## 1.5 Software Development Tools
+
+| Layer | Technology | Reason |
+|---|---|---|
+| Map | MapLibre GL JS | One continuous view from globe to street level on real imagery |
+| 3D models | three.js | Draws the selected aircraft inside MapLibre's WebGL context |
+| Frontend | React, TypeScript, Vite | Contract enforced at compile time |
+| Backend | FastAPI, Python | Pydantic makes the same contract executable |
+| HTTP | httpx | Async, so polling never blocks a request |
+| WebSocket | websockets | The global AIS feed pushes rather than answers |
+| Storage | In-process memory; SQLite for accounts | One process, one poller; accounts are the only state that must survive a restart |
+| Orbits | sgp4 | The standard propagator for the published element format |
+| Tests | pytest, Vitest | Both run offline against fixture data |
+| Version control | Git, GitHub | Every change is a commit; pushing to main deploys |
+| Hosting | Vercel (frontend), Northflank (backend) | Free tiers; both deploy automatically from main |
+| OpenSky relay | Python script, Windows Task Scheduler | Runs on a team member's PC, which OpenSky accepts and cloud servers are refused |
+| Report and figures | matplotlib, pandoc, Microsoft Word, Playwright | Diagrams drawn from code; screenshots captured from the live site by script |
+
+### Data sources
+
+| Source | Provides | Access |
+|---|---|---|
+| adsb.lol | Aircraft | Open Database Licence; a key for automated use since November 2026 |
+| OpenSky Network | Aircraft | Free, non-commercial, OAuth2, metered |
+| Digitraffic (Fintraffic) | Ships, Baltic | CC BY 4.0, commercial permitted, no key |
+| aisstream.io | Ships, global | Free, key required |
+| CelesTrak / SatNOGS | Orbital elements | Free |
+| NASA GIBS, OpenFreeMap | Imagery and map tiles | Open |
+
+## 1.6 Software Success Indicators
+
+Each indicator is tied to an objective and can be checked against the running
+system, not just the code.
+
+| Indicator | Objective | Target | Result |
+|---|---|---|---|
+| Worldwide aircraft on the map | O1 | At least 5,000 aircraft while the relay runs | 5,500 to 9,400 in the relay's log, November 2026 |
+| Freshness of aircraft data | O1 | Data age under two minutes | Shown in the status bar; the world is refreshed every 120 s |
+| The browser never calls a data source | O2 | Zero requests from the browser to any feed | Every request goes to the Orbital API (§5.1) |
+| Upstream failure does not break the map | O3 | An outage shows the last positions, flagged stale, never an error page | Observed on 25 November 2026 with the relay PC off: "upstream is not responding — showing last known positions" |
+| API response time | O1 | List endpoint under 100 ms | 23 ms (NFR-03) |
+| Smooth drawing | O1 | 60 frames per second at the 2,000-object cap | 4.2 ms per frame at the median (NFR-02) |
+| One data shape for every layer | O4, O5 | Satellites and ships added without changing the shape | Both added; a test on each side enforces it (NFR-27) |
+| A new source needs no frontend change | O4 | Zero frontend changes per new feed | Demonstrated twice: adsb.fi, then the OpenSky relay |
+| Upstream quotas respected | O2 | OpenSky stays within 4,000 credits a day | The relay's log never showed fewer than 3,600 remaining |
+| Accounts and tiers work end to end | O6 | Register, sign in, switch premium on and off | Working on the live site (Figures 6.12 and 6.13) |
+| Usable without an account and on a phone | O1 | Every layer works signed out and at 375 px width | Checked on the live site (NFR-30, NFR-33) |
+| Decisions are recorded | O7 | Every significant decision written down | 216 entries in the decision log, D1 to D217 |
+| Automated tests pass | O3, O4 | All tests pass offline before each release | All 2,087 passing at this revision: 934 backend, 1,153 frontend |
+
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
 ```
 
-# Chapter 2: Feasibility Study and Related Work
+# Chapter 2: Software Overview Analysis
 
-## 2.1 Technical Feasibility
+## 2.1 Definitions of Terms
 
-Every claim below was tested against the live services before the design
-depended on it.
-
-| Question | Result |
+| Term | Meaning in this report |
 |---|---|
-| Are live aircraft positions obtainable without payment? | Yes. OpenSky returned 11,651 worldwide; adsb.lol 10,009 |
-| Can the whole world be fetched economically? | Yes. 10,013 aircraft in 1.9 seconds |
-| Can satellite positions be computed rather than fetched? | Yes. ~1,400 satellites, no network in the request path |
-| Are live ship positions obtainable without payment? | Yes. 916 vessels in 37 KB from one request; 17,848 in four minutes from the stream |
+| ADS-B | Automatic Dependent Surveillance–Broadcast. Aircraft broadcast their identity, position, altitude and speed about once a second; ground receivers pick it up |
+| AIS | Automatic Identification System. The ship equivalent of ADS-B: position every few seconds, name, type and destination every six minutes |
+| ICAO address | The unique 24-bit hexadecimal code of an aircraft's transponder, for example 885179. Orbital's identifier for an aircraft |
+| Callsign | The flight's radio name, for example THA923. What visitors search for |
+| Squawk | The four-digit transponder code assigned by air traffic control |
+| MMSI | Maritime Mobile Service Identity, the nine-digit number of a ship's radio. Orbital's identifier for a ship |
+| IMO number | A ship's permanent seven-digit hull number, which survives renaming |
+| TLE (orbital elements) | Two-line element set: the published description of a satellite's orbit, from which a position is computed |
+| SGP4 | The standard model that turns orbital elements into a position for a given moment |
+| NORAD number | A satellite's catalogue number, for example 49044 for the ISS's Nauka module |
+| LEO, MEO, GEO | Low Earth orbit (under 2,000 km), medium Earth orbit (to 34,000 km) and geostationary orbit (35,786 km) |
+| Provider | The backend module that speaks to one data source and returns the shared data shape |
+| Union provider | Two providers combined into one layer, each filling the other's gaps |
+| Poller | The backend component that fetches from each source on a schedule, with retry and backoff |
+| Store | The in-memory table of the latest position of every object |
+| Relay | A script on a team member's PC that fetches from OpenSky, which refuses cloud servers, and posts the result to the Orbital server |
+| Credit | OpenSky's unit of quota. A worldwide fetch costs 4; a free account has 4,000 a day |
+| Bounding box | The rectangle of latitude and longitude currently on screen. The API returns only objects inside it |
+| Thinning | Returning a sample of at most 2,000 objects when more are in view, so the browser can draw them in time |
+| Stale | Data older than its source's threshold. Shown faded and flagged, never hidden |
+| Dead reckoning | Moving a marker between updates along its last known heading and speed, so motion looks continuous |
+| Detail panel | The card that opens when an object is selected, showing everything known about it |
+| Tier | A level of account: free or premium (and administrator, with no interface) |
+| ETag / 304 | An HTTP mechanism that lets the server answer "unchanged" without sending the data again |
+| WebGL | The browser's interface to the graphics card, which MapLibre uses to draw the map |
+| ODbL, CC BY 4.0 | Open data licences of the aircraft and Finnish ship data, both requiring attribution |
 
-### Two measurements that changed the design
-
-**One global query is not enough.** A single 6,000 nautical-mile circle returned
-10,013 aircraft and four circles returned 10,009, which appeared to prove one
-was sufficient. The other three sample points were inside the area the first
-already covered. Over Australia the single circle returned 0 and a direct query
-returned 27. The global sweep uses four circles.
-
-**A rate limit cannot be characterised with a burst.** adsb.lol appeared to
-tolerate any rate when tested with occasional bursts. Under continuous load it
-refused 38% of requests. The real limit is four requests, then approximately one
-every twelve seconds.
-
-### Performance
-
-The backend runs a single-threaded event loop, so a slow operation delays every
-other request.
-
-| Objects held | Poll apply | Bbox filter | Thin to 2,000 | Search |
-|---|---|---|---|---|
-| 2,000 | 0.7 ms | 0.57 ms | 0.82 ms | 1.6 ms |
-| 10,000 | 7.4 ms | 3.2 ms | 9.1 ms | 8.3 ms |
-| 30,000 | 14.4 ms | 9.2 ms | 43.5 ms | 24.2 ms |
-
-Rendering at the 2,000-marker cap costs 0.80 ms per update, 4.8% of a 60 fps
-frame budget, scaling linearly to 10,000.
-
-**Conclusion: technically feasible.** Every required capability was demonstrated
-on live services before being designed around.
-
-## 2.2 Economic Feasibility
-
-### Direct cost
-
-| Category | Cost |
-|---|---|
-| Data sources | 0 |
-| Map imagery and tiles | 0 |
-| Libraries and tooling | 0 |
-| Hosting during development | 0 |
-| Total | 0 |
-
-The real cost is labour: five students over one semester.
-
-### The quota is the budget
-
-No money changes hands, but OpenSky's daily credit allowance is finite and was
-budgeted like money. The polling intervals are derived from it rather than
-chosen by feel: the configured jobs project 3,072 credits per day against a
-4,000 allowance, 77%, leaving headroom for the lookups a user triggers by
-clicking. The system refuses to start if a configuration would exceed 85%.
-
-Using the free adsb.lol feed as the primary source, with OpenSky supplementing
-it every 120 seconds, decouples the refresh rate from the allowance entirely.
-Ships and satellites cost nothing.
-
-### Licensing constrains the revenue model
-
-| Source | Commercial use |
-|---|---|
-| Digitraffic | Permitted (CC BY 4.0) |
-| adsb.lol | Permitted (ODbL) |
-| OpenSky Network | Forbidden, non-commercial only |
-| aisstream.io | Not stated |
-
-A commercial version is possible but not with the current source mix: the
-aircraft layer would have to drop OpenSky and accept its coverage gaps.
-
-### The implemented model
-
-A free tier supported by advertising and a paid tier are both implemented.
-Advertisements are the project's own messages in real advertisement dimensions,
-because a third-party network would introduce tracking into a project that
-collects no analytics. There is no payment processor, so the button reads
-"Switch premium on" rather than "Buy", and a test enforces that wording.
-
-## 2.3 Operational Feasibility
-
-### Operation
-
-Orbital runs as two processes with no database server, no message queue and no
-external cache. State lives in process memory; only accounts must survive a
-restart, in one SQLite file.
-
-### Failure behaviour
-
-The API layer never calls an upstream service. It reads a cache the ingestion
-layer fills on a schedule, so there is no upstream call in the request path that
-can fail.
-
-| Failure | Behaviour |
-|---|---|
-| Upstream 5xx | Last good snapshot served, flagged stale; poller backs off |
-| Rate limited | Same, using the upstream's own retry hint |
-| One of two feeds down | The other continues; the map is drawn |
-| CelesTrak returned 503 for a full day | The SatNOGS fallback served; cached elements remain usable for days |
-| Network absent | The fixture provider replays committed data |
-
-### Readability
-
-The interface must not make claims the data cannot support. Markers older than
-two minutes fade; an object with no transmitted heading is drawn as a disc
-rather than an arrow pointing north; the ship layer names its actual coverage;
-and the satellite layer reports no data age, because a computed position does
-not have one.
-
-## 2.4 Schedule Feasibility
-
-Work proceeded in phases, each with an explicit boundary, and each session ended
-with a written handover.
-
-| Phase | Delivered |
-|---|---|
-| 1 | Aircraft layer end to end |
-| 2 | Satellite layer; migration to MapLibre |
-| 3 | Moon and solar system views |
-| 4 | Accounts, tiers, advertisements |
-| 5 | Ship layer, regional then global |
-| 6 | Performance and defect sweep |
-
-The strongest evidence that the schedule held is the cost of the later phases.
-The satellite layer cost one provider module and one registry entry; the ship
-layer cost the same four months later; and the polling logic was not modified
-for either.
-
-Where time was lost: six sessions went to one defect misdiagnosed five times.
-The cause was structural — one camera serving two pictures at very different
-scales — and the resolution deleted 376 lines, added 130, and cost no feature.
-
-## 2.5 Related Systems
-
-| System | Covers | Model | Relationship |
-|---|---|---|---|
-| Flightradar24 | Aircraft | Commercial | The reference for a mature tracker; larger network, closed data |
-| MarineTraffic | Ships | Commercial | The shipping equivalent; acquired during this project |
-| OpenSky Network | Aircraft | Research | Used as a source; its non-commercial clause constrains §2.2 |
-| adsb.lol | Aircraft | Community | Used as the primary aircraft source |
-| AISHub | Ships | Reciprocal | Rejected: access requires contributing a receiver |
-| N2YO, Heavens-Above | Satellites | Free | Comparable satellite tracking; neither combines classes |
-
-Each individual layer is done better elsewhere by organisations with larger
-networks. What distinguishes Orbital is that three classes of object with three
-different acquisition models — observed and metered, observed and free, and
-computed — are presented on one map through one shared data shape.
-
-A deliberate search found no free, global, key-less ship feed equivalent to
-adsb.lol. An AIS receiver is a real installation rather than a cheap dongle, so
-volunteer networks operate on reciprocity, and the commercial half of the market
-has consolidated under two owners.
-
-## 2.6 Relevant Theories and Technologies
+## 2.2 Related Theories
 
 **ADS-B.** Aircraft broadcast identity, position, altitude and velocity about
 once a second. Coverage depends on a receiver being in range, which is why
@@ -340,14 +253,28 @@ dissolves when scaled down; marker artwork is therefore deliberately chunky.
 not changed the server returns 304 Not Modified before reading its store — no
 filtering, thinning, serialisation or compression.
 
+## 2.3 Related Information Systems
 
-```{=openxml}
-<w:p><w:r><w:br w:type="page"/></w:r></w:p>
-```
+| System | Covers | Model | Relationship |
+|---|---|---|---|
+| Flightradar24 | Aircraft | Commercial | The reference for a mature tracker; larger network, closed data |
+| MarineTraffic | Ships | Commercial | The shipping equivalent; acquired during this project |
+| OpenSky Network | Aircraft | Research | Used as a source; its non-commercial clause constrains §2.5.2 |
+| adsb.lol | Aircraft | Community | Used as the primary aircraft source |
+| AISHub | Ships | Reciprocal | Rejected: access requires contributing a receiver |
+| N2YO, Heavens-Above | Satellites | Free | Comparable satellite tracking; neither combines classes |
 
-# Chapter 3: Requirements Analysis
+Each individual layer is done better elsewhere by organisations with larger
+networks. What distinguishes Orbital is that three classes of object with three
+different acquisition models — observed and metered, observed and free, and
+computed — are presented on one map through one shared data shape.
 
-## 3.1 Stakeholder Analysis
+A deliberate search found no free, global, key-less ship feed equivalent to
+adsb.lol. An AIS receiver is a real installation rather than a cheap dongle, so
+volunteer networks operate on reciprocity, and the commercial half of the market
+has consolidated under two owners.
+
+## 2.4 Stakeholders
 
 Orbital's stakeholder map has an unusual shape: most of its stakeholders are
 upstream. The parties with the greatest power over whether the system works are
@@ -357,8 +284,8 @@ the data providers, none of whom have any relationship with the project.
 
 | Stakeholder | Interest | Power | How the design responds |
 |---|---|---|---|
-| adsb.lol | That clients do not abuse a donated service | High | One backend, fixed request count regardless of viewers; a gate enforces the measured rate limit |
-| OpenSky Network | Non-commercial use; quota respected | High | Used as a supplement; spending held at 77% of allowance; startup refuses an overspending configuration |
+| adsb.lol | That clients do not abuse a donated service; automated clients use a key | High | One backend, fixed request count regardless of viewers; queries kept within its 250 nm limit; a key has been requested |
+| OpenSky Network | Non-commercial use; quota respected; no requests from cloud servers | High | Fetched from a team member's PC by the relay, only while someone is watching; at most one worldwide fetch every two minutes, inside the daily allowance |
 | Fintraffic | Attribution under CC BY 4.0 | Medium | Attributed; polled at the rate its own cache headers ask for |
 | aisstream.io | Not stated | Medium | Used as a free public service and credited; behind a switch that disables it if the project is monetised |
 | CelesTrak / SatNOGS | Not to be polled excessively | Medium | Refreshed every six hours, cached to disk, with a fallback |
@@ -392,7 +319,159 @@ that tier under all configurations.
 | Nyan Lin Htet | 6708397 | Technical Engineer, Tester |
 | Pyae Phyo Maung | 6708170 | Co-Tester, Co-Quality Assurance and Analysis |
 
-## 3.2 Functional Requirements
+## 2.5 Feasibility Study
+
+The four feasibility questions were settled before the design depended on them.
+
+### 2.5.1 Technical Feasibility
+
+Every claim below was tested against the live services before the design
+depended on it.
+
+| Question | Result |
+|---|---|
+| Are live aircraft positions obtainable without payment? | Yes. OpenSky returned 11,651 worldwide; adsb.lol 10,009 |
+| Can the whole world be fetched economically? | Yes. 10,013 aircraft in 1.9 seconds |
+| Can satellite positions be computed rather than fetched? | Yes. ~1,400 satellites, no network in the request path |
+| Are live ship positions obtainable without payment? | Yes. 916 vessels in 37 KB from one request; 17,848 in four minutes from the stream |
+
+#### Two measurements that changed the design
+
+**One global query is not enough.** A single 6,000 nautical-mile circle returned
+10,013 aircraft and four circles returned 10,009, which appeared to prove one
+was sufficient. The other three sample points were inside the area the first
+already covered. Over Australia the single circle returned 0 and a direct query
+returned 27. The global sweep uses four circles.
+
+**A rate limit cannot be characterised with a burst.** adsb.lol appeared to
+tolerate any rate when tested with occasional bursts. Under continuous load it
+refused 38% of requests. The real limit is four requests, then approximately one
+every twelve seconds.
+
+#### Performance
+
+The backend runs a single-threaded event loop, so a slow operation delays every
+other request.
+
+| Objects held | Poll apply | Bbox filter | Thin to 2,000 | Search |
+|---|---|---|---|---|
+| 2,000 | 0.7 ms | 0.57 ms | 0.82 ms | 1.6 ms |
+| 10,000 | 7.4 ms | 3.2 ms | 9.1 ms | 8.3 ms |
+| 30,000 | 14.4 ms | 9.2 ms | 43.5 ms | 24.2 ms |
+
+Rendering at the 2,000-marker cap costs 0.80 ms per update, 4.8% of a 60 fps
+frame budget, scaling linearly to 10,000.
+
+**Conclusion: technically feasible.** Every required capability was demonstrated
+on live services before being designed around.
+
+### 2.5.2 Economic Feasibility
+
+#### Direct cost
+
+| Category | Cost |
+|---|---|
+| Data sources | 0 |
+| Map imagery and tiles | 0 |
+| Libraries and tooling | 0 |
+| Hosting during development | 0 |
+| Total | 0 |
+
+The real cost is labour: five students over one semester.
+
+#### The quota is the budget
+
+No money changes hands, but OpenSky's daily credit allowance is finite and was
+budgeted like money. The polling intervals are derived from it rather than
+chosen by feel: the configured jobs project 3,072 credits per day against a
+4,000 allowance, 77%, leaving headroom for the lookups a user triggers by
+clicking. The system refuses to start if a configuration would exceed 85%.
+
+Using the free adsb.lol feed as the primary source, with OpenSky supplementing
+it every 120 seconds, decouples the refresh rate from the allowance entirely.
+Ships and satellites cost nothing.
+
+#### Licensing constrains the revenue model
+
+| Source | Commercial use |
+|---|---|
+| Digitraffic | Permitted (CC BY 4.0) |
+| adsb.lol | Permitted (ODbL) |
+| OpenSky Network | Forbidden, non-commercial only |
+| aisstream.io | Not stated |
+
+A commercial version is possible but not with the current source mix: the
+aircraft layer would have to drop OpenSky and accept its coverage gaps.
+
+#### The implemented model
+
+A free tier supported by advertising and a paid tier are both implemented.
+Advertisements are the project's own messages in real advertisement dimensions,
+because a third-party network would introduce tracking into a project that
+collects no analytics. There is no payment processor, so the button reads
+"Switch premium on" rather than "Buy", and a test enforces that wording.
+
+### 2.5.3 Operational Feasibility
+
+#### Operation
+
+Orbital runs as two processes with no database server, no message queue and no
+external cache. State lives in process memory; only accounts must survive a
+restart, in one SQLite file.
+
+#### Failure behaviour
+
+The API layer never calls an upstream service. It reads a cache the ingestion
+layer fills on a schedule, so there is no upstream call in the request path that
+can fail.
+
+| Failure | Behaviour |
+|---|---|
+| Upstream 5xx | Last good snapshot served, flagged stale; poller backs off |
+| Rate limited | Same, using the upstream's own retry hint |
+| One of two feeds down | The other continues; the map is drawn |
+| CelesTrak returned 503 for a full day | The SatNOGS fallback served; cached elements remain usable for days |
+| Network absent | The fixture provider replays committed data |
+
+#### Readability
+
+The interface must not make claims the data cannot support. Markers older than
+two minutes fade; an object with no transmitted heading is drawn as a disc
+rather than an arrow pointing north; the ship layer names its actual coverage;
+and the satellite layer reports no data age, because a computed position does
+not have one.
+
+### 2.5.4 Schedule Feasibility
+
+Work proceeded in phases, each with an explicit boundary, and each session ended
+with a written handover.
+
+| Phase | Delivered |
+|---|---|
+| 1 | Aircraft layer end to end |
+| 2 | Satellite layer; migration to MapLibre |
+| 3 | Moon and solar system views |
+| 4 | Accounts, tiers, advertisements |
+| 5 | Ship layer, regional then global |
+| 6 | Performance and defect sweep |
+
+The strongest evidence that the schedule held is the cost of the later phases.
+The satellite layer cost one provider module and one registry entry; the ship
+layer cost the same four months later; and the polling logic was not modified
+for either.
+
+Where time was lost: six sessions went to one defect misdiagnosed five times.
+The cause was structural — one camera serving two pictures at very different
+scales — and the resolution deleted 376 lines, added 130, and cost no feature.
+
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+# Chapter 3: Requirements Analysis
+
+## 3.1 Functional Requirements
 
 Priority is M (must), S (should) or C (could). All are implemented.
 
@@ -461,7 +540,7 @@ Priority is M (must), S (should) or C (could). All are implemented.
 The premium window is seven days because that is where propagation accuracy
 becomes untrustworthy. No tier can exceed it.
 
-## 3.3 Non-Functional Requirements
+## 3.2 Non-Functional Requirements
 
 ### Performance
 
@@ -526,13 +605,7 @@ becomes untrustworthy. No tier can exceed it.
 | NFR-32 | Controls reachable and labelled for assistive technology |
 | NFR-33 | Layout usable at a 375 px viewport |
 
-
-
-```{=openxml}
-<w:p><w:r><w:br w:type="page"/></w:r></w:p>
-```
-
-## 3.4 Use Case Diagram
+## 3.3 Use Case Diagram
 
 ![Figure 3.1 — Use case diagram. Eleven use cases, five actors, one system boundary.](figures/3-1-use-case-diagram.png){width=6.5in}
 
@@ -541,7 +614,7 @@ instant lies within the actor's entitlement window. UC-07 to UC-10 are started
 by a scheduler rather than a person, and are shown because every external
 dependency and failure mode lives there.
 
-## 3.5 Use Case Descriptions
+## 3.4 Use Case Descriptions
 
 ### UC-01 View the map
 
@@ -664,7 +737,7 @@ the accumulated world is held locally.
 
 There is no interface for this and no endpoint that can perform it.
 
-## 3.6 Software Requirements Specification
+## 3.5 Software Requirements Specification
 
 ### Purpose
 
@@ -814,7 +887,7 @@ report, a decision record, a test plan, and a demonstration.
 | Constraint | Consequence for the plan |
 |---|---|
 | Free data sources only | Rate limits, not money, are the budget (§4.4) |
-| No commercial licence on one feed | The revenue model cannot use OpenSky (§2.2) |
+| No commercial licence on one feed | The revenue model cannot use OpenSky (§2.5.2) |
 | One backend worker | Vertical scaling only; a second worker would double upstream cost |
 | Five part-time students | Parallel work must be separable, or it serialises |
 | One semester | Scope is fixed by phase boundaries rather than by deadline pressure |
@@ -868,7 +941,7 @@ visible: each new object type is one provider module and one registry entry.
 
 **This is the plan, not the log.** The bars are what the team undertook to do
 and the order the dependencies allow. What was actually delivered, phase by
-phase, is recorded in §2.4, and Chapter 8 is where the two are compared. Keeping
+phase, is recorded in §2.5.4, and Chapter 8 is where the two are compared. Keeping
 them apart matters: a Gantt chart redrawn after the fact to match what happened
 is not a plan and cannot be used to judge whether planning worked.
 
@@ -891,7 +964,7 @@ blocks another.
 **That is a designed property, not a fortunate one.** The shared data shape was
 specified before any provider was written precisely so that the second and third
 object types would not sit behind the first. The measured evidence that it
-worked is in §2.4: the ship layer cost the same as the satellite layer four
+worked is in §2.5.4: the ship layer cost the same as the satellite layer four
 months later, and the polling logic was not modified for either.
 
 ### Scheduling assumption
@@ -916,7 +989,7 @@ against.
 | **Total cash cost** | **0** |
 
 Every input is a free public service or an open-source library, and both hosts
-run on free tiers. This is not an accident of a student budget: §2.2 records
+run on free tiers. This is not an accident of a student budget: §2.5.2 records
 that free sources were a requirement, because a tracker that costs money per
 viewer cannot be free to look at.
 
@@ -1020,7 +1093,7 @@ intentions is a document nobody checks against the system.
 | R5 | The map shows something false and nothing says so | M | H | Every response carries its age and a staleness flag; a marker fades after two minutes unreported; the status bar states how many of how many are drawn |
 | R6 | Secrets committed to the repository | L | H | Credentials in environment variables only; configuration never printed as an object, only field by field |
 | R7 | Work serialises behind one member | M | M | The shared data shape fixed before any provider was written, so the layers proceed in parallel; handover written every session |
-| R8 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in §2.2 rather than assumed away |
+| R8 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in §2.5.2 rather than assumed away |
 | R9 | A defect resists diagnosis and consumes the schedule | M | H | Every defect written down with how it was found; a fix counts as fixed when demonstrated, not when written |
 | R10 | A decision correct when made becomes wrong later | M | M | Decision record carries alternatives and reasoning, so a reversal is cheap and evidenced |
 
@@ -1055,7 +1128,7 @@ them into a header comparison, and because the tag is computed from the store's
 version counter and the query before the store is read, a 304 never builds the
 response at all.
 
-The one poll in thirty that does change costs the measured work in §2.1: a
+The one poll in thirty that does change costs the measured work in §2.5.1: a
 bounding-box filter and a thinning pass, together under one and a half
 milliseconds at the 2,000 cap. **Upstream cost does not move at all** with
 viewer count, because the browser never calls a source.
@@ -1485,3 +1558,181 @@ draw a sphere but could not draw a map: no vector basemap, no zoom to street
 level, no established tiling. Replacing it cost a phase and was correct — a
 decision that was right when it was made became wrong once the requirement grew
 past what it could reach.
+
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+# Chapter 6: Program Screenshots
+
+These are the key screens of Orbital, captured from the live site
+(orbital-liveview.vercel.app) on 25 November 2026. The aircraft, ships and
+satellites in them are real and were in those positions when captured. Each
+screenshot is followed by what the screen is for and how it works. The
+"Sponsored" cards are the free tier's advertising; premium removes them.
+
+## 6.1 Live Aircraft
+
+![Figure 6.1 — The worldwide aircraft view.](figures/6-01-world-aircraft.png){width=6.5in}
+
+**Purpose.** The opening screen. It shows every aircraft the system currently
+knows about, worldwide, on a 3D globe, so a visitor sees air traffic at a
+glance without signing in.
+
+**How it works.** The browser asks the Orbital API for the aircraft inside the
+part of the globe on screen. The API reads them from the server's in-memory
+store, which the OpenSky relay refreshes every two minutes and adsb.lol and
+adsb.fi supplement. When more than 2,000 are in view, the API returns a sample,
+and the status bar at the bottom says so ("showing a sample of 5,842 in view")
+along with the data's age and source. Colour is altitude, explained in the key.
+
+![Figure 6.2 — Aircraft over mainland Southeast Asia, zoomed in.](figures/6-02-regional-aircraft.png){width=6.5in}
+
+**Purpose.** Following traffic in one region with callsigns readable.
+
+**How it works.** Scrolling zooms the map from the globe to street level in one
+continuous view. As the visible area shrinks, the browser asks again for just
+that area, so every aircraft in it is drawn instead of a sample. Each icon
+points along its heading, is labelled with its callsign, and moves smoothly
+between updates by dead reckoning along its last known heading and speed.
+
+## 6.2 Search
+
+![Figure 6.3 — Search suggestions while typing a callsign.](figures/6-03-search.png){width=6.5in}
+
+**Purpose.** Finding a particular flight, airport, satellite or ship without
+looking for it on the map.
+
+**How it works.** As the visitor types, the browser sends the text to the
+search endpoint, which matches it against the objects held in memory and
+returns up to eight suggestions with their altitude. Choosing one, or pressing
+Enter, selects that object, flies the camera to it and opens its detail panel.
+The search box searches whichever layer is active, and its placeholder text
+changes to say what it accepts.
+
+## 6.3 Aircraft Details and Flown Route
+
+![Figure 6.4 — The detail panel of Thai Airways flight THA923, with the route it has flown.](figures/6-04-aircraft-detail.png){width=6.5in}
+
+**Purpose.** Everything known about one aircraft: its photo, airline, aircraft
+type, registration, altitude, speed and heading, its scheduled route, and the
+path it has actually flown.
+
+**How it works.** Selecting an aircraft asks the API for its details. The
+server looks up the airline and aircraft type from shared tables and the
+scheduled route from a community route database. It asks the home relay for
+the aircraft's flown track from OpenSky, which arrives within a few seconds
+and is drawn as the white line. The photo comes from Planespotters and is
+credited to its photographer. The panel labels the scheduled route as
+published rather than reported, because aircraft do not transmit their
+destination.
+
+## 6.4 Satellites
+
+![Figure 6.5 — The satellite layer: about 1,500 satellites, coloured by orbit.](figures/6-05-satellites.png){width=6.5in}
+
+**Purpose.** Showing where active satellites are right now, and what kind of
+orbit each is on.
+
+**How it works.** Satellite positions are not downloaded; they are computed.
+The server holds the published orbital elements for each satellite, refreshed
+every six hours, and calculates each position with the SGP4 model when the
+browser asks. Colour shows the orbit class (low, medium, geostationary or
+elliptical), and the icon's shape shows what kind of spacecraft it is, as the
+key explains.
+
+![Figure 6.6 — The International Space Station selected, with its orbit drawn.](figures/6-06-satellite-detail.png){width=6.5in}
+
+**Purpose.** Details of one satellite: its catalogue number, type, altitude,
+speed, orbital period and inclination, and the orbit it follows.
+
+**How it works.** Selecting a satellite computes its path for one full orbit
+and draws it as a line around the globe. The panel says the position is
+"computed for now", not observed, and how old the orbital elements are,
+because accuracy falls as they age. Plain-language notes explain each value,
+for example that an inclination of 51.6° means the station never passes north
+of 52° or south of −52°.
+
+## 6.5 Time Control
+
+![Figure 6.7 — The sky as it was one hour ago.](figures/6-07-time-control.png){width=6.5in}
+
+**Purpose.** Seeing where the satellites were, or will be, at another moment.
+
+**How it works.** Because satellite positions are computed, they can be
+computed for any time. Dragging the slider, or using the arrow keys, sends the
+chosen time with each request, and every satellite is recalculated for that
+moment. The panel turns amber, shows the exact time in UTC, and offers "Return
+to live". Free users can move 24 hours either way and premium users 7 days.
+
+## 6.6 Ships
+
+![Figure 6.8 — Ships in the Gulf of Finland, coloured by vessel type.](figures/6-08-ships.png){width=6.5in}
+
+**Purpose.** Showing vessels near the coast, by type: cargo, passenger, tanker,
+tug, fishing and others.
+
+**How it works.** Ship positions come from AIS, merged from two sources: the
+Finnish Digitraffic service and the global aisstream.io feed, which pushes
+updates to the server over a WebSocket. Both are received by stations on the
+shore, which is why the layer is labelled "ships in coastal waters" and is
+densest around Finland.
+
+![Figure 6.9 — The detail panel of the passenger ship Silja Serenade.](figures/6-09-ship-detail.png){width=6.5in}
+
+**Purpose.** Details of one vessel: its type, navigational status, speed,
+heading, destination and arrival time, size, and identifying numbers.
+
+**How it works.** Name, type, size and destination are broadcast separately
+from position, and less often, so the server keeps adding them to a vessel's
+record as they arrive. Values a transmitter marks as "not available" are never
+shown as numbers, and the status is labelled "as set by the crew" because it
+is entered by hand on board.
+
+## 6.7 The Moon
+
+![Figure 6.10 — The Moon, with the three spacecraft in lunar orbit.](figures/6-10-moon.png){width=6.5in}
+
+**Purpose.** Visiting other worlds under the same camera, and following the
+spacecraft that orbit the Moon.
+
+**How it works.** The world picker under the logo lists the Sun, the planets
+and the Moon. Choosing one flies the camera out and back in, and swaps the
+surface imagery. On the Moon, the "In orbit" panel lists LRO, Danuri and
+Chandrayaan-2, whose positions come from NASA JPL's Horizons service and are
+drawn over the surface.
+
+## 6.8 The Solar System
+
+![Figure 6.11 — The solar system page, with the planets where they are today.](figures/6-11-solar-system.png){width=6.5in}
+
+**Purpose.** An overview of the Sun, the eight planets and the Moon, as a way
+to choose a world and to see where Earth is.
+
+**How it works.** The planets' positions are computed for the current date
+from their orbits and drawn on their orbital paths. Earth is marked "you are
+here". The arrows and the index move between bodies, and "Back to Earth"
+returns to the map.
+
+## 6.9 Accounts and Premium
+
+![Figure 6.12 — The sign-in page.](figures/6-12-sign-in.png){width=6.5in}
+
+**Purpose.** Signing in to an existing account or creating a new one. The map
+works without an account; an account is needed only for premium.
+
+**How it works.** The email and password are sent to the API over HTTPS. The
+server checks the password against a scrypt hash stored in its SQLite
+database, and on success sets a session cookie that scripts on the page cannot
+read. Passwords are never stored, logged or returned.
+
+![Figure 6.13 — The premium page, comparing the free and premium tiers.](figures/6-13-premium.png){width=6.5in}
+
+**Purpose.** Explaining what premium adds: time travel 7 days either way
+instead of 24 hours, and no advertising. Everything else is free.
+
+**How it works.** The page reads the visitor's tier from their session. Orbital
+has no payment system, so a signed-in user switches premium on or off with one
+click, and the server records the tier on their account. The time control and
+the advertising read that tier and change at once.

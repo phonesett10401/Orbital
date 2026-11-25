@@ -1,51 +1,6 @@
 # Chapter 3: Requirements Analysis
 
-## 3.1 Stakeholder Analysis
-
-Orbital's stakeholder map has an unusual shape: most of its stakeholders are
-upstream. The parties with the greatest power over whether the system works are
-the data providers, none of whom have any relationship with the project.
-
-### Upstream — the data providers
-
-| Stakeholder | Interest | Power | How the design responds |
-|---|---|---|---|
-| adsb.lol | That clients do not abuse a donated service | High | One backend, fixed request count regardless of viewers; a gate enforces the measured rate limit |
-| OpenSky Network | Non-commercial use; quota respected | High | Used as a supplement; spending held at 77% of allowance; startup refuses an overspending configuration |
-| Fintraffic | Attribution under CC BY 4.0 | Medium | Attributed; polled at the rate its own cache headers ask for |
-| aisstream.io | Not stated | Medium | Used as a free public service and credited; behind a switch that disables it if the project is monetised |
-| CelesTrak / SatNOGS | Not to be polled excessively | Medium | Refreshed every six hours, cached to disk, with a fallback |
-| Volunteer receiver operators | Recognition that coverage is theirs | Low | The map draws where no network reaches |
-
-Because the upstream stakeholders hold the power and grant no guarantees, the
-system is designed so any of them failing degrades the display rather than
-breaking it. That is a requirement derived from stakeholder analysis rather than
-a technical preference.
-
-### Downstream — the users
-
-| Stakeholder | Needs | Power |
-|---|---|---|
-| Anonymous viewer | To look without registering; not to be misled | High, the default user |
-| Registered free user | An identity; recent history | Medium |
-| Premium user | A wider historical window | Medium |
-| Administrator | Account management | Low, one role |
-
-The administrator tier exists in the data but has no interface. An account can
-only be promoted from a terminal on the server, and the public endpoint refuses
-that tier under all configurations.
-
-### The team
-
-| Member | ID | Roles |
-|---|---|---|
-| Phone Sett Paing Kyaw | 6708369 | Project Manager, Developer |
-| Bhone Pyae Hein | 6708381 | System Analysis, Co-Developer |
-| Han Phyo Htet | 6708463 | Quality Assurance, Business Analysis, Co-Tester |
-| Nyan Lin Htet | 6708397 | Technical Engineer, Tester |
-| Pyae Phyo Maung | 6708170 | Co-Tester, Co-Quality Assurance and Analysis |
-
-## 3.2 Functional Requirements
+## 3.1 Functional Requirements
 
 Priority is M (must), S (should) or C (could). All are implemented.
 
@@ -114,7 +69,7 @@ Priority is M (must), S (should) or C (could). All are implemented.
 The premium window is seven days because that is where propagation accuracy
 becomes untrustworthy. No tier can exceed it.
 
-## 3.3 Non-Functional Requirements
+## 3.2 Non-Functional Requirements
 
 ### Performance
 
@@ -179,7 +134,7 @@ becomes untrustworthy. No tier can exceed it.
 | NFR-32 | Controls reachable and labelled for assistive technology |
 | NFR-33 | Layout usable at a 375 px viewport |
 
-## 3.4 Use Case Diagram
+## 3.3 Use Case Diagram
 
 ![Figure 3.1 — Use case diagram. Eleven use cases, five actors, one system boundary.](figures/3-1-use-case-diagram.png){width=6.5in}
 
@@ -188,7 +143,7 @@ instant lies within the actor's entitlement window. UC-07 to UC-10 are started
 by a scheduler rather than a person, and are shown because every external
 dependency and failure mode lives there.
 
-## 3.5 Use Case Descriptions
+## 3.4 Use Case Descriptions
 
 ### UC-01 View the map
 
@@ -311,7 +266,7 @@ the accumulated world is held locally.
 
 There is no interface for this and no endpoint that can perform it.
 
-## 3.6 Software Requirements Specification
+## 3.5 Software Requirements Specification
 
 ### Purpose
 
