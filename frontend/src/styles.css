@@ -168,6 +168,12 @@ body {
     width: 728px;
     height: 90px;
   }
+
+  /* The leaderboard ends at 106px, below the panel's 76px top, and covered its title. */
+  body:has(.ad--banner) .panel {
+    top: 116px;
+    max-height: calc(100% - 190px);
+  }
 }
 
 /*
