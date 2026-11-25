@@ -7,6 +7,7 @@ files are the same document rather than two separate renderings of it.
 from __future__ import annotations
 
 import pathlib
+import re
 import subprocess
 
 REPO = pathlib.Path(r"C:\Orbital")
@@ -37,23 +38,27 @@ author:
   - "Han Phyo Htet (6708463)"
   - "Nyan Lin Htet (6708397)"
   - "Pyae Phyo Maung (6708170)"
-date: "CSC480 --- 15 September 2026"
+date: "CSC480 --- November 2026"
 lang: en-GB
 ---
 """
 
 CHAPTERS = [
     "chapter-1-introduction.md",
-    "chapter-2-feasibility-and-related-work.md",
-    "chapter-3-requirements-analysis.md",
-    "chapter-4-project-planning.md",
+    "chapter-2-software-overview-analysis.md",
+    "chapter-3-software-requirements-specification.md",
+    "chapter-4-project-methodology.md",
     "chapter-5-system-design.md",
-    "chapter-6-program-screenshots.md",
+    "chapter-6-implementation-and-testing.md",
+    "chapter-7-gui-and-description.md",
+    "chapter-8-conclusion-and-recommendations.md",
+    "appendix-a-feasibility-study.md",
+    "appendix-b-charter-cost-resources.md",
+    "appendix-c-activity-diagram.md",
 ]
 
-#: Stem for both built files. It names the range, so a stale document from an
-#: earlier range is obvious in the folder rather than silently overwritten.
-STEM = "Orbital-Report-Chapters-1-6"
+#: Stem for both built files: the complete report in the course's format.
+STEM = "Orbital-Final-Report"
 
 
 def assemble() -> pathlib.Path:
@@ -64,8 +69,12 @@ def assemble() -> pathlib.Path:
         # it still wants its own page: a figure that starts four lines from the
         # bottom pushes its own caption onto the next one.
         text = text.replace(
-            "## 3.4 Use Case Diagram", PAGE_BREAK + "## 3.4 Use Case Diagram"
+            "#### 5.2.2.1 Use Case Diagram", PAGE_BREAK + "#### 5.2.2.1 Use Case Diagram"
         )
+        # The contents must match the course's numbered outline, and Word lists
+        # every heading to the TOC depth, so unnumbered sub-headings below
+        # level 2 become bold labels.
+        text = re.sub(r"^#{3,6} (?!(?:\d+|[A-Z])\.\d)(.+)$", r"**\1**", text, flags=re.M)
         # Not before the first: pandoc's own table of contents already ends
         # its page, and a second break left page 2 blank.
         if index:
@@ -85,7 +94,8 @@ def to_docx(md: pathlib.Path) -> pathlib.Path:
             "--from",
             "markdown+pipe_tables+backtick_code_blocks+yaml_metadata_block"
             "+raw_attribute+link_attributes+implicit_figures",
-            "--toc", "--toc-depth=2",
+            # Four levels, because the course outline numbers down to 3.2.3.1.
+            "--toc", "--toc-depth=4",
             "--standalone",
             # Pandoc resolves a relative image path against the *working
             # directory*, not against the file the path was written in. The

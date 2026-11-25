@@ -163,7 +163,7 @@ system, not just the code.
 | One data shape for every layer | O4, O5 | Satellites and ships added without changing the shape | Both added; a test on each side enforces it (NFR-27) |
 | A new source needs no frontend change | O4 | Zero frontend changes per new feed | Demonstrated twice: adsb.fi, then the OpenSky relay |
 | Upstream quotas respected | O2 | OpenSky stays within 4,000 credits a day | The relay's log never showed fewer than 3,600 remaining |
-| Accounts and tiers work end to end | O6 | Register, sign in, switch premium on and off | Working on the live site (Figures 6.12 and 6.13) |
+| Accounts and tiers work end to end | O6 | Register, sign in, switch premium on and off | Working on the live site (Figures 7.13 and 7.14) |
 | Usable without an account and on a phone | O1 | Every layer works signed out and at 375 px width | Checked on the live site (NFR-30, NFR-33) |
 | Decisions are recorded | O7 | Every significant decision written down | 216 entries in the decision log, D1 to D217 |
 | Automated tests pass | O3, O4 | All tests pass offline before each release | All 2,087 passing at this revision: 934 backend, 1,153 frontend |

@@ -1,24 +1,22 @@
 # Orbital — Project Report
 
-Draft chapters for the CSC480 report, following the structure in
-`OneDrive/Documents/TEMPLATE.pdf`.
+The CSC480 final report, following the course's table of contents
+(November 2026). The numbered headings must match that outline exactly; the
+build turns unnumbered sub-headings into bold labels so the contents page does.
 
 ## Status
 
 | Chapter | Sections | State |
 |---|---|---|
-| **1. Introduction** | Background · Objectives · Scope · Limitations · Software Development Tools · Software Success Indicators | **Draft complete** |
-| **2. Software Overview Analysis** | Definitions of Terms · Related Theories · Related Information Systems · Stakeholders · Feasibility Study | **Draft complete** |
-| **3. Requirements Analysis** | Functional · Non-Functional · Use Case Diagram · Use Case Descriptions · SRS | **Draft complete** |
-| **4. Project Planning** | Charter · WBS · Gantt · Cost · Resources · Risk · Communication | **Draft complete** |
-| **5. System Design** | Architecture · ER · UML · UI · Prototype | **Draft complete** |
-| **6. Program Screenshots** | 13 key screens, each with its purpose and how it works | **Draft complete** |
-| 7. System Testing | Plan · Cases · Unit · Integration · System · UAT · Results | Not started |
-| 8. Conclusion | Summary · Objectives · Problems · Improvements · Lessons | Not started |
-
-Chapters 6–8 are largely assembly rather than research: much of their content
-already exists in `docs/decisions.md`, `docs/architecture.md`,
-`docs/test-plan.md` and `docs/data-contract.md`.
+| **1. Introduction** | Background · Objectives · Scope · Limitations · Software Development Tools · Software Success Indicators | Complete |
+| **2. Software Overview Analysis** | Definitions of Terms · Related Theories · Related Information Systems · Stakeholders | Complete |
+| **3. Software Requirements Specification** | System Overview · Functional · Data · Technical · Integration · Usability | Complete |
+| **4. Project Methodology** | Implementation Plan (Gantt) · Risk Plan and Traceability · Organizational Structure · Communication | Complete |
+| **5. System Design** | Architecture · Database · Use Case, Class and Sequence Diagrams · Structure Chart | Complete |
+| **6. Implementation and Testing** | Traceability Matrix · Unit · Functional · Integration · System · Implementation Plan | Complete |
+| **7. GUI and Description** | The interface layout and 13 screens, each with its purpose and how it works | Complete |
+| **8. Conclusion and Recommendations** | Objectives met · Problems · Recommendations | Complete |
+| Appendices | A Feasibility Study · B Charter, Cost and Resources · C Activity Diagram | Complete |
 
 ## Built documents
 
@@ -28,8 +26,8 @@ not artifacts nobody needs to keep.
 
 | File | |
 |---|---|
-| `Orbital-Report-Chapters-1-6.docx` | Word, chapters 1-6 with figures and program screenshots |
-| `Orbital-Report-Chapters-1-6.pdf` | The same document, exported by Word itself |
+| `Orbital-Final-Report.docx` | Word, the complete report, 72 pages |
+| `Orbital-Final-Report.pdf` | The same document, exported by Word itself |
 
 | `Orbital-Presentation.pptx` | 13 slides |
 | `Orbital-Outline.txt` | Plain-text outline of both, with page and slide numbers |

@@ -1,4 +1,4 @@
-"""Write a plain-text outline of the report and the deck.
+﻿"""Write a plain-text outline of the report and the deck.
 
 **Read out of the built artefacts, not typed.** Chapter headings come from the
 markdown sources, page numbers from the rendered PDF, and slide titles and
@@ -16,16 +16,18 @@ import re
 
 HERE = pathlib.Path(__file__).parent
 OUT = HERE / "documents" / "Orbital-Outline.txt"
-PDF = HERE / "documents" / "Orbital-Report-Chapters-1-6.pdf"
+PDF = HERE / "documents" / "Orbital-Final-Report.pdf"
 PPTX = HERE / "documents" / "Orbital-Presentation.pptx"
 
 CHAPTERS = [
     "chapter-1-introduction.md",
-    "chapter-2-feasibility-and-related-work.md",
-    "chapter-3-requirements-analysis.md",
-    "chapter-4-project-planning.md",
+    "chapter-2-software-overview-analysis.md",
+    "chapter-3-software-requirements-specification.md",
+    "chapter-4-project-methodology.md",
     "chapter-5-system-design.md",
-    "chapter-6-program-screenshots.md",
+    "chapter-6-implementation-and-testing.md",
+    "chapter-7-gui-and-description.md",
+    "chapter-8-conclusion-and-recommendations.md",
 ]
 
 WIDTH = 78

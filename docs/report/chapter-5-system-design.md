@@ -72,26 +72,9 @@ the trail the server observed itself, which is now kept for four hours.
 | Aircraft request rate | 4 per minute | A fifth under the measured limit of burst-4 then ~5 per minute |
 | Vessel ceiling | 14,000 | Bounds memory for a feed that accumulates rather than answers |
 
----
-
-### Structure chart
-
-![Figure 5.2 — Structure chart. Orbital as four modules, each with the parts it is made of.](figures/5-1b-structure-chart.png){width=6.5in}
-
-The structure chart breaks Orbital into four modules, matching the layers
-above with the store drawn as its own module. Each module calls only the one
-beside it, so a change inside one leaves the others untouched.
-
-| Module | Made of |
-|---|---|
-| 1 Data ingestion | The poller, which asks on a timer; one provider per feed; the union provider, which merges feeds |
-| 2 Data store | Live objects held in memory; track history; the accounts database |
-| 3 API service | Live map data; search; sign-in and health |
-| 4 Map frontend | Map layers; details and search; time control |
-
 ### Data flow diagram, Level 1
 
-![Figure 5.3 — Data flow diagram, Level 1. From live feeds to the visitor's screen.](figures/5-1c-data-flow-level-1.png){width=6.5in}
+![Figure 5.2 — Data flow diagram, Level 1. From live feeds to the visitor's screen.](figures/5-1c-data-flow-level-1.png){width=6.5in}
 
 | Process | Takes in | Gives out |
 |---|---|---|
@@ -104,11 +87,13 @@ D1, the live objects, is held in memory and rebuilt from the feeds after a
 restart. D2, the accounts, is the one store saved to disk. Process 3.0 only
 reads D1 and never calls a feed, so the map never waits for an outside service.
 
-## 5.2 Database Design
+## 5.2 Software Design
 
-![Figure 5.4 — Entity relationship diagram. Two persisted tables, and the domain entities that have no table.](figures/5-2-er-diagram.png){width=6.5in}
+### 5.2.1 Database Design
 
-### Two tables, and that is the design
+![Figure 5.3 — Entity relationship diagram. Two persisted tables, and the domain entities that have no table.](figures/5-2-er-diagram.png){width=6.5in}
+
+#### Two tables, and that is the design
 
 The persisted schema is `accounts` and `sessions`. Nothing else in Orbital is
 written down.
@@ -138,7 +123,7 @@ own schedule.
 its hash is in the table, so the token exists in the user's cookie and nowhere
 else. A copy of the database does not let anyone sign in as anybody.
 
-### Why almost nothing is persisted
+#### Why almost nothing is persisted
 
 A tracker looks like a system that should have a large database, and Orbital
 deliberately does not. A poll replaces the previous snapshot; positions are held
@@ -159,12 +144,12 @@ The cost is equally plain: Orbital cannot answer a question about last Tuesday.
 Entitlement windows of twenty-four hours and seven days are bounded by what is
 still in memory, not by a query.
 
-### The entities that have no table
+#### The entities that have no table
 
 `TrackedObject` is the shared shape all three object types normalise to, with
 `TrackPoint`, `Airport` and `FlightRoute` hanging off it. They have real
 structure, real relationships and real cardinality — they simply have no rows.
-They are drawn dashed in Figure 5.4 because omitting them would make the data
+They are drawn dashed in Figure 5.3 because omitting them would make the data
 model look like two tables about sign-in, which is the least interesting part of
 this system.
 
@@ -173,11 +158,141 @@ aircraft has a route and a track; a satellite and a ship have neither. This is
 what makes a new object type cost one ingestion module: there is no per-type
 schema to add.
 
----
+### 5.2.2 UML Modeling
 
-## 5.3 UML Diagrams
+#### 5.2.2.1 Use Case Diagram
 
-### 5.3.1 Class Diagram
+![Figure 5.4 — Use case diagram. Eleven use cases, five actors, one system boundary.](figures/3-1-use-case-diagram.png){width=6.5in}
+
+UC-03 includes UC-01. UC-06 extends UC-01 when an instant is chosen, if that
+instant lies within the actor's entitlement window. UC-07 to UC-10 are started
+by a scheduler rather than a person, and are shown because every external
+dependency and failure mode lives there.
+
+**Use case descriptions**
+
+**UC-01 View the map**
+
+**Actor** Anonymous Viewer. **Preconditions** None; no account required.
+
+1. The system draws the Earth on satellite imagery.
+2. The client requests the active layer's objects for the visible area.
+3. The API returns the cached snapshot, filtered and thinned, with its age.
+4. The client draws each object oriented to its heading, coloured by the
+   property that varies on that layer.
+5. Between polls the client interpolates positions.
+
+**A1** Data is stale: the response is flagged, markers past two minutes fade.
+**A2** Backend unreachable: the last state remains; the map is not cleared.
+**A3** More objects than the cap: a spatially even sample is returned and both
+figures are reported.
+
+**UC-02 Switch layer**
+
+**Actor** Anonymous Viewer.
+
+1. The viewer selects Aircraft, Satellites or Ships.
+2. The system clears the current selection and objects.
+3. All surrounding text changes with the layer — subtitle, search placeholder,
+   count noun and colour key.
+4. Layer-specific furniture is hidden; airports and receiver coverage belong to
+   the aircraft layer.
+5. The client polls the new layer's endpoint.
+
+**UC-03 Select an object**
+
+**Actor** Anonymous Viewer. **Includes** UC-01.
+
+1. The viewer clicks a marker.
+2. The client requests that object's full record.
+3. A panel opens with fields appropriate to the layer.
+4. The object's observed track is drawn.
+
+**A1** Empty map clicked: the selection clears. **A2** No longer tracked: a 404
+is returned and the panel says so rather than showing an empty record.
+
+**UC-04 Search**
+
+**Actor** Anonymous Viewer.
+
+1. The viewer types into the search box.
+2. After a debounce, the client requests results.
+3. Matches are returned in separate groups, ranked within each but not across
+   them, because they are not comparable.
+4. Only the groups the active layer can act on are shown.
+5. Choosing a result moves the camera to it and selects it.
+
+**UC-05 Register and sign in**
+
+**Actor** Anonymous Viewer becoming Registered User.
+
+1. The viewer supplies an email and password.
+2. A password shorter than ten characters is rejected.
+3. The password is hashed with scrypt.
+4. A session cookie is issued, HttpOnly and SameSite.
+
+**A1** Email already registered: reported without revealing the password.
+**A2** Wrong credentials: one message for both cases, so the response does not
+disclose which accounts exist.
+
+**UC-06 View a past instant**
+
+**Actor** Registered or Premium User. **Extends** UC-01. **Precondition** Signed
+in, satellite layer active.
+
+1. The user moves the time control to a past instant.
+2. The system checks it against the account's window: 24 hours free, 7 days
+   premium.
+3. Positions are propagated to that instant and returned.
+
+**A1** Outside the window: refused with the window that does apply.
+**A2** Beyond seven days: refused for every tier, because propagation accuracy
+degrades about a kilometre per day.
+
+**UC-07 Poll a data source**
+
+**Actor** Scheduler, with an external feed as secondary actor.
+
+1. The scheduler waits the configured interval.
+2. It checks the remaining quota and the rate gate; if either forbids, it skips.
+3. The provider fetches and converts to the shared shape, discarding objects
+   without a usable position and converting every "not available" encoding to an
+   explicit absence.
+4. The store merges the result.
+
+**A1** Unreachable: the previous snapshot is retained and the next attempt is
+delayed by an increasing backoff. **A2** Rate limited: the upstream's own retry
+hint is used. **A3** Both sources of a layer fail: only then is it an outage.
+
+**UC-08 Refresh orbital elements**
+
+1. Every six hours elements are fetched from CelesTrak.
+2. Sets older than seven days from epoch are refused.
+3. Accepted elements are cached to disk.
+
+**A1** CelesTrak unavailable: SatNOGS is used. If both fail, cached elements
+continue to serve.
+
+**UC-09 Maintain the global AIS stream**
+
+1. A WebSocket is opened and subscribed to the whole world.
+2. Positions and identities are accumulated in memory.
+3. Positions older than fifteen minutes are removed; identities are kept for six
+   hours, because a vessel's name does not expire when its position does.
+
+**A1** Connection dropped: reconnection with backoff, losing nothing, because
+the accumulated world is held locally.
+
+**UC-11 Promote an account to administrator**
+
+**Actor** System Administrator at a terminal on the server.
+
+1. The administrator runs the account tool on the host.
+2. The tool sets the account's tier.
+
+There is no interface for this and no endpoint that can perform it.
+
+#### 5.2.2.2 Class Diagram
 
 ![Figure 5.5 — Class diagram of the ingestion layer.](figures/5-3-class-diagram.png){width=6.5in}
 
@@ -206,7 +321,7 @@ that the sky had emptied. Raising makes a failure a failure.
 to a socket, which is the structural reason §5.1's third property is true rather
 than merely intended.
 
-### Class relationships
+**Class relationships**
 
 | Relationship | In Orbital |
 |---|---|
@@ -215,7 +330,7 @@ than merely intended.
 | Aggregation | A `Poller` has an `ObjectStore`, but the store outlives it and the API shares it |
 | Association | The API uses the `ObjectStore` to answer requests and never touches a feed |
 
-### 5.3.2 Sequence Diagram
+#### 5.2.2.3 Sequence Diagram
 
 ![Figure 5.6 — Sequence diagram. The poll loop, and a request that does not wait for it.](figures/5-4-sequence-diagram.png){width=6.5in}
 
@@ -237,109 +352,17 @@ cannot fail because one failed. It reads whatever the store last had. That singl
 property is why an upstream outage degrades Orbital rather than breaking it, and
 why viewer count is decoupled from upstream cost entirely.
 
-### 5.3.3 Activity Diagram
+## 5.3 Structure Chart
 
-![Figure 5.7 — Activity diagram. One poll cycle, including the ways it fails.](figures/5-5-activity-diagram.png){width=4.9in}
+![Figure 5.7 — Structure chart. Orbital as four modules, each with the parts it is made of.](figures/5-1b-structure-chart.png){width=6.5in}
 
-An activity diagram of the happy path would be a straight line and would say
-nothing. The branches are the content: **three of the four outcomes of a fetch
-are failures**, and what happens to each is the reason the map does not go blank
-when a feed does.
+The structure chart breaks Orbital into four modules, matching the layers
+above with the store drawn as its own module. Each module calls only the one
+beside it, so a change inside one leaves the others untouched.
 
-| Outcome | Response |
+| Module | Made of |
 |---|---|
-| Records returned | Normalise, apply to the store, reset the backoff |
-| `ProviderRateLimited` | Honour `Retry-After`, double the backoff, keep the snapshot |
-| `ProviderUnavailable` | Keep the previous snapshot, mark the store stale |
-| `ProviderBadResponse` | As above — a malformed answer is treated as no answer |
-
-**None of the three failures empties the store.** A feed that goes dark costs
-freshness, which is visible and labelled in the status bar, rather than costing
-the map, which would not be. The retention window is what finally removes an
-object that nobody is reporting — a decision made by elapsed time, not by one
-failed request.
-
----
-
-## 5.4 User Interface Design
-
-![Figure 5.8 — The deployed interface, annotated. Captured headlessly at 1600 × 950 while the deployment was live.](figures/5-6-ui-design.png){width=6.5in}
-
-This is a screenshot of the running system rather than a wireframe. The counts
-in the status bar — objects drawn, objects in view, data age, and which feed
-answered — are the real ones at the moment of capture.
-
-### The principles the layout follows
-
-**The map is the product; everything else is chrome at the edges.** Controls
-occupy the corners and the top strip. Nothing floats over the centre, because
-the centre is the thing the user came for.
-
-**One layer at a time.** Aircraft, satellites and ships are a switch rather than
-three checkboxes. All three at once is roughly forty thousand markers and no
-legible map; the switch makes that impossible rather than merely discouraged.
-
-**The corner is one column, not four floating controls.** Brand, world chooser,
-sign-in and about stack under one another, and the world chooser opens to the
-right rather than downward so it does not cover the items beneath it.
-
-**The status bar is the honesty line.** It states that 2,000 of 13,607 objects
-in view are drawn, how old the data is, and which feed answered. A tracker that
-quietly showed a sample as though it were everything would be easier to build
-and would be lying.
-
-**Colour carries meaning, and only meaning.** Altitude is a ramp; marker shape
-distinguishes a known heading from an unknown one; a faded marker has not been
-reported for over two minutes. The key states all three rather than expecting
-the reader to infer them.
-
-**The revenue model is visible in the product.** Advertisement slots are shown to
-anonymous and free accounts and removed by the premium tier, and the upgrade
-prompt says what premium changes in concrete terms — a full week of history
-instead of twenty-four hours — rather than in adjectives.
-
----
-
-## 5.5 Prototype Design
-
-### What the prototype is
-
-The prototype is the deployed system. There is no separate mock-up, and that is
-a deliberate consequence of how the work was sequenced: the first phase
-delivered one object type end to end — feed, normalisation, store, API, map,
-marker on screen — rather than delivering a layer at a time across all three.
-
-A vertical slice is a prototype that is also the first increment of the product.
-The alternative, a horizontal one, produces a complete ingestion layer with
-nothing to look at, and defers every integration risk to the end.
-
-| | Address |
-|---|---|
-| Application | `orbital-liveview.vercel.app` |
-| Landing page | `orbital-liveview.vercel.app/landing` |
-
-### What each phase's prototype proved
-
-| Phase | Prototype | The risk it retired |
-|---|---|---|
-| 1 | Aircraft, end to end | That a free feed could sustain a live map at all |
-| 2 | Satellites; migration to MapLibre | That a second object type costs one module |
-| 3 | Moon and solar system | That the renderer is not Earth-specific |
-| 4 | Accounts, tiers, advertisements | That a revenue model fits without a payment integration |
-| 5 | Ships, regional then global | That the shape holds for a streaming source, not just a polled one |
-| 6 | Performance and defect sweep | That the whole thing holds at full object count |
-
-### Evolution rather than throw-away
-
-Each phase's prototype became the next phase's foundation, and none was
-discarded. The evidence that this was the right shape is the cost of the later
-phases: the satellite layer cost one provider module and one registry entry,
-and the ship layer cost the same four months later, with the polling logic
-unmodified for either.
-
-**One prototype was discarded**, and it is worth recording. The original
-renderer was a three.js globe, replaced by MapLibre in phase 2. The globe could
-draw a sphere but could not draw a map: no vector basemap, no zoom to street
-level, no established tiling. Replacing it cost a phase and was correct — a
-decision that was right when it was made became wrong once the requirement grew
-past what it could reach.
+| 1 Data ingestion | The poller, which asks on a timer; one provider per feed; the union provider, which merges feeds |
+| 2 Data store | Live objects held in memory; track history; the accounts database |
+| 3 API service | Live map data; search; sign-in and health |
+| 4 Map frontend | Map layers; details and search; time control |

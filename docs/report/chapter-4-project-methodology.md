@@ -1,69 +1,22 @@
-# Chapter 4: Project Planning
+# Chapter 4: Project Methodology
 
-## 4.1 Project Charter
+The project was run as a sequence of **incremental phases, each delivering a
+working vertical slice**: one kind of object taken all the way from its data
+feed to a marker on the deployed map before the next was started. Each phase
+ended with a team review that accepted the phase or listed what was
+outstanding. The phases are listed in §6.2.
 
-### Purpose
+Three practices held the method together:
 
-Orbital exists to put aircraft, ships and satellites on one map, in a browser,
-for free, with no account required. The three kinds of object are already
-tracked publicly and separately; nothing assembles them into a single view a
-person can simply open.
-
-### Objectives
-
-| # | Objective | How it will be judged |
-|---|---|---|
-| O1 | One map showing all three object types | All three layers render live data from the deployed system |
-| O2 | No account and no cost to look | The default view requires no sign-in and no payment |
-| O3 | Upstream failure degrades, never breaks | With a feed disabled, the map still draws, labelled stale |
-| O4 | A new object type costs one module | Adding a type requires no change to the API or the frontend |
-| O5 | Honest reporting of what is shown | Sampling, staleness and source are stated in the interface |
-
-### Scope
-
-**In scope.** Ingestion from free public feeds; normalisation to one shared
-shape; a read-only REST API; a browser client rendering the three layers on a
-map; object selection and detail; search; accounts with a free and a premium
-entitlement window; the Moon, the eight planets and the solar system view.
-
-**Out of scope.** Writing to any upstream; historical archiving beyond the
-retention window; native mobile applications; flight booking, ticketing or any
-transaction; real-time alerting or push notification; an administrator
-interface.
-
-### Deliverables
-
-The deployed application, the source repository with its test suites, this
-report, a decision record, a test plan, and a demonstration.
-
-### Constraints
-
-| Constraint | Consequence for the plan |
+| Practice | What it means in this project |
 |---|---|
-| Free data sources only | Rate limits, not money, are the budget (§4.4) |
-| No commercial licence on one feed | The revenue model cannot use OpenSky (§2.5.2) |
-| One backend worker | Vertical scaling only; a second worker would double upstream cost |
-| Five part-time students | Parallel work must be separable, or it serialises |
-| One semester | Scope is fixed by phase boundaries rather than by deadline pressure |
+| A shared data shape fixed first | The contract every layer speaks was agreed before any provider was written, so later layers could be built in parallel (§3.2.2) |
+| A written decision record | Every significant choice is recorded with its alternatives and reasons: 216 entries by the end |
+| A handover every session | What was done, what is blocked, and who is waiting on whom, written at the end of every working session (Appendix B.2) |
 
-### Assumptions
+## 4.1 Project Implementation Plan (Gantt Chart)
 
-That the public feeds remain available and free; that their terms do not change
-mid-project; that free hosting tiers remain sufficient for a demonstration
-workload. **The first of these did not hold** — OpenSky became unreachable from
-every cloud host partway through — and §4.6 treats it as the realised risk it
-turned out to be rather than as an assumption that was merely unlucky.
-
-### Authority
-
-The Project Manager owns scope and phase boundaries and decides what is in the
-current phase and what is explicitly out. Every significant decision is written
-to the decision record with its alternatives and its reasoning, so that a choice
-can be defended, or reversed, on the evidence that produced it.
-
----
-
-## 4.2 Work Breakdown Structure
+### Work breakdown structure
 
 The work is broken down to the level at which one person owns one deliverable.
 Decomposing further produces a task list that is stale within a week;
@@ -87,19 +40,17 @@ that most later packages touch the ingestion layer only by adding one file to
 it. Breaking it down by delivered phase makes the actual shape of the effort
 visible: each new object type is one provider module and one registry entry.
 
----
-
-## 4.3 Project Schedule
+### Schedule
 
 ![Figure 4.2 — Planned schedule. Twelve weeks, six work packages, three milestones.](figures/4-2-gantt-chart.png){width=6.6in}
 
 **This is the plan, not the log.** The bars are what the team undertook to do
 and the order the dependencies allow. What was actually delivered, phase by
-phase, is recorded in §2.5.4, and Chapter 8 is where the two are compared. Keeping
+phase, is listed in §6.2 and Appendix A.4. Keeping
 them apart matters: a Gantt chart redrawn after the fact to match what happened
 is not a plan and cannot be used to judge whether planning worked.
 
-### Milestones
+#### Milestones
 
 | Milestone | Week | Condition for passing |
 |---|---|---|
@@ -107,7 +58,7 @@ is not a plan and cannot be used to judge whether planning worked.
 | M2 Feature complete | 8 | All three object layers render live; accounts and entitlements work |
 | M3 Report and demonstration | 11 | Deployed system, report, test results, demonstration rehearsed |
 
-### The critical path
+#### The critical path
 
 Requirements → data contract → the first provider → the poller and store → the
 API → the map renderer → the first layer on screen. Everything after that first
@@ -118,121 +69,17 @@ blocks another.
 **That is a designed property, not a fortunate one.** The shared data shape was
 specified before any provider was written precisely so that the second and third
 object types would not sit behind the first. The measured evidence that it
-worked is in §2.5.4: the ship layer cost the same as the satellite layer four
+worked is in Appendix A.4: the ship layer cost the same as the satellite layer four
 months later, and the polling logic was not modified for either.
 
-### Scheduling assumption
+#### Scheduling assumption
 
 The window is twelve weeks from **25 August 2026**, the date of the first
 commit. If the module's submission date differs, the plan shifts with it — the
 dependencies and durations do not change, only the calendar they are laid
 against.
 
----
-
-## 4.4 Cost Estimation
-
-### Direct cost
-
-| Category | Cost |
-|---|---|
-| Data sources | 0 |
-| Map imagery and tiles | 0 |
-| Libraries and tooling | 0 |
-| Hosting, development and demonstration | 0 |
-| **Total cash cost** | **0** |
-
-Every input is a free public service or an open-source library, and both hosts
-run on free tiers. This is not an accident of a student budget: §2.5.2 records
-that free sources were a requirement, because a tracker that costs money per
-viewer cannot be free to look at.
-
-### The real budget is quota, not currency
-
-No money changes hands, so the constraint that behaves like money is the
-upstream request allowance. It was budgeted like money:
-
-| Resource | Allowance | Planned use | Headroom |
-|---|---|---|---|
-| OpenSky daily credits | 4,000 | 3,072 (77%) | 928, for user-triggered lookups |
-| adsb.lol request rate | Burst 4, then ~5/min | Within the measured limit | Enforced by a gate, not by convention |
-| Celestrak / SatNOGS | Courtesy limits | Refreshed every six hours, cached to disk | Falls back to cache on failure |
-| Ships (Digitraffic, aisstream) | No metered limit | Continuous websocket | — |
-
-The startup refuses a configuration projected to exceed 85% of the OpenSky
-allowance. A budget that is only written down is a budget nobody keeps; one the
-program will not start without is a budget that holds.
-
-### Labour, as a notional replacement cost
-
-The project's only real cost is effort. Stated as what it would cost to buy,
-under assumptions that are stated rather than implied:
-
-| Item | Assumption |
-|---|---|
-| Team | 5 members |
-| Duration | 12 weeks |
-| Effort per member per week | 8 hours |
-| **Total effort** | **480 person-hours** |
-
-At a notional junior developer rate of **£25 per hour**, that is **£12,000** of
-labour delivered at zero cash cost. The rate is an assumption for comparison
-only; the hours are the figure worth arguing about, and they are an estimate,
-not a measurement. The project did not keep timesheets, and inventing precise
-ones here would be exactly the kind of invented number this report declines to
-produce elsewhere.
-
----
-
-## 4.5 Resource Planning
-
-### People
-
-| Member | Roles | Primary work packages |
-|---|---|---|
-| Phone Sett Paing Kyaw | Project Manager, Developer | 1, 3, 4 |
-| Bhone Pyae Hein | System Analysis, Co-Developer | 2, 3 |
-| Han Phyo Htet | Quality Assurance, Business Analysis | 2, 5, 6.4 |
-| Nyan Lin Htet | Technical Engineer, Tester | 5, 6 |
-| Pyae Phyo Maung | Co-Tester, Co-QA and Analysis | 5, 6.4 |
-
-Seven roles across five people, so most members hold two. That is a
-consequence of team size rather than a design: with five people, a role per
-person would leave two roles unfilled, and the two that would go are quality
-assurance and technical environment — the two whose absence is invisible until
-late.
-
-### Technology
-
-| Resource | Purpose | Cost |
-|---|---|---|
-| Python, FastAPI, httpx, SGP4 | Ingestion and API | Free, open source |
-| React, TypeScript, MapLibre GL, Vite | Browser client | Free, open source |
-| SQLite | Accounts and sessions | Free, bundled |
-| Vercel | Frontend and landing page hosting | Free tier |
-| Northflank | Backend container hosting | Free tier |
-| GitHub | Source control, history, issues | Free |
-
-### Data
-
-Six upstream feeds, all free: OpenSky, adsb.fi and adsb.lol for aircraft,
-Celestrak and SatNOGS for orbital elements and satellite identity, Digitraffic
-and aisstream for vessels. OpenSky refuses cloud hosts, so its world view and
-flight tracks are fetched from a team member's PC and relayed to the server
-(§5.1). adsb.lol now limits a query to 250 nautical miles and asks automated
-clients to use a key, which has been requested.
-
-### Environment
-
-A member must be able to set the project up from a clean machine. That is the
-Technical Engineer's deliverable rather than a shared assumption, and it is the
-reason generated assets are fetched by a script rather than committed: a clone
-plus one command produces a running system, and a build with no network works
-as long as a previous one has run.
-
----
-
-## 4.6 Risk Management Plan
+## 4.2 Risk Management Plan (Traceability Matrix)
 
 Probability and impact are graded **H/M/L**. The response column says what was
 actually built or done, not what would ideally be done — a risk register of
@@ -247,7 +94,7 @@ intentions is a document nobody checks against the system.
 | R5 | The map shows something false and nothing says so | M | H | Every response carries its age and a staleness flag; a marker fades after two minutes unreported; the status bar states how many of how many are drawn |
 | R6 | Secrets committed to the repository | L | H | Credentials in environment variables only; configuration never printed as an object, only field by field |
 | R7 | Work serialises behind one member | M | M | The shared data shape fixed before any provider was written, so the layers proceed in parallel; handover written every session |
-| R8 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in §2.5.2 rather than assumed away |
+| R8 | A feed's licence forbids the intended use | M | M | Licences recorded per source; the commercial constraint is stated in Appendix A.2 rather than assumed away |
 | R9 | A defect resists diagnosis and consumes the schedule | M | H | Every defect written down with how it was found; a fix counts as fixed when demonstrated, not when written |
 | R10 | A decision correct when made becomes wrong later | M | M | Decision record carries alternatives and reasoning, so a reversal is cheap and evidenced |
 
@@ -272,6 +119,25 @@ credential kept out of a file, a defect written down, a decision recorded. That
 is a weaker kind of mitigation, because it depends on somebody continuing to do
 it, and that is why they come second.
 
+### Risk traceability matrix
+
+Each risk is traced to the requirements that mitigate it and to the evidence
+that the mitigation works, so a risk cannot be marked as handled without a
+requirement and a test behind it.
+
+| Risk | Mitigating requirements | Implemented in | Verified by |
+|---|---|---|---|
+| R1 Feed unavailable | FR-02, FR-05, FR-08, NFR-08, NFR-10 | Union providers, poller, store | `test_union.py`, `test_shipunion.py`, `test_poller.py`, outage tests in `test_api.py`; realised twice in production (below) |
+| R2 Rate-limited or banned | FR-07, FR-18, IR-01, IR-02 | Poller, quota, relay | `test_quota.py`, `test_poller.py`, `test_relay.py` |
+| R3 Too many objects to draw | FR-15, FR-25, NFR-01, NFR-02 | Thinning, interpolation | `test_thinning.py`, `interpolate.test.ts`, browser measurement (§6.1.5) |
+| R4 Traffic outgrows the backend | FR-16, NFR-03, NFR-06 | ETag, compression | `test_etag.py`, `test_app_surface.py` |
+| R5 False map, unannounced | FR-24, NFR-09, NFR-17, NFR-18 | Status bar, marker fading | `status.test.ts`, `layerChrome.test.ts`; observed live (§6.1.5) |
+| R6 Secrets committed | NFR-22, NFR-23 | Settings read from the environment | Configuration tests; code review |
+| R7 Work serialises | NFR-25, NFR-26 | The shared data shape | `test_models.py`; two feeds added with no frontend change |
+| R8 Licence forbids use | Constraints in §3.1 | Licence recorded per source | Review of each source's terms |
+| R9 Defect consumes the schedule | NFR-29 | Offline test suites, defect log | 2,087 tests run on every change |
+| R10 Decision becomes wrong | NFR-28 | Decision record | 216 recorded decisions |
+
 ### R4 in detail, because it is the one with a ceiling
 
 The client polls every 10 seconds and tier 1 refreshes every 300, so roughly
@@ -282,7 +148,7 @@ them into a header comparison, and because the tag is computed from the store's
 version counter and the query before the store is read, a 304 never builds the
 response at all.
 
-The one poll in thirty that does change costs the measured work in §2.5.1: a
+The one poll in thirty that does change costs the measured work in Appendix A.1: a
 bounding-box filter and a thinning pass, together under one and a half
 milliseconds at the 2,000 cap. **Upstream cost does not move at all** with
 viewer count, because the browser never calls a source.
@@ -332,9 +198,39 @@ scales — and the resolution deleted 376 lines, added 130, and cost no feature.
 It is recorded here because a risk register that lists only the risks that were
 survived cheaply is not a risk register.
 
----
+## 4.3 Organizational Structure
 
-## 4.7 Communication Plan
+The team is five students led by a Project Manager. Each member owns one area
+and backs up another, so no area depends on one person alone.
+
+```
+                    Project Manager
+                 Phone Sett Paing Kyaw
+                           |
+     +----------------+----+-----------+------------------+
+     |                |                |                  |
+ System Analysis   Development    Quality Assurance   Technical
+ Bhone Pyae Hein   Phone Sett     Han Phyo Htet       Engineering
+                   Paing Kyaw,    Pyae Phyo Maung     Nyan Lin Htet
+                   Bhone Pyae
+                   Hein
+```
+
+| Member | Student ID | Roles | Responsibilities | Work packages |
+|---|---|---|---|---|
+| Phone Sett Paing Kyaw | 6708369 | Project Manager, Developer | Scope and phase boundaries, decision record, backend and frontend development | 1, 3, 4 |
+| Bhone Pyae Hein | 6708381 | System Analysis, Co-Developer | Requirements, data contract and API specification, backend development | 2, 3 |
+| Han Phyo Htet | 6708463 | Quality Assurance, Business Analysis, Co-Tester | Test plan, acceptance of each phase, business analysis | 2, 5, 6 |
+| Nyan Lin Htet | 6708397 | Technical Engineer, Tester | Build, feeds and keys, deployment, testing | 5, 6 |
+| Pyae Phyo Maung | 6708170 | Co-Tester, Co-Quality Assurance and Analysis | Test execution, defect log, analysis | 5, 6 |
+
+Seven roles across five people, so most members hold two. That is a
+consequence of team size rather than a design: with five people, a role per
+person would leave two roles unfilled, and the two that would go are quality
+assurance and technical environment — the two whose absence is invisible until
+late.
+
+## 4.4 Communication and Coordination Channels
 
 | Channel | Participants | Frequency | Purpose |
 |---|---|---|---|
